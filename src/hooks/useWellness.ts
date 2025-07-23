@@ -303,20 +303,6 @@ function getTimeOfDayFromTimestamp(timestamp: number): 'morning' | 'afternoon' |
   if (hour >= 17 && hour < 21) return 'evening'
   return 'night'
 }
-  const [stats, setStats] = useKV<UserStats>('user-stats', {
-    moodStreak: 0,
-    journalStreak: 0,
-    communityContributions: 0,
-    unlockedThemes: ['default'],
-    badges: []
-  })
-  
-  const updateStats = (updates: Partial<UserStats>) => {
-    setStats(current => ({ ...current, ...updates }))
-  }
-  
-  return { stats, updateStats }
-}
 
 function analyzeSentiment(text: string): 'positive' | 'neutral' | 'negative' {
   const positiveWords = ['happy', 'joy', 'great', 'wonderful', 'amazing', 'good', 'better', 'grateful', 'peaceful']
