@@ -1,17 +1,28 @@
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Button } from "@/components/ui/button"
-import { ChatCircle } from "@phosphor-icons/react"
+import { ChatCircle, X } from "@phosphor-icons/react"
 import { MoodTracker } from "@/components/MoodTracker"
 import { JournalSection } from "@/components/JournalSection"
 import { ChatBot } from "@/components/ChatBot"
 import { CommunitySection } from "@/components/CommunitySection"
 import { WellnessDashboard } from "@/components/WellnessDashboard"
-import { motion } from "framer-motion"
+import { motion, AnimatePresence } from "framer-motion"
 
 function App() {
   const [activeTab, setActiveTab] = useState("dashboard")
   const [showChat, setShowChat] = useState(false)
+  const [isMobile, setIsMobile] = useState(false)
+  
+  useEffect(() => {
+    const checkMobile = () => {
+      setIsMobile(window.innerWidth < 1024)
+    }
+    
+    checkMobile()
+    window.addEventListener('resize', checkMobile)
+    return () => window.removeEventListener('resize', checkMobile)
+  }, [])
   
   return (
     <div className="min-h-screen bg-background">
@@ -34,8 +45,9 @@ function App() {
             
             <Button
               onClick={() => setShowChat(!showChat)}
-              className="md:hidden"
+              className="lg:hidden"
               size="sm"
+              variant={showChat ? "secondary" : "default"}
             >
               <ChatCircle size={16} />
             </Button>
@@ -92,18 +104,71 @@ function App() {
             </Tabs>
           </div>
           
-          <div className="lg:col-span-1">
-            <motion.div
-              initial={{ opacity: 0, x: 20 }}
-              animate={{ opacity: 1, x: 0 }}
-              transition={{ delay: 0.2 }}
-              className={`sticky top-24 ${showChat || window.innerWidth >= 1024 ? 'block' : 'hidden'}`}
-            >
-              <ChatBot />
-            </motion.div>
-          </div>
+          {/* Desktop chatbot sidebar */}
+          {!isMobile && (
+            <div className="lg:col-span-1">
+              <motion.div
+                initial={{ opacity: 0, x: 20 }}
+                animate={{ opacity: 1, x: 0 }}
+                transition={{ delay: 0.2 }}
+                className="sticky top-28"
+              >
+                <ChatBot />
+              </motion.div>
+            </div>
+          )}
         </div>
       </div>
+      
+      {/* Mobile chatbot overlay */}
+      <AnimatePresence>
+        {isMobile && showChat && (
+          <>
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              className="fixed inset-0 bg-black/50 z-40 lg:hidden"
+              onClick={() => setShowChat(false)}
+            />
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95, y: 20 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.95, y: 20 }}
+              className="fixed inset-4 z-50 lg:hidden"
+            >
+              <div className="relative h-full">
+                <Button
+                  onClick={() => setShowChat(false)}
+                  className="absolute top-2 right-2 z-10"
+                  size="sm"
+                  variant="ghost"
+                >
+                  <X size={16} />
+                </Button>
+                <ChatBot className="h-full" />
+              </div>
+            </motion.div>
+          </>
+        )}
+      </AnimatePresence>
+      
+      {/* Floating chat button for mobile */}
+      {isMobile && !showChat && (
+        <motion.div
+          initial={{ opacity: 0, scale: 0 }}
+          animate={{ opacity: 1, scale: 1 }}
+          className="fixed bottom-6 right-6 z-30 lg:hidden"
+        >
+          <Button
+            onClick={() => setShowChat(true)}
+            size="lg"
+            className="rounded-full w-14 h-14 shadow-lg"
+          >
+            <ChatCircle size={24} />
+          </Button>
+        </motion.div>
+      )}
       
       <footer className="border-t bg-card/50 mt-12">
         <div className="container mx-auto px-4 py-6">

@@ -26,7 +26,8 @@ export interface ChatMessage {
   sender: 'user' | 'mitra'
   timestamp: number
   context?: {
-    type: 'mood_support' | 'general' | 'crisis' | 'celebration'
+    type?: 'mood_support' | 'general' | 'crisis' | 'celebration'
+    suggestedMood?: MoodEntry['mood']
     relatedData?: any
   }
 }

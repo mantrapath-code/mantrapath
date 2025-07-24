@@ -72,24 +72,29 @@ export function ChatBot({ className }: ChatBotProps) {
   ]
   
   return (
-    <Card className={cn("flex flex-col h-96", isExpanded && "fixed inset-4 z-50 h-auto", className)}>
-      <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+    <Card className={cn("flex flex-col", isExpanded ? "h-[90vh]" : "h-96", className)}>
+      <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2 shrink-0">
         <CardTitle className="flex items-center gap-2">
           <Robot className="text-primary" size={24} />
           Mantra-Mitra
           <Badge variant="secondary" className="text-xs">AI Companion</Badge>
         </CardTitle>
-        <Button
-          variant="ghost"
-          size="sm"
-          onClick={() => setIsExpanded(!isExpanded)}
-        >
-          {isExpanded ? <Minimize size={16} /> : <Expand size={16} />}
-        </Button>
+        {!className?.includes('h-full') && (
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => setIsExpanded(!isExpanded)}
+          >
+            {isExpanded ? <Minimize size={16} /> : <Expand size={16} />}
+          </Button>
+        )}
       </CardHeader>
       
-      <CardContent className="flex-1 flex flex-col gap-4 p-4">
-        <div className="flex-1 overflow-y-auto space-y-4 max-h-64">
+      <CardContent className="flex-1 flex flex-col gap-4 p-4 min-h-0">
+        <div className={cn(
+          "flex-1 overflow-y-auto space-y-4",
+          className?.includes('h-full') ? "max-h-none" : "max-h-64"
+        )}>
           <AnimatePresence>
             {messages.length === 0 && (
               <motion.div
