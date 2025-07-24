@@ -194,32 +194,133 @@ export function WellnessDashboard() {
                 <CardTitle>Recent Mood Timeline</CardTitle>
               </CardHeader>
               <CardContent>
-                <div className="flex items-end gap-2 h-20">
-                  {recentMoods.reverse().map((mood, index) => {
-                    const height = (getMoodValue(mood.mood) / 5) * 100
-                    const colors = {
-                      'excellent': 'bg-green-500',
-                      'good': 'bg-blue-500',
-                      'neutral': 'bg-yellow-500',
-                      'low': 'bg-orange-500',
-                      'very-low': 'bg-red-500'
-                    }
+                <div className="relative h-32 overflow-hidden">
+                  <svg className="w-full h-full" viewBox="0 0 280 120" preserveAspectRatio="none">
+                    {/* Grid lines */}
+                    <defs>
+                      <linearGradient id="moodGradient" x1="0%" y1="0%" x2="0%" y2="100%">
+                        <stop offset="0%" stopColor="var(--primary)" stopOpacity="0.3" />
+                        <stop offset="100%" stopColor="var(--primary)" stopOpacity="0.05" />
+                      </linearGradient>
+                    </defs>
                     
-                    return (
-                      <motion.div
-                        key={mood.id}
-                        initial={{ height: 0 }}
-                        animate={{ height: `${height}%` }}
-                        transition={{ delay: index * 0.1 }}
-                        className={`flex-1 rounded-t ${colors[mood.mood]} min-h-1`}
-                        title={`${mood.mood} - ${new Date(mood.timestamp).toLocaleDateString()}`}
+                    {/* Background grid */}
+                    {[0, 1, 2, 3, 4].map((i) => (
+                      <line
+                        key={i}
+                        x1="0"
+                        y1={24 * i}
+                        x2="280"
+                        y2={24 * i}
+                        stroke="var(--border)"
+                        strokeWidth="0.5"
+                        opacity="0.3"
                       />
-                    )
-                  })}
+                    ))}
+                    
+                    {/* Area chart */}
+                    <path
+                      d={(() => {
+                        const points = recentMoods.reverse().map((mood, index) => {
+                          const x = (index / (recentMoods.length - 1)) * 280
+                          const y = 120 - ((getMoodValue(mood.mood) - 1) / 4) * 120
+                          return `${x},${y}`
+                        })
+                        
+                        const pathData = `M 0,120 L ${points.join(' L ')} L 280,120 Z`
+                        return pathData
+                      })()}
+                      fill="url(#moodGradient)"
+                      className="transition-all duration-1000"
+                    />
+                    
+                    {/* Mood line */}
+                    <path
+                      d={(() => {
+                        const points = recentMoods.map((mood, index) => {
+                          const x = (index / (recentMoods.length - 1)) * 280
+                          const y = 120 - ((getMoodValue(mood.mood) - 1) / 4) * 120
+                          return `${x},${y}`
+                        })
+                        
+                        return `M ${points.join(' L ')}`
+                      })()}
+                      fill="none"
+                      stroke="var(--primary)"
+                      strokeWidth="3"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      className="transition-all duration-1000"
+                    />
+                    
+                    {/* Data points */}
+                    {recentMoods.map((mood, index) => {
+                      const x = (index / (recentMoods.length - 1)) * 280
+                      const y = 120 - ((getMoodValue(mood.mood) - 1) / 4) * 120
+                      const colors = {
+                        'excellent': '#22c55e',
+                        'good': '#3b82f6',
+                        'neutral': '#eab308',
+                        'low': '#f97316',
+                        'very-low': '#ef4444'
+                      }
+                      
+                      return (
+                        <motion.circle
+                          key={mood.id}
+                          cx={x}
+                          cy={y}
+                          r="4"
+                          fill={colors[mood.mood]}
+                          stroke="white"
+                          strokeWidth="2"
+                          initial={{ scale: 0 }}
+                          animate={{ scale: 1 }}
+                          transition={{ delay: index * 0.1 }}
+                          className="cursor-pointer"
+                          title={`${mood.mood} - ${new Date(mood.timestamp).toLocaleDateString()}`}
+                        />
+                      )
+                    })}
+                  </svg>
+                  
+                  {/* Y-axis labels */}
+                  <div className="absolute left-0 top-0 h-full flex flex-col justify-between text-xs text-muted-foreground py-1">
+                    <span>Excellent</span>
+                    <span>Good</span>
+                    <span>Neutral</span>
+                    <span>Low</span>
+                    <span>Very Low</span>
+                  </div>
                 </div>
-                <div className="flex justify-between text-xs text-muted-foreground mt-2">
+                
+                <div className="flex justify-between text-xs text-muted-foreground mt-4">
                   <span>7 days ago</span>
                   <span>Today</span>
+                </div>
+                
+                {/* Legend */}
+                <div className="flex items-center justify-center gap-4 mt-3 text-xs">
+                  <div className="flex items-center gap-1">
+                    <div className="w-3 h-3 rounded-full bg-green-500"></div>
+                    <span>Excellent</span>
+                  </div>
+                  <div className="flex items-center gap-1">
+                    <div className="w-3 h-3 rounded-full bg-blue-500"></div>
+                    <span>Good</span>
+                  </div>
+                  <div className="flex items-center gap-1">
+                    <div className="w-3 h-3 rounded-full bg-yellow-500"></div>
+                    <span>Neutral</span>
+                  </div>
+                  <div className="flex items-center gap-1">
+                    <div className="w-3 h-3 rounded-full bg-orange-500"></div>
+                    <span>Low</span>
+                  </div>
+                  <div className="flex items-center gap-1">
+                    <div className="w-3 h-3 rounded-full bg-red-500"></div>
+                    <span>Very Low</span>
+                  </div>
                 </div>
               </CardContent>
             </Card>
