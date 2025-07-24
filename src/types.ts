@@ -50,6 +50,7 @@ export interface UserStats {
   unlockedThemes: string[]
   badges: string[]
   totalPoints?: number
+  currentTheme?: string
 }
 
 export interface MoodPattern {

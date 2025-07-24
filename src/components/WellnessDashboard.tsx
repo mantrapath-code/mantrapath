@@ -9,17 +9,44 @@ import { useMoodBasedTheme } from "@/hooks/useMoodTheme"
 import { MoodInsights } from "@/components/MoodInsights"
 import { MoodPatternNotifications } from "@/components/MoodPatternNotifications"
 import { EnhancedMoodChart } from "@/components/EnhancedMoodChart"
-import { motion } from "framer-motion"
+import { motion, AnimatePresence } from "framer-motion"
+import { toast } from "sonner"
 
 export function WellnessDashboard() {
   const { moods, getMoodTrend } = useMoods()
   const { entries } = useJournal()
   const { stats } = useUserStats()
-  const { currentTheme, availableThemes, applyTheme, autoApplyMoodTheme, getCurrentMood } = useMoodBasedTheme()
+  const { currentTheme, availableThemes, applyTheme, autoApplyMoodTheme, getCurrentMood, isThemeChanging } = useMoodBasedTheme()
   
   const recentMoods = moods.slice(0, 7)
   const moodTrend = getMoodTrend()
   const userCurrentMood = getCurrentMood()
+  
+  const handleThemeChange = (themeKey: string) => {
+    applyTheme(themeKey)
+    toast.success(`Theme changed to ${availableThemes[themeKey]?.name}`, {
+      description: availableThemes[themeKey]?.description,
+      duration: 2000,
+    })
+  }
+  
+  const handleAutoTheme = () => {
+    const oldTheme = currentTheme
+    const wasChanged = autoApplyMoodTheme()
+    
+    if (wasChanged) {
+      const newThemeName = availableThemes[stats.currentTheme || 'default']?.name || 'Default'
+      toast.success(`Theme auto-applied based on your mood`, {
+        description: `Switched to ${newThemeName} theme`,
+        duration: 3000,
+      })
+    } else {
+      toast.info(`Theme already matches your mood`, {
+        description: `${availableThemes[currentTheme]?.name} theme is perfect for ${userCurrentMood} mood`,
+        duration: 2000,
+      })
+    }
+  }
   
   const getMoodValue = (mood: string) => {
     switch (mood) {
@@ -58,12 +85,22 @@ export function WellnessDashboard() {
                 <Button
                   variant="outline"
                   size="sm"
-                  onClick={autoApplyMoodTheme}
+                  onClick={handleAutoTheme}
                   className="text-xs"
                 >
                   <Palette size={14} className="mr-1" />
                   Auto Theme
                 </Button>
+                <AnimatePresence>
+                  {isThemeChanging && (
+                    <motion.div
+                      initial={{ scale: 0 }}
+                      animate={{ scale: 1 }}
+                      exit={{ scale: 0 }}
+                      className="w-2 h-2 bg-primary rounded-full"
+                    />
+                  )}
+                </AnimatePresence>
                 <Badge variant="secondary" className="text-xs">
                   Theme: {availableThemes[currentTheme]?.name || 'Default'}
                 </Badge>
@@ -193,6 +230,27 @@ export function WellnessDashboard() {
             <EnhancedMoodChart />
           )}
           
+          {/* Theme Debug Info - Remove in production */}
+          <Card className="border-orange-200 bg-orange-50/50">
+            <CardHeader>
+              <CardTitle className="text-sm text-orange-700">Theme Debug Info</CardTitle>
+            </CardHeader>
+            <CardContent className="text-xs space-y-2">
+              <div className="grid grid-cols-2 gap-2">
+                <div>Current Theme: <span className="font-mono">{currentTheme}</span></div>
+                <div>Current Mood: <span className="font-mono">{userCurrentMood}</span></div>
+                <div>Recommended Theme: <span className="font-mono">
+                  {Object.entries(availableThemes).find(([key, theme]) => 
+                    theme.moodRange.includes(userCurrentMood as any))?.[0] || 'default'}
+                </span></div>
+                <div>Is Changing: <span className="font-mono">{isThemeChanging ? 'Yes' : 'No'}</span></div>
+              </div>
+              <div className="text-orange-600">
+                Try logging a different mood in the Mood tab to see the theme change automatically!
+              </div>
+            </CardContent>
+          </Card>
+          
           {stats.badges.length > 0 && (
             <Card>
               <CardHeader>
@@ -233,10 +291,10 @@ export function WellnessDashboard() {
                     key={key}
                     initial={{ opacity: 0, x: -20 }}
                     animate={{ opacity: 1, x: 0 }}
-                    className={`flex items-center justify-between p-4 border rounded-lg cursor-pointer transition-colors ${
-                      currentTheme === key ? 'border-primary bg-primary/5' : 'border-border hover:bg-muted/50'
+                    className={`flex items-center justify-between p-4 border rounded-lg cursor-pointer transition-all ${
+                      currentTheme === key ? 'border-primary bg-primary/5 shadow-md' : 'border-border hover:bg-muted/50'
                     }`}
-                    onClick={() => applyTheme(key)}
+                    onClick={() => handleThemeChange(key)}
                   >
                     <div className="flex-1">
                       <div className="flex items-center gap-3">
@@ -258,8 +316,13 @@ export function WellnessDashboard() {
                             )
                           })}
                         </div>
-                        <div>
-                          <h3 className="font-medium">{theme.name}</h3>
+                        <div className="flex-1">
+                          <div className="flex items-center gap-2">
+                            <h3 className="font-medium">{theme.name}</h3>
+                            {currentTheme === key && (
+                              <div className="w-2 h-2 bg-primary rounded-full animate-pulse" />
+                            )}
+                          </div>
                           <p className="text-sm text-muted-foreground">{theme.description}</p>
                         </div>
                       </div>
@@ -272,18 +335,27 @@ export function WellnessDashboard() {
               </div>
               
               <div className="pt-4 border-t">
-                <h4 className="font-medium mb-2">Smart Theme Suggestions</h4>
-                <p className="text-sm text-muted-foreground mb-3">
-                  Based on your current mood ({userCurrentMood}), we recommend:
-                </p>
-                <Button 
-                  onClick={autoApplyMoodTheme}
-                  variant="outline"
-                  className="w-full"
-                >
-                  <Palette size={16} className="mr-2" />
-                  Apply Mood-Based Theme
-                </Button>
+                <div className="space-y-3">
+                  <h4 className="font-medium">Smart Theme Suggestions</h4>
+                  <p className="text-sm text-muted-foreground">
+                    Based on your current mood ({userCurrentMood}), we recommend:
+                  </p>
+                  
+                  <div className="text-xs text-muted-foreground">
+                    Current theme: {currentTheme} | Mood: {userCurrentMood} | 
+                    Recommended: {Object.entries(availableThemes).find(([key, theme]) => 
+                      theme.moodRange.includes(userCurrentMood as any))?.[0] || 'default'}
+                  </div>
+                  
+                  <Button 
+                    onClick={handleAutoTheme}
+                    variant="outline"
+                    className="w-full"
+                  >
+                    <Palette size={16} className="mr-2" />
+                    Apply Mood-Based Theme
+                  </Button>
+                </div>
               </div>
             </CardContent>
           </Card>

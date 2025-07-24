@@ -182,8 +182,12 @@ export function useUserStats() {
     currentTheme: 'default'
   })
   
-  const updateStats = (updates: Partial<UserStats>) => {
-    setStats(current => ({ ...current, ...updates }))
+  const updateStats = (updates: Partial<UserStats> | ((current: UserStats) => UserStats)) => {
+    if (typeof updates === 'function') {
+      setStats(updates)
+    } else {
+      setStats(current => ({ ...current, ...updates }))
+    }
   }
   
   return { stats, updateStats }

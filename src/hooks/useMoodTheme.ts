@@ -1,4 +1,4 @@
-import { useEffect } from 'react'
+import { useEffect, useState } from 'react'
 import { useMoods, useUserStats } from './useWellness'
 
 export interface MoodTheme {
@@ -17,12 +17,22 @@ export const moodThemes: Record<string, MoodTheme> = {
       '--background': 'oklch(0.97 0.02 350)',
       '--foreground': 'oklch(0.25 0.06 350)',
       '--card': 'oklch(0.99 0.01 350)',
+      '--card-foreground': 'oklch(0.25 0.06 350)',
+      '--popover': 'oklch(0.99 0.01 350)',
+      '--popover-foreground': 'oklch(0.25 0.06 350)',
       '--primary': 'oklch(0.65 0.12 350)',
       '--primary-foreground': 'oklch(0.98 0.01 350)',
       '--secondary': 'oklch(0.93 0.03 350)',
+      '--secondary-foreground': 'oklch(0.35 0.06 350)',
       '--accent': 'oklch(0.75 0.15 20)',
+      '--accent-foreground': 'oklch(0.2 0.05 20)',
+      '--destructive': 'oklch(0.65 0.15 20)',
+      '--destructive-foreground': 'oklch(0.98 0.01 350)',
       '--muted': 'oklch(0.95 0.02 350)',
+      '--muted-foreground': 'oklch(0.5 0.06 350)',
       '--border': 'oklch(0.88 0.03 350)',
+      '--input': 'oklch(0.88 0.03 350)',
+      '--ring': 'oklch(0.65 0.12 350)',
     }
   },
   calm: {
@@ -33,12 +43,22 @@ export const moodThemes: Record<string, MoodTheme> = {
       '--background': 'oklch(0.98 0.01 200)',
       '--foreground': 'oklch(0.25 0.08 200)',
       '--card': 'oklch(1 0 0)',
+      '--card-foreground': 'oklch(0.25 0.08 200)',
+      '--popover': 'oklch(1 0 0)',
+      '--popover-foreground': 'oklch(0.25 0.08 200)',
       '--primary': 'oklch(0.6 0.15 200)',
       '--primary-foreground': 'oklch(0.98 0.01 200)',
       '--secondary': 'oklch(0.94 0.02 200)',
+      '--secondary-foreground': 'oklch(0.35 0.08 200)',
       '--accent': 'oklch(0.7 0.12 160)',
+      '--accent-foreground': 'oklch(0.2 0.05 160)',
+      '--destructive': 'oklch(0.65 0.15 20)',
+      '--destructive-foreground': 'oklch(0.98 0.01 200)',
       '--muted': 'oklch(0.96 0.01 200)',
+      '--muted-foreground': 'oklch(0.5 0.08 200)',
       '--border': 'oklch(0.89 0.02 200)',
+      '--input': 'oklch(0.89 0.02 200)',
+      '--ring': 'oklch(0.6 0.15 200)',
     }
   },
   energetic: {
@@ -49,12 +69,22 @@ export const moodThemes: Record<string, MoodTheme> = {
       '--background': 'oklch(0.98 0.02 120)',
       '--foreground': 'oklch(0.2 0.08 120)',
       '--card': 'oklch(1 0 0)',
+      '--card-foreground': 'oklch(0.2 0.08 120)',
+      '--popover': 'oklch(1 0 0)',
+      '--popover-foreground': 'oklch(0.2 0.08 120)',
       '--primary': 'oklch(0.65 0.18 120)',
       '--primary-foreground': 'oklch(0.98 0.01 120)',
       '--secondary': 'oklch(0.92 0.04 120)',
+      '--secondary-foreground': 'oklch(0.3 0.08 120)',
       '--accent': 'oklch(0.75 0.15 80)',
+      '--accent-foreground': 'oklch(0.2 0.05 80)',
+      '--destructive': 'oklch(0.65 0.15 20)',
+      '--destructive-foreground': 'oklch(0.98 0.01 120)',
       '--muted': 'oklch(0.94 0.03 120)',
+      '--muted-foreground': 'oklch(0.45 0.08 120)',
       '--border': 'oklch(0.87 0.04 120)',
+      '--input': 'oklch(0.87 0.04 120)',
+      '--ring': 'oklch(0.65 0.18 120)',
     }
   },
   dynamic: {
@@ -65,12 +95,22 @@ export const moodThemes: Record<string, MoodTheme> = {
       '--background': 'oklch(0.97 0.03 60)',
       '--foreground': 'oklch(0.15 0.1 60)',
       '--card': 'oklch(0.99 0.01 60)',
+      '--card-foreground': 'oklch(0.15 0.1 60)',
+      '--popover': 'oklch(0.99 0.01 60)',
+      '--popover-foreground': 'oklch(0.15 0.1 60)',
       '--primary': 'oklch(0.7 0.2 60)',
       '--primary-foreground': 'oklch(0.98 0.01 60)',
       '--secondary': 'oklch(0.9 0.05 60)',
+      '--secondary-foreground': 'oklch(0.25 0.1 60)',
       '--accent': 'oklch(0.8 0.18 40)',
+      '--accent-foreground': 'oklch(0.15 0.05 40)',
+      '--destructive': 'oklch(0.65 0.15 20)',
+      '--destructive-foreground': 'oklch(0.98 0.01 60)',
       '--muted': 'oklch(0.93 0.04 60)',
+      '--muted-foreground': 'oklch(0.4 0.1 60)',
       '--border': 'oklch(0.85 0.05 60)',
+      '--input': 'oklch(0.85 0.05 60)',
+      '--ring': 'oklch(0.7 0.2 60)',
     }
   },
   default: {
@@ -81,12 +121,22 @@ export const moodThemes: Record<string, MoodTheme> = {
       '--background': 'oklch(0.98 0.01 180)',
       '--foreground': 'oklch(0.3 0.08 180)',
       '--card': 'oklch(1 0 0)',
+      '--card-foreground': 'oklch(0.25 0.06 220)',
+      '--popover': 'oklch(1 0 0)',
+      '--popover-foreground': 'oklch(0.25 0.06 220)',
       '--primary': 'oklch(0.7 0.1 180)',
       '--primary-foreground': 'oklch(1 0 0)',
       '--secondary': 'oklch(0.95 0.02 180)',
+      '--secondary-foreground': 'oklch(0.4 0.08 180)',
       '--accent': 'oklch(0.8 0.1 60)',
+      '--accent-foreground': 'oklch(0.2 0.05 60)',
+      '--destructive': 'oklch(0.65 0.15 20)',
+      '--destructive-foreground': 'oklch(1 0 0)',
       '--muted': 'oklch(0.96 0.01 180)',
+      '--muted-foreground': 'oklch(0.5 0.06 180)',
       '--border': 'oklch(0.9 0.02 180)',
+      '--input': 'oklch(0.92 0.02 180)',
+      '--ring': 'oklch(0.7 0.1 180)',
     }
   }
 }
@@ -94,6 +144,7 @@ export const moodThemes: Record<string, MoodTheme> = {
 export function useMoodBasedTheme() {
   const { moods } = useMoods()
   const { stats, updateStats } = useUserStats()
+  const [isThemeChanging, setIsThemeChanging] = useState(false)
 
   const getCurrentMood = () => {
     if (moods.length === 0) return 'neutral'
@@ -113,25 +164,41 @@ export function useMoodBasedTheme() {
     const theme = moodThemes[themeName]
     if (!theme) return
 
+    setIsThemeChanging(true)
+
+    // Apply CSS variables to document root
     const root = document.documentElement
     Object.entries(theme.cssVariables).forEach(([property, value]) => {
       root.style.setProperty(property, value)
     })
 
-    updateStats({ currentTheme: themeName as any })
+    // Update stats with functional update to ensure persistence
+    updateStats(currentStats => ({ 
+      ...currentStats, 
+      currentTheme: themeName as any 
+    }))
+
+    // Visual feedback for theme change
+    setTimeout(() => setIsThemeChanging(false), 1000)
   }
 
   const autoApplyMoodTheme = () => {
     const currentMood = getCurrentMood()
     const recommendedTheme = getRecommendedTheme(currentMood)
-    applyTheme(recommendedTheme)
+    
+    // Only apply if the theme actually changes
+    if (recommendedTheme !== stats.currentTheme) {
+      applyTheme(recommendedTheme)
+      return true // Theme was changed
+    }
+    return false // No change needed
   }
 
   const resetToDefaultTheme = () => {
     applyTheme('default')
   }
 
-  // Auto-apply theme when mood changes
+  // Auto-apply theme when mood changes and on initial load
   useEffect(() => {
     if (moods.length > 0) {
       const latestMood = moods[0]
@@ -144,6 +211,18 @@ export function useMoodBasedTheme() {
     }
   }, [moods])
 
+  // Apply saved theme on component mount
+  useEffect(() => {
+    const savedTheme = stats.currentTheme || 'default'
+    const theme = moodThemes[savedTheme]
+    if (theme) {
+      const root = document.documentElement
+      Object.entries(theme.cssVariables).forEach(([property, value]) => {
+        root.style.setProperty(property, value)
+      })
+    }
+  }, [stats.currentTheme])
+
   return {
     currentTheme: stats.currentTheme || 'default',
     availableThemes: moodThemes,
@@ -151,6 +230,7 @@ export function useMoodBasedTheme() {
     autoApplyMoodTheme,
     resetToDefaultTheme,
     getCurrentMood,
-    getRecommendedTheme
+    getRecommendedTheme,
+    isThemeChanging
   }
 }

@@ -8,6 +8,7 @@ import { ChatBot } from "@/components/ChatBot"
 import { CommunitySection } from "@/components/CommunitySection"
 import { WellnessDashboard } from "@/components/WellnessDashboard"
 import { motion, AnimatePresence } from "framer-motion"
+import { Toaster } from "@/components/ui/sonner"
 
 function App() {
   const [activeTab, setActiveTab] = useState("dashboard")
@@ -180,6 +181,13 @@ function App() {
           </div>
         </div>
       </footer>
+      
+      <Toaster 
+        position="top-right"
+        expand={false}
+        richColors
+        closeButton
+      />
     </div>
   )
 }
