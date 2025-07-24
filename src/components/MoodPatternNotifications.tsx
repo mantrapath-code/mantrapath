@@ -2,171 +2,452 @@ import { useState, useEffect } from "react"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
-import { Bell, TrendDown, TrendUp, X } from "@phosphor-icons/react"
-import { useMoods, useMoodAnalytics } from "@/hooks/useWellness"
+import { Bell, TrendDown, TrendUp, X, Warning, Target, Calendar, Clock, Activity, Brain } from "@phosphor-icons/react"
+import { useMoods, useMoodAnalytics, useJournal } from "@/hooks/useWellness"
 import { motion, AnimatePresence } from "framer-motion"
 import { useKV } from '@github/spark/hooks'
+import { toast } from "sonner"
 
-interface MoodPattern {
+interface SmartNotification {
   id: string
-  type: 'declining-trend' | 'negative-streak' | 'positive-pattern'
+  type: 'declining-trend' | 'negative-streak' | 'positive-pattern' | 'preventive-action' | 'pattern-alert' | 'wellness-reminder'
+  category: 'urgent' | 'preventive' | 'supportive' | 'insight'
   message: string
   recommendation: string
+  actionItems?: string[]
   severity: 'low' | 'medium' | 'high'
   timestamp: number
+  confidence: number
+  basedOn: string[]
+  preventiveAction?: {
+    type: 'breathing' | 'social' | 'activity' | 'mindfulness' | 'routine'
+    estimatedTime: string
+    benefits: string[]
+  }
 }
 
 export function MoodPatternNotifications() {
   const { moods } = useMoods()
-  const { getWeeklyInsights } = useMoodAnalytics()
+  const { getWeeklyInsights, getMoodPredictions } = useMoodAnalytics()
+  const { entries } = useJournal()
   const [dismissedPatterns, setDismissedPatterns] = useKV<string[]>('dismissed-patterns', [])
-  const [activePatterns, setActivePatterns] = useState<MoodPattern[]>([])
+  const [activeNotifications, setActiveNotifications] = useState<SmartNotification[]>([])
+  const [lastCheckTimestamp, setLastCheckTimestamp] = useKV<number>('last-pattern-check', 0)
 
   useEffect(() => {
-    checkForPatterns()
-  }, [moods])
-
-  const checkForPatterns = () => {
-    const patterns: MoodPattern[] = []
+    // Check for patterns every hour or when moods change
+    const now = Date.now()
+    const oneHour = 60 * 60 * 1000
     
-    // Check for declining trend (last 3 days)
-    const recentMoods = moods.slice(0, 3)
+    if (now - lastCheckTimestamp > oneHour || moods.length > 0) {
+      checkForSmartPatterns()
+      setLastCheckTimestamp(now)
+    }
+  }, [moods, entries])
+
+  const checkForSmartPatterns = () => {
+    const notifications: SmartNotification[] = []
+    const now = Date.now()
+    const currentHour = new Date().getHours()
+    const currentDay = new Date().getDay()
+    
+    // Enhanced declining trend detection
+    const recentMoods = moods.slice(0, 5) // Look at last 5 entries
     if (recentMoods.length >= 3) {
       const moodValues = { 'very-low': 1, 'low': 2, 'neutral': 3, 'good': 4, 'excellent': 5 }
       const trend = recentMoods.map(m => moodValues[m.mood])
       
-      if (trend[0] < trend[1] && trend[1] < trend[2]) {
-        const patternId = `declining-${Date.now()}`
+      // Check for consistent decline
+      const isDecline = trend.every((mood, i) => i === 0 || mood <= trend[i - 1])
+      const avgDecline = trend.length > 1 ? trend[0] - trend[trend.length - 1] : 0
+      
+      if (isDecline && avgDecline >= 1) {
+        const patternId = `smart-decline-${Math.floor(now / (12 * 60 * 60 * 1000))}`
         if (!dismissedPatterns.includes(patternId)) {
-          patterns.push({
+          notifications.push({
             id: patternId,
             type: 'declining-trend',
-            message: 'Your mood has been declining over the past 3 days',
-            recommendation: 'Consider reaching out to support or practicing self-care activities',
+            category: trend[0] <= 2 ? 'urgent' : 'preventive',
+            message: `Your mood has declined over ${trend.length} recent entries`,
+            recommendation: 'Consider proactive self-care before things get harder',
+            actionItems: [
+              'Try a 5-minute breathing exercise',
+              'Reach out to a supportive friend',
+              'Take a short walk or do gentle movement',
+              'Practice a grounding technique'
+            ],
             severity: trend[0] <= 2 ? 'high' : 'medium',
-            timestamp: Date.now()
+            timestamp: now,
+            confidence: Math.min(0.9, avgDecline / 2),
+            basedOn: [`${trend.length} consecutive mood entries`, `${avgDecline.toFixed(1)} point decline`],
+            preventiveAction: {
+              type: 'breathing',
+              estimatedTime: '5-10 minutes',
+              benefits: ['Reduces stress', 'Improves focus', 'Calms nervous system']
+            }
           })
         }
       }
     }
 
-    // Check for negative streak (4+ consecutive low moods)
-    const consecutiveLowMoods = getConsecutiveLowMoods()
-    if (consecutiveLowMoods >= 4) {
-      const patternId = `negative-streak-${Math.floor(Date.now() / (24 * 60 * 60 * 1000))}`
+    // Predictive pattern alerts based on historical data
+    const historicalPatterns = analyzeHistoricalPatterns()
+    historicalPatterns.forEach(pattern => {
+      if (pattern.confidence > 0.6) {
+        const patternId = `predictive-${pattern.type}-${Math.floor(now / (24 * 60 * 60 * 1000))}`
+        if (!dismissedPatterns.includes(patternId)) {
+          notifications.push({
+            id: patternId,
+            type: 'pattern-alert',
+            category: 'preventive',
+            message: pattern.message,
+            recommendation: pattern.recommendation,
+            actionItems: pattern.actionItems,
+            severity: 'medium',
+            timestamp: now,
+            confidence: pattern.confidence,
+            basedOn: pattern.basedOn,
+            preventiveAction: pattern.preventiveAction
+          })
+        }
+      }
+    })
+
+    // Wellness reminders based on successful patterns
+    const successfulPatterns = detectSuccessfulPatterns()
+    successfulPatterns.forEach(pattern => {
+      const patternId = `wellness-reminder-${pattern.type}-${Math.floor(now / (7 * 24 * 60 * 60 * 1000))}`
       if (!dismissedPatterns.includes(patternId)) {
-        patterns.push({
+        notifications.push({
           id: patternId,
-          type: 'negative-streak',
-          message: `You've logged ${consecutiveLowMoods} consecutive low mood entries`,
-          recommendation: 'This might be a good time to connect with your support network or try a breathing exercise',
-          severity: consecutiveLowMoods >= 7 ? 'high' : 'medium',
-          timestamp: Date.now()
+          type: 'wellness-reminder',
+          category: 'supportive',
+          message: pattern.message,
+          recommendation: pattern.recommendation,
+          severity: 'low',
+          timestamp: now,
+          confidence: pattern.confidence,
+          basedOn: pattern.basedOn,
+          preventiveAction: pattern.preventiveAction
         })
       }
-    }
+    })
 
-    // Check for positive patterns to reinforce
-    const recentPositive = moods.slice(0, 5).filter(m => ['good', 'excellent'].includes(m.mood))
-    if (recentPositive.length >= 4) {
-      const patternId = `positive-pattern-${Math.floor(Date.now() / (7 * 24 * 60 * 60 * 1000))}`
+    // Positive reinforcement
+    const positiveStreak = getPositiveStreak()
+    if (positiveStreak >= 3) {
+      const patternId = `positive-streak-${Math.floor(now / (7 * 24 * 60 * 60 * 1000))}`
       if (!dismissedPatterns.includes(patternId)) {
-        patterns.push({
+        notifications.push({
           id: patternId,
           type: 'positive-pattern',
-          message: 'You\'ve been in a great mood lately! 🌟',
-          recommendation: 'Keep up the great work! Consider noting what\'s been helping you feel good',
+          category: 'supportive',
+          message: `Amazing! You've maintained positive mood for ${positiveStreak} days 🌟`,
+          recommendation: 'Keep up the great work and consider what\'s been helping you thrive',
+          actionItems: [
+            'Reflect on what\'s been working well',
+            'Share your positive energy with others',
+            'Consider setting a new wellness goal'
+          ],
           severity: 'low',
-          timestamp: Date.now()
+          timestamp: now,
+          confidence: 0.9,
+          basedOn: [`${positiveStreak} consecutive positive mood days`],
+          preventiveAction: {
+            type: 'mindfulness',
+            estimatedTime: '5 minutes',
+            benefits: ['Reinforces positive patterns', 'Builds self-awareness', 'Maintains momentum']
+          }
         })
       }
     }
 
-    setActivePatterns(patterns)
+    setActiveNotifications(notifications)
   }
 
-  const getConsecutiveLowMoods = () => {
-    let count = 0
+  const analyzeHistoricalPatterns = () => {
+    const patterns: any[] = []
+    const currentHour = new Date().getHours()
+    const currentDay = new Date().getDay()
+    
+    // Analyze time-based patterns
+    const afternoonSlumps = moods.filter(m => {
+      const hour = new Date(m.timestamp).getHours()
+      return hour >= 14 && hour <= 16 && ['low', 'very-low'].includes(m.mood)
+    })
+    
+    if (afternoonSlumps.length >= 3 && currentHour >= 13 && currentHour <= 15) {
+      patterns.push({
+        type: 'afternoon-slump',
+        message: 'You often experience afternoon energy dips around this time',
+        recommendation: 'Try a quick energy boost before your mood drops',
+        actionItems: [
+          'Take a 5-minute walk',
+          'Do some light stretching',
+          'Have a healthy snack',
+          'Practice energizing breathing'
+        ],
+        confidence: Math.min(0.8, afternoonSlumps.length / 10),
+        basedOn: [`${afternoonSlumps.length} historical afternoon low moods`],
+        preventiveAction: {
+          type: 'activity',
+          estimatedTime: '5-10 minutes',
+          benefits: ['Boosts energy', 'Prevents mood dip', 'Improves focus']
+        }
+      })
+    }
+
+    // Analyze day-of-week patterns
+    const mondayBlues = moods.filter(m => {
+      const day = new Date(m.timestamp).getDay()
+      return day === 1 && ['low', 'very-low'].includes(m.mood)
+    })
+    
+    if (mondayBlues.length >= 2 && currentDay === 1) {
+      patterns.push({
+        type: 'monday-blues',
+        message: 'Mondays tend to be challenging for you',
+        recommendation: 'Start your Monday with extra self-care',
+        actionItems: [
+          'Plan something enjoyable for Monday evening',
+          'Prepare Sunday night to reduce Monday stress',
+          'Start with a gentle morning routine',
+          'Connect with supportive people'
+        ],
+        confidence: Math.min(0.9, mondayBlues.length / 5),
+        basedOn: [`${mondayBlues.length} challenging Mondays`],
+        preventiveAction: {
+          type: 'routine',
+          estimatedTime: '10-15 minutes',
+          benefits: ['Reduces Monday stress', 'Improves week start', 'Builds resilience']
+        }
+      })
+    }
+
+    return patterns
+  }
+
+  const detectSuccessfulPatterns = () => {
+    const patterns: any[] = []
+    
+    // Analyze what activities correlate with mood improvements
+    const exerciseMentions = entries.filter(entry => 
+      entry.content.toLowerCase().includes('exercise') || 
+      entry.content.toLowerCase().includes('workout') ||
+      entry.keywords.includes('exercise')
+    )
+    
+    if (exerciseMentions.length >= 3) {
+      const exerciseImpact = analyzeActivityImpact('exercise')
+      if (exerciseImpact && exerciseImpact.improvement > 0.5) {
+        patterns.push({
+          type: 'exercise-reminder',
+          message: 'Exercise has been consistently boosting your mood',
+          recommendation: 'Consider incorporating movement into your routine today',
+          confidence: 0.8,
+          basedOn: [`${exerciseMentions.length} exercise entries`, `+${exerciseImpact.improvement.toFixed(1)} mood improvement`],
+          preventiveAction: {
+            type: 'activity',
+            estimatedTime: '15-30 minutes',
+            benefits: ['Improves mood', 'Increases energy', 'Reduces stress']
+          }
+        })
+      }
+    }
+
+    return patterns
+  }
+
+  const analyzeActivityImpact = (activity: string) => {
+    const relevantEntries = entries.filter(entry => 
+      entry.content.toLowerCase().includes(activity.toLowerCase()) || 
+      entry.keywords.includes(activity.toLowerCase())
+    )
+    
+    if (relevantEntries.length < 2) return null
+
+    const moodValues = { 'very-low': 1, 'low': 2, 'neutral': 3, 'good': 4, 'excellent': 5 }
+    let beforeMoods: number[] = []
+    let afterMoods: number[] = []
+
+    relevantEntries.forEach(entry => {
+      const entryTime = entry.timestamp
+      const beforeMood = moods.find(m => m.timestamp <= entryTime && (entryTime - m.timestamp) <= 4 * 60 * 60 * 1000)
+      const afterMood = moods.find(m => m.timestamp >= entryTime && (m.timestamp - entryTime) <= 4 * 60 * 60 * 1000)
+      
+      if (beforeMood && afterMood) {
+        beforeMoods.push(moodValues[beforeMood.mood])
+        afterMoods.push(moodValues[afterMood.mood])
+      }
+    })
+
+    if (beforeMoods.length < 2) return null
+
+    const avgBefore = beforeMoods.reduce((a, b) => a + b, 0) / beforeMoods.length
+    const avgAfter = afterMoods.reduce((a, b) => a + b, 0) / afterMoods.length
+
+    return {
+      improvement: avgAfter - avgBefore,
+      frequency: relevantEntries.length
+    }
+  }
+
+  const getPositiveStreak = () => {
+    let streak = 0
+    const moodValues = { 'very-low': 1, 'low': 2, 'neutral': 3, 'good': 4, 'excellent': 5 }
+    
     for (const mood of moods) {
-      if (['very-low', 'low'].includes(mood.mood)) {
-        count++
+      if (moodValues[mood.mood] >= 4) {
+        streak++
       } else {
         break
       }
     }
-    return count
+    return streak
   }
 
-  const dismissPattern = (patternId: string) => {
-    setDismissedPatterns(current => [...current, patternId])
-    setActivePatterns(current => current.filter(p => p.id !== patternId))
+  const dismissNotification = (notificationId: string) => {
+    setDismissedPatterns(current => [...current, notificationId])
+    setActiveNotifications(current => current.filter(n => n.id !== notificationId))
+    
+    // Show a supportive message when dismissing
+    toast.success("We're here when you need us", {
+      description: "You can always access wellness tools in the chatbot.",
+      duration: 3000,
+    })
   }
 
-  const getSeverityColor = (severity: string) => {
-    switch (severity) {
-      case 'high': return 'destructive'
-      case 'medium': return 'default'
-      case 'low': return 'secondary'
-      default: return 'default'
+  const executePreventiveAction = (notification: SmartNotification) => {
+    if (notification.preventiveAction) {
+      const action = notification.preventiveAction
+      toast.success(`Starting ${action.type} exercise`, {
+        description: `This should take about ${action.estimatedTime}`,
+        duration: 5000,
+      })
+      
+      // Here you could trigger specific actions like opening breathing exercises
+      // For now, we'll just dismiss the notification and show encouragement
+      dismissNotification(notification.id)
     }
   }
 
-  const getPatternIcon = (type: string) => {
-    switch (type) {
-      case 'declining-trend': return <TrendDown className="text-destructive" size={16} />
-      case 'negative-streak': return <Bell className="text-destructive" size={16} />
-      case 'positive-pattern': return <TrendUp className="text-accent" size={16} />
+  const getCategoryColor = (category: string) => {
+    switch (category) {
+      case 'urgent': return 'border-l-destructive bg-destructive/5'
+      case 'preventive': return 'border-l-orange-500 bg-orange-50'
+      case 'supportive': return 'border-l-green-500 bg-green-50'
+      case 'insight': return 'border-l-blue-500 bg-blue-50'
+      default: return 'border-l-primary bg-primary/5'
+    }
+  }
+
+  const getCategoryIcon = (category: string, type: string) => {
+    switch (category) {
+      case 'urgent': return <Warning className="text-destructive" size={16} />
+      case 'preventive': return <Target className="text-orange-600" size={16} />
+      case 'supportive': return <TrendUp className="text-green-600" size={16} />
+      case 'insight': return <Brain className="text-blue-600" size={16} />
       default: return <Bell size={16} />
     }
   }
 
-  if (activePatterns.length === 0) return null
+  const getSeverityBadge = (severity: string) => {
+    switch (severity) {
+      case 'high': return { variant: 'destructive' as const, label: 'High Priority' }
+      case 'medium': return { variant: 'default' as const, label: 'Medium Priority' }
+      case 'low': return { variant: 'secondary' as const, label: 'Low Priority' }
+      default: return { variant: 'outline' as const, label: 'Info' }
+    }
+  }
+
+  if (activeNotifications.length === 0) return null
 
   return (
     <div className="space-y-3">
       <AnimatePresence>
-        {activePatterns.map((pattern) => (
-          <motion.div
-            key={pattern.id}
-            initial={{ opacity: 0, y: -20, height: 0 }}
-            animate={{ opacity: 1, y: 0, height: 'auto' }}
-            exit={{ opacity: 0, y: -20, height: 0 }}
-            transition={{ duration: 0.3 }}
-          >
-            <Alert className={`border-l-4 ${
-              pattern.severity === 'high' ? 'border-l-destructive' : 
-              pattern.severity === 'medium' ? 'border-l-primary' : 
-              'border-l-accent'
-            }`}>
-              <div className="flex items-start justify-between">
-                <div className="flex items-start gap-2 flex-1">
-                  {getPatternIcon(pattern.type)}
-                  <div className="flex-1">
-                    <AlertDescription className="space-y-2">
-                      <div className="flex items-center gap-2">
-                        <span className="font-medium">{pattern.message}</span>
-                        <Badge variant={getSeverityColor(pattern.severity)} className="text-xs">
-                          {pattern.severity}
+        {activeNotifications.map((notification) => {
+          const severityBadge = getSeverityBadge(notification.severity)
+          
+          return (
+            <motion.div
+              key={notification.id}
+              initial={{ opacity: 0, y: -20, height: 0 }}
+              animate={{ opacity: 1, y: 0, height: 'auto' }}
+              exit={{ opacity: 0, y: -20, height: 0 }}
+              transition={{ duration: 0.3 }}
+            >
+              <Alert className={`border-l-4 ${getCategoryColor(notification.category)}`}>
+                <div className="flex items-start justify-between">
+                  <div className="flex items-start gap-2 flex-1">
+                    {getCategoryIcon(notification.category, notification.type)}
+                    <div className="flex-1 space-y-3">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <span className="font-medium">{notification.message}</span>
+                        <Badge variant={severityBadge.variant} className="text-xs">
+                          {severityBadge.label}
+                        </Badge>
+                        <Badge variant="outline" className="text-xs">
+                          {Math.round(notification.confidence * 100)}% confidence
                         </Badge>
                       </div>
-                      <p className="text-sm text-muted-foreground">
-                        {pattern.recommendation}
-                      </p>
-                    </AlertDescription>
+                      
+                      <AlertDescription className="space-y-3">
+                        <p className="text-sm text-muted-foreground">
+                          {notification.recommendation}
+                        </p>
+                        
+                        {notification.actionItems && notification.actionItems.length > 0 && (
+                          <div className="space-y-2">
+                            <span className="text-sm font-medium">Suggested actions:</span>
+                            <ul className="text-sm space-y-1">
+                              {notification.actionItems.map((item, index) => (
+                                <li key={index} className="flex items-start gap-2">
+                                  <span className="text-primary text-xs">•</span>
+                                  <span>{item}</span>
+                                </li>
+                              ))}
+                            </ul>
+                          </div>
+                        )}
+                        
+                        {notification.preventiveAction && (
+                          <div className="bg-accent/10 p-3 rounded-lg space-y-2">
+                            <div className="flex items-center justify-between">
+                              <span className="text-sm font-medium">Quick Action Available</span>
+                              <Button
+                                size="sm"
+                                onClick={() => executePreventiveAction(notification)}
+                                className="text-xs"
+                              >
+                                Start {notification.preventiveAction.type}
+                              </Button>
+                            </div>
+                            <div className="text-xs text-muted-foreground">
+                              {notification.preventiveAction.estimatedTime} • {notification.preventiveAction.benefits.join(', ')}
+                            </div>
+                          </div>
+                        )}
+                        
+                        <div className="text-xs text-muted-foreground">
+                          <span className="font-medium">Based on: </span>
+                          {notification.basedOn.join(', ')}
+                        </div>
+                      </AlertDescription>
+                    </div>
                   </div>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => dismissNotification(notification.id)}
+                    className="shrink-0 ml-2"
+                  >
+                    <X size={14} />
+                  </Button>
                 </div>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={() => dismissPattern(pattern.id)}
-                  className="shrink-0 ml-2"
-                >
-                  <X size={14} />
-                </Button>
-              </div>
-            </Alert>
-          </motion.div>
-        ))}
+              </Alert>
+            </motion.div>
+          )
+        })}
       </AnimatePresence>
     </div>
   )

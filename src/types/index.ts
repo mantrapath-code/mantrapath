@@ -55,3 +55,46 @@ export interface UserStats {
   badges: string[]
   currentTheme?: 'default' | 'calm' | 'energetic' | 'supportive' | 'dynamic'
 }
+
+// Enhanced types for mood insights and patterns
+export interface MoodPattern {
+  type: 'daily' | 'weekly' | 'trigger-based' | 'context-based'
+  pattern: string
+  confidence: number
+  frequency: number
+  suggestion: string
+  impact: 'positive' | 'negative' | 'neutral'
+}
+
+export interface PersonalizedInsight {
+  id: string
+  type: 'pattern' | 'achievement' | 'recommendation' | 'warning'
+  title: string
+  description: string
+  actionItems: string[]
+  priority: 'low' | 'medium' | 'high'
+  timestamp: number
+  category: string
+}
+
+export interface WeeklyAnalysis {
+  week: { start: number; end: number }
+  averageMood: number
+  moodVariability: number
+  dominantMood: string
+  patterns: MoodPattern[]
+  insights: PersonalizedInsight[]
+  recommendations: RecommendationCard[]
+  streaks: { current: number; longest: number }
+}
+
+export interface RecommendationCard {
+  id: string
+  title: string
+  description: string
+  type: 'exercise' | 'mindfulness' | 'social' | 'routine' | 'professional'
+  urgency: 'low' | 'medium' | 'high'
+  estimatedTime: string
+  benefits: string[]
+  basedOn: string[]
+}

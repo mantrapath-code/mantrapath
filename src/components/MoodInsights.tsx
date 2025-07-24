@@ -3,6 +3,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Progress } from '@/components/ui/progress'
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { 
   TrendUp, 
   TrendDown, 
@@ -13,13 +14,17 @@ import {
   Heart,
   Brain,
   Users,
-  Activity
+  Activity,
+  ArrowsLeftRight,
+  BarChart3
 } from '@phosphor-icons/react'
 import { motion } from 'framer-motion'
 import { useMoods, useJournal } from '@/hooks/useWellness'
 import { MoodPattern, PersonalizedInsight, WeeklyAnalysis, RecommendationCard } from '@/types'
 import { DemoDataSeeder } from '@/components/DemoDataSeeder'
 import { MoodCorrelations } from '@/components/MoodCorrelations'
+import { MoodComparisonView } from '@/components/MoodComparisonView'
+import { EnhancedMoodChart } from '@/components/EnhancedMoodChart'
 import { EnhancedMoodChart } from '@/components/EnhancedMoodChart'
 
 export function MoodInsights() {
@@ -62,117 +67,159 @@ export function MoodInsights() {
 
   return (
     <div className="space-y-6">
-      {/* Enhanced Mood Chart */}
-      <EnhancedMoodChart />
-      
-      {/* Weekly Overview */}
-      <motion.div
-        initial={{ opacity: 0, y: 20 }}
-        animate={{ opacity: 1, y: 0 }}
-      >
-        <Card className="bg-gradient-to-r from-blue-50 to-indigo-50 dark:from-blue-950/20 dark:to-indigo-950/20">
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <Calendar className="text-blue-600" size={24} />
-              This Week's Analysis
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-              <div className="text-center">
-                <div className="text-3xl font-bold text-blue-600 mb-1">
-                  {Math.round(weeklyAnalysis.averageMood * 20)}%
+      <Tabs defaultValue="overview" className="w-full">
+        <TabsList className="grid w-full grid-cols-4">
+          <TabsTrigger value="overview" className="flex items-center gap-2">
+            <Calendar size={16} />
+            Overview
+          </TabsTrigger>
+          <TabsTrigger value="comparison" className="flex items-center gap-2">
+            <ArrowsLeftRight size={16} />
+            Compare
+          </TabsTrigger>
+          <TabsTrigger value="correlations" className="flex items-center gap-2">
+            <BarChart3 size={16} />
+            Correlations
+          </TabsTrigger>
+          <TabsTrigger value="recommendations" className="flex items-center gap-2">
+            <Target size={16} />
+            Actions
+          </TabsTrigger>
+        </TabsList>
+
+        <TabsContent value="overview" className="space-y-6 mt-6">
+          {/* Enhanced Mood Chart */}
+          <EnhancedMoodChart />
+          
+          {/* Weekly Overview */}
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+          >
+            <Card className="bg-gradient-to-r from-blue-50 to-indigo-50 dark:from-blue-950/20 dark:to-indigo-950/20">
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <Calendar className="text-blue-600" size={24} />
+                  This Week's Analysis
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                  <div className="text-center">
+                    <div className="text-3xl font-bold text-blue-600 mb-1">
+                      {Math.round(weeklyAnalysis.averageMood * 20)}%
+                    </div>
+                    <div className="text-sm text-muted-foreground">Average Wellness</div>
+                  </div>
+                  <div className="text-center">
+                    <div className="text-3xl font-bold text-green-600 mb-1 capitalize">
+                      {weeklyAnalysis.dominantMood}
+                    </div>
+                    <div className="text-sm text-muted-foreground">Dominant Mood</div>
+                  </div>
+                  <div className="text-center">
+                    <div className="text-3xl font-bold text-purple-600 mb-1">
+                      {weeklyAnalysis.streaks.current}
+                    </div>
+                    <div className="text-sm text-muted-foreground">Current Streak</div>
+                  </div>
                 </div>
-                <div className="text-sm text-muted-foreground">Average Wellness</div>
-              </div>
-              <div className="text-center">
-                <div className="text-3xl font-bold text-green-600 mb-1 capitalize">
-                  {weeklyAnalysis.dominantMood}
-                </div>
-                <div className="text-sm text-muted-foreground">Dominant Mood</div>
-              </div>
-              <div className="text-center">
-                <div className="text-3xl font-bold text-purple-600 mb-1">
-                  {weeklyAnalysis.streaks.current}
-                </div>
-                <div className="text-sm text-muted-foreground">Current Streak</div>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-      </motion.div>
+              </CardContent>
+            </Card>
+          </motion.div>
 
-      {/* Detected Patterns */}
-      {patterns.length > 0 && (
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.1 }}
-        >
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <TrendUp className="text-green-600" size={24} />
-                Detected Patterns
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              {patterns.slice(0, 3).map((pattern, index) => (
-                <PatternCard key={index} pattern={pattern} />
-              ))}
-            </CardContent>
-          </Card>
-        </motion.div>
-      )}
+          {/* Detected Patterns */}
+          {patterns.length > 0 && (
+            <motion.div
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.1 }}
+            >
+              <Card>
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2">
+                    <TrendUp className="text-green-600" size={24} />
+                    Detected Patterns
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  {patterns.slice(0, 3).map((pattern, index) => (
+                    <PatternCard key={index} pattern={pattern} />
+                  ))}
+                </CardContent>
+              </Card>
+            </motion.div>
+          )}
 
-      {/* Personalized Insights */}
-      {weeklyAnalysis.insights.length > 0 && (
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.2 }}
-        >
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <Lightbulb className="text-yellow-600" size={24} />
-                Personal Insights
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              {weeklyAnalysis.insights.map((insight) => (
-                <InsightCard key={insight.id} insight={insight} />
-              ))}
-            </CardContent>
-          </Card>
-        </motion.div>
-      )}
+          {/* Personalized Insights */}
+          {weeklyAnalysis.insights.length > 0 && (
+            <motion.div
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.2 }}
+            >
+              <Card>
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2">
+                    <Lightbulb className="text-yellow-600" size={24} />
+                    Personal Insights
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  {weeklyAnalysis.insights.map((insight) => (
+                    <InsightCard key={insight.id} insight={insight} />
+                  ))}
+                </CardContent>
+              </Card>
+            </motion.div>
+          )}
+        </TabsContent>
 
-      {/* Recommendations */}
-      {recommendations.length > 0 && (
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.3 }}
-        >
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <Target className="text-primary" size={24} />
-                Personalized Recommendations
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              {recommendations.slice(0, 3).map((rec) => (
-                <RecommendationCardComponent key={rec.id} recommendation={rec} />
-              ))}
-            </CardContent>
-          </Card>
-        </motion.div>
-      )}
+        <TabsContent value="comparison" className="space-y-6 mt-6">
+          <MoodComparisonView />
+        </TabsContent>
 
-      {/* Mood Correlations */}
-      <MoodCorrelations />
+        <TabsContent value="correlations" className="space-y-6 mt-6">
+          <MoodCorrelations />
+        </TabsContent>
+
+        <TabsContent value="recommendations" className="space-y-6 mt-6">
+          {/* Recommendations */}
+          {recommendations.length > 0 ? (
+            <motion.div
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+            >
+              <Card>
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2">
+                    <Target className="text-primary" size={24} />
+                    Personalized Recommendations
+                  </CardTitle>
+                  <p className="text-sm text-muted-foreground">
+                    Based on your mood patterns and insights, here are actions that could help improve your well-being
+                  </p>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  {recommendations.map((rec) => (
+                    <RecommendationCardComponent key={rec.id} recommendation={rec} />
+                  ))}
+                </CardContent>
+              </Card>
+            </motion.div>
+          ) : (
+            <Card>
+              <CardContent className="p-6 text-center">
+                <Target className="mx-auto text-muted-foreground mb-4" size={48} />
+                <h3 className="text-lg font-semibold mb-2">Personalized Recommendations Coming Soon</h3>
+                <p className="text-muted-foreground">
+                  Continue logging your moods and activities to receive tailored wellness recommendations.
+                </p>
+              </CardContent>
+            </Card>
+          )}
+        </TabsContent>
+      </Tabs>
     </div>
   )
 }
