@@ -4,6 +4,10 @@ export interface MoodEntry {
   timestamp: number
   note?: string
   triggers?: string[]
+  dayOfWeek?: number
+  timeOfDay?: 'morning' | 'afternoon' | 'evening' | 'night'
+  energy?: 'high' | 'medium' | 'low'
+  context?: string[]
 }
 
 export interface JournalEntry {
@@ -23,6 +27,8 @@ export interface ChatMessage {
   context?: {
     suggestedMood?: MoodEntry['mood']
     suggestedContent?: string[]
+    breathingExercise?: boolean
+    exerciseType?: '4-7-8' | '4-4-4-4' | 'box'
   }
 }
 
@@ -47,4 +53,5 @@ export interface UserStats {
   communityContributions: number
   unlockedThemes: string[]
   badges: string[]
+  currentTheme?: 'default' | 'calm' | 'energetic' | 'supportive' | 'dynamic'
 }

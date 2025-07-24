@@ -111,7 +111,7 @@ function App() {
                 initial={{ opacity: 0, x: 20 }}
                 animate={{ opacity: 1, x: 0 }}
                 transition={{ delay: 0.2 }}
-                className="sticky top-28"
+                className="sticky top-32"
               >
                 <ChatBot />
               </motion.div>
@@ -135,18 +135,20 @@ function App() {
               initial={{ opacity: 0, scale: 0.95, y: 20 }}
               animate={{ opacity: 1, scale: 1, y: 0 }}
               exit={{ opacity: 0, scale: 0.95, y: 20 }}
-              className="fixed inset-4 z-50 lg:hidden"
+              className="fixed inset-4 z-50 lg:hidden rounded-lg overflow-hidden"
             >
-              <div className="relative h-full">
+              <div className="relative h-full bg-background rounded-lg">
                 <Button
                   onClick={() => setShowChat(false)}
-                  className="absolute top-2 right-2 z-10"
+                  className="absolute top-4 right-4 z-10"
                   size="sm"
                   variant="ghost"
                 >
                   <X size={16} />
                 </Button>
-                <ChatBot className="h-full" />
+                <div className="h-full p-4 pt-16">
+                  <ChatBot className="h-full" />
+                </div>
               </div>
             </motion.div>
           </>

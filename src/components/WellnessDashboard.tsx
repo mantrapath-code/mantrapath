@@ -1,16 +1,24 @@
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Progress } from "@/components/ui/progress"
 import { Badge } from "@/components/ui/badge"
+import { Button } from "@/components/ui/button"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { Trophy, Heart, BookOpen, Users, Target, Brain } from "@phosphor-icons/react"
+import { Trophy, Heart, BookOpen, Users, Target, Brain, Palette } from "@phosphor-icons/react"
 import { useMoods, useJournal, useUserStats } from "@/hooks/useWellness"
+import { useMoodBasedTheme } from "@/hooks/useMoodTheme"
 import { MoodInsights } from "@/components/MoodInsights"
+import { MoodPatternNotifications } from "@/components/MoodPatternNotifications"
 import { motion } from "framer-motion"
 
 export function WellnessDashboard() {
   const { moods, getMoodTrend } = useMoods()
   const { entries } = useJournal()
   const { stats } = useUserStats()
+  const { currentTheme, availableThemes, applyTheme, autoApplyMoodTheme, getCurrentMood } = useMoodBasedTheme()
+  
+  const recentMoods = moods.slice(0, 7)
+  const moodTrend = getMoodTrend()
+  const userCurrentMood = getCurrentMood()
   
   const recentMoods = moods.slice(0, 7)
   const moodTrend = getMoodTrend()
@@ -34,16 +42,35 @@ export function WellnessDashboard() {
   
   return (
     <div className="space-y-6">
+      {/* Mood Pattern Notifications */}
+      <MoodPatternNotifications />
+
       <motion.div
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
       >
         <Card className="bg-gradient-to-r from-primary/5 to-accent/5">
           <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <Target className="text-primary" size={24} />
-              Your Wellness Journey
-            </CardTitle>
+            <div className="flex items-center justify-between">
+              <CardTitle className="flex items-center gap-2">
+                <Target className="text-primary" size={24} />
+                Your Wellness Journey
+              </CardTitle>
+              <div className="flex items-center gap-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={autoApplyMoodTheme}
+                  className="text-xs"
+                >
+                  <Palette size={14} className="mr-1" />
+                  Auto Theme
+                </Button>
+                <Badge variant="secondary" className="text-xs">
+                  Theme: {availableThemes[currentTheme]?.name || 'Default'}
+                </Badge>
+              </div>
+            </div>
           </CardHeader>
           <CardContent>
             <div className="space-y-4">
@@ -69,17 +96,39 @@ export function WellnessDashboard() {
                   💜 Remember to be gentle with yourself. Consider reaching out for support.
                 </div>
               )}
+
+              {/* Current Mood Status */}
+              {moods.length > 0 && (
+                <div className="flex items-center justify-between p-3 bg-muted/50 rounded-lg">
+                  <span className="text-sm font-medium">Current Mood:</span>
+                  <div className="flex items-center gap-2">
+                    <Badge 
+                      variant={userCurrentMood === 'excellent' || userCurrentMood === 'good' ? 'default' : 'secondary'}
+                      className="capitalize"
+                    >
+                      {userCurrentMood}
+                    </Badge>
+                    <span className="text-xs text-muted-foreground">
+                      {new Date(moods[0].timestamp).toLocaleDateString()}
+                    </span>
+                  </div>
+                </div>
+              )}
             </div>
           </CardContent>
         </Card>
       </motion.div>
 
       <Tabs defaultValue="overview" className="w-full">
-        <TabsList className="grid w-full grid-cols-2">
+        <TabsList className="grid w-full grid-cols-3">
           <TabsTrigger value="overview">Overview</TabsTrigger>
           <TabsTrigger value="insights" className="flex items-center gap-2">
             <Brain size={16} />
-            Insights & Patterns
+            Insights
+          </TabsTrigger>
+          <TabsTrigger value="themes" className="flex items-center gap-2">
+            <Palette size={16} />
+            Themes
           </TabsTrigger>
         </TabsList>
         
@@ -199,6 +248,80 @@ export function WellnessDashboard() {
         
         <TabsContent value="insights" className="space-y-6">
           <MoodInsights />
+        </TabsContent>
+
+        <TabsContent value="themes" className="space-y-6">
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Palette className="text-primary" size={24} />
+                Personalized Themes
+              </CardTitle>
+              <p className="text-sm text-muted-foreground">
+                Choose a theme that matches your current mood or let the app adapt automatically
+              </p>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="grid gap-3">
+                {Object.entries(availableThemes).map(([key, theme]) => (
+                  <motion.div
+                    key={key}
+                    initial={{ opacity: 0, x: -20 }}
+                    animate={{ opacity: 1, x: 0 }}
+                    className={`flex items-center justify-between p-4 border rounded-lg cursor-pointer transition-colors ${
+                      currentTheme === key ? 'border-primary bg-primary/5' : 'border-border hover:bg-muted/50'
+                    }`}
+                    onClick={() => applyTheme(key)}
+                  >
+                    <div className="flex-1">
+                      <div className="flex items-center gap-3">
+                        <div className="flex gap-1">
+                          {theme.moodRange.map((mood, index) => {
+                            const colors = {
+                              'excellent': 'bg-green-400',
+                              'good': 'bg-blue-400',
+                              'neutral': 'bg-yellow-400',
+                              'low': 'bg-orange-400',
+                              'very-low': 'bg-red-400'
+                            }
+                            return (
+                              <div
+                                key={index}
+                                className={`w-3 h-3 rounded-full ${colors[mood]}`}
+                                title={mood}
+                              />
+                            )
+                          })}
+                        </div>
+                        <div>
+                          <h3 className="font-medium">{theme.name}</h3>
+                          <p className="text-sm text-muted-foreground">{theme.description}</p>
+                        </div>
+                      </div>
+                    </div>
+                    {currentTheme === key && (
+                      <Badge variant="default" className="text-xs">Active</Badge>
+                    )}
+                  </motion.div>
+                ))}
+              </div>
+              
+              <div className="pt-4 border-t">
+                <h4 className="font-medium mb-2">Smart Theme Suggestions</h4>
+                <p className="text-sm text-muted-foreground mb-3">
+                  Based on your current mood ({userCurrentMood}), we recommend:
+                </p>
+                <Button 
+                  onClick={autoApplyMoodTheme}
+                  variant="outline"
+                  className="w-full"
+                >
+                  <Palette size={16} className="mr-2" />
+                  Apply Mood-Based Theme
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
         </TabsContent>
       </Tabs>
     </div>

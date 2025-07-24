@@ -178,7 +178,8 @@ export function useUserStats() {
     journalStreak: 0,
     communityContributions: 0,
     unlockedThemes: ['default'],
-    badges: []
+    badges: [],
+    currentTheme: 'default'
   })
   
   const updateStats = (updates: Partial<UserStats>) => {
