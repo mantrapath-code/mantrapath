@@ -20,6 +20,7 @@ import { useMoods, useJournal } from '@/hooks/useWellness'
 import { MoodPattern, PersonalizedInsight, WeeklyAnalysis, RecommendationCard } from '@/types'
 import { DemoDataSeeder } from '@/components/DemoDataSeeder'
 import { MoodCorrelations } from '@/components/MoodCorrelations'
+import { EnhancedMoodChart } from '@/components/EnhancedMoodChart'
 
 export function MoodInsights() {
   const { moods } = useMoods()
@@ -61,6 +62,9 @@ export function MoodInsights() {
 
   return (
     <div className="space-y-6">
+      {/* Enhanced Mood Chart */}
+      <EnhancedMoodChart />
+      
       {/* Weekly Overview */}
       <motion.div
         initial={{ opacity: 0, y: 20 }}
