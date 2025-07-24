@@ -25,7 +25,6 @@ import { DemoDataSeeder } from '@/components/DemoDataSeeder'
 import { MoodCorrelations } from '@/components/MoodCorrelations'
 import { MoodComparisonView } from '@/components/MoodComparisonView'
 import { EnhancedMoodChart } from '@/components/EnhancedMoodChart'
-import { EnhancedMoodChart } from '@/components/EnhancedMoodChart'
 
 export function MoodInsights() {
   const { moods } = useMoods()
