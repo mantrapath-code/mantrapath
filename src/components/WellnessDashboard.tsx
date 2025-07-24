@@ -20,9 +20,6 @@ export function WellnessDashboard() {
   const moodTrend = getMoodTrend()
   const userCurrentMood = getCurrentMood()
   
-  const recentMoods = moods.slice(0, 7)
-  const moodTrend = getMoodTrend()
-  
   const getMoodValue = (mood: string) => {
     switch (mood) {
       case 'excellent': return 5
