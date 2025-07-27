@@ -5,7 +5,7 @@ import { Badge } from '@/components/ui/badge'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Progress } from '@/components/ui/progress'
 import { CalendarBlank, TrendUp, TrendDown, ArrowsLeftRight, ChartLine } from '@phosphor-icons/react'
-import { useMoods } from '@/hooks/useWellness'
+import { useMoods } from '../hooks/useWellness'
 import { motion } from 'framer-motion'
 
 type TimePeriod = '7d' | '14d' | '30d' | '90d'

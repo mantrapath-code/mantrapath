@@ -2,7 +2,7 @@ import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Database, Sparkle } from "@phosphor-icons/react"
 import { useKV } from '@github/spark/hooks'
-import { MoodEntry } from "@/types"
+import { MoodEntry } from "../types"
 import { toast } from "sonner"
 
 export function DemoDataSeeder() {

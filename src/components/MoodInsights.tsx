@@ -19,12 +19,12 @@ import {
   BarChart3
 } from '@phosphor-icons/react'
 import { motion } from 'framer-motion'
-import { useMoods, useJournal } from '@/hooks/useWellness'
-import { MoodPattern, PersonalizedInsight, WeeklyAnalysis, RecommendationCard } from '@/types'
-import { DemoDataSeeder } from '@/components/DemoDataSeeder'
-import { MoodCorrelations } from '@/components/MoodCorrelations'
-import { MoodComparisonView } from '@/components/MoodComparisonView'
-import { EnhancedMoodChart } from '@/components/EnhancedMoodChart'
+import { useMoods, useJournal } from '../hooks/useWellness'
+import { MoodPattern, PersonalizedInsight, WeeklyAnalysis, RecommendationCard } from '../types'
+import { DemoDataSeeder } from './DemoDataSeeder'
+import { MoodCorrelations } from './MoodCorrelations'
+import { MoodComparisonView } from './MoodComparisonView'
+import { EnhancedMoodChart } from './EnhancedMoodChart'
 
 export function MoodInsights() {
   const { moods } = useMoods()

@@ -7,6 +7,8 @@ import { JournalSection } from "@/components/JournalSection"
 import { ChatBot } from "@/components/ChatBot"
 import { CommunitySection } from "@/components/CommunitySection"
 import { WellnessDashboard } from "@/components/WellnessDashboard"
+import { MoodPatternNotifications } from "@/components/MoodPatternNotifications"
+import { useMoodBasedTheme } from "@/hooks/useMoodTheme"
 import { motion, AnimatePresence } from "framer-motion"
 import { Toaster } from "@/components/ui/sonner"
 
@@ -14,6 +16,9 @@ function App() {
   const [activeTab, setActiveTab] = useState("dashboard")
   const [showChat, setShowChat] = useState(false)
   const [isMobile, setIsMobile] = useState(false)
+  
+  // Initialize mood-based theme system
+  const { currentTheme } = useMoodBasedTheme()
   
   useEffect(() => {
     const checkMobile = () => {
@@ -181,6 +186,9 @@ function App() {
           </div>
         </div>
       </footer>
+      
+      {/* Mood Pattern Notifications - Global component */}
+      <MoodPatternNotifications />
       
       <Toaster 
         position="top-right"
