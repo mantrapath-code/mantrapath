@@ -1,299 +1,235 @@
-/**
- * Wellness-related hooks for mood tracking, chat functionality, analytics, and user stats
- * 
- * Exports:
- * - useMoods: Mood tracking and management
- * - useChat: Chat functionality with Mantra-Mitra
- * - useMoodAnalytics: Mood analytics and insights  
- * - useUserStats: User statistics and achievements
- * 
- * Note: useJournal is exported from './useJournal' separately
- */
+import { useState, useEffect, useCallback } from 'react'
+import { toast } from 'sonner'
+import { apiService } from '@/services/api'
 
-import { useKV } from '@github/spark/hooks'
-import { MoodEntry, JournalEntry, ChatMessage, CommunityPost, UserStats } from '@/types'
-
-export function useMoods() {
-  const [moods, setMoods] = useKV<MoodEntry[]>('user-moods', [])
-  
-  const addMood = (mood: MoodEntry['mood'], note?: string, triggers?: string[], energy?: 'high' | 'medium' | 'low', context?: string[]) => {
-    const getTimeOfDay = (): 'morning' | 'afternoon' | 'evening' | 'night' => {
-      const hour = new Date().getHours()
-      if (hour >= 5 && hour < 12) return 'morning'
-      if (hour >= 12 && hour < 17) return 'afternoon'
-      if (hour >= 17 && hour < 21) return 'evening'
-      return 'night'
-    }
-
-    const newMood: MoodEntry = {
-      id: Date.now().toString(),
-      mood,
-      timestamp: Date.now(),
-      note,
-      triggers,
-      dayOfWeek: new Date().getDay(),
-      timeOfDay: getTimeOfDay(),
-      energy: energy || 'medium',
-      context
-    }
-    setMoods(current => [newMood, ...current])
-    
-    // Update mood streak
-    updateMoodStreak(mood)
-    
-    return newMood
-  }
-
-  const updateMoodStreak = (mood: MoodEntry['mood']) => {
-    const moodValue = { 'very-low': 1, 'low': 2, 'neutral': 3, 'good': 4, 'excellent': 5 }[mood]
-    // If mood is neutral or above, continue/start streak
-    if (moodValue >= 3) {
-      // This would typically update the user stats, but we'll keep it simple for now
-    }
-  }
-
-  const getMoodTrend = () => {
-    const recent = moods.slice(0, 7)
-    if (recent.length === 0) return 'neutral'
-    
-    const moodValues = {
-      'very-low': 1,
-      'low': 2,
-      'neutral': 3,
-      'good': 4,
-      'excellent': 5
-    }
-    
-    const average = recent.reduce((sum, entry) => sum + moodValues[entry.mood], 0) / recent.length
-    
-    if (average >= 4) return 'positive'
-    if (average <= 2) return 'concerning'
-    return 'neutral'
-  }
-
-  return { moods, addMood, getMoodTrend }
+export interface MoodEntry {
+  id: string
+  mood: number
+  energy: number
+  stress: number
+  sleep: number
+  note: string
+  tags: string[]
+  timestamp: string
 }
 
-export function useChat() {
-  const [messages, setMessages] = useKV<ChatMessage[]>('chat-messages', [])
-  
-  const addMessage = (content: string, sender: 'user' | 'mitra', context?: ChatMessage['context']) => {
-    const newMessage: ChatMessage = {
-      id: Date.now().toString(),
-      content,
-      sender,
-      timestamp: Date.now(),
-      context
-    }
-    
-    setMessages(current => [...current, newMessage])
-    return newMessage
+export interface MoodAnalytics {
+  averageMood: number
+  moodTrend: 'improving' | 'declining' | 'stable'
+  totalEntries: number
+  streak: number
+  weeklyPattern: Record<string, number>
+  monthlySummary: {
+    highestMood: number
+    lowestMood: number
+    totalDaysTracked: number
+    mostCommonStressLevel: number
   }
-  
-  const getMitraResponse = async (userMessage: string): Promise<string> => {
-    const prompt = spark.llmPrompt`You are Mantra-Mitra, a compassionate AI wellness companion. Respond to this user message with empathy and practical support. Keep responses warm, supportive, and actionable. User message: ${userMessage}`
-    
+  patterns: Array<{
+    type: string
+    severity: string
+    message: string
+    recommendation: string
+  }>
+}
+
+export function useWellness() {
+  const [moodEntries, setMoodEntries] = useState<MoodEntry[]>([])
+  const [analytics, setAnalytics] = useState<MoodAnalytics | null>(null)
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+
+  // Load mood entries from backend
+  const loadMoodEntries = useCallback(async () => {
     try {
-      const response = await spark.llm(prompt, 'gpt-4o-mini')
-      return response
-    } catch (error) {
-      return "I'm here to support you. Sometimes I need a moment to think - please try again."
+      setLoading(true)
+      setError(null)
+
+      const backendEntries = await apiService.getMoodEntries(100)
+      
+      // Convert backend format to frontend format
+      const formattedEntries: MoodEntry[] = backendEntries.map(entry => ({
+        id: entry.id,
+        mood: entry.mood_score,
+        energy: entry.energy_level || 5,
+        stress: entry.stress_level || 5,
+        sleep: entry.sleep_quality || 5,
+        note: entry.notes || '',
+        tags: entry.context_tags || [],
+        timestamp: entry.created_at
+      }))
+
+      setMoodEntries(formattedEntries)
+      
+    } catch (err) {
+      console.error('Failed to load mood entries:', err)
+      setError('Failed to load mood data')
+      toast.error('Failed to load mood data')
+    } finally {
+      setLoading(false)
     }
-  }
-  
-  return { messages, addMessage, getMitraResponse }
-}
+  }, [])
 
-export function useMoodAnalytics() {
-  const { moods } = useMoods()
-  // Note: Journal entries would be imported from useJournal if needed
+  // Load analytics from backend
+  const loadAnalytics = useCallback(async () => {
+    try {
+      const [overview, patterns] = await Promise.all([
+        apiService.getAnalyticsOverview(),
+        apiService.getWeeklyPatterns()
+      ])
 
-  const getWeeklyInsights = () => {
-    const oneWeekAgo = Date.now() - (7 * 24 * 60 * 60 * 1000)
-    const weekMoods = moods.filter(mood => mood.timestamp >= oneWeekAgo)
-    
-    if (weekMoods.length === 0) return []
+      const analyticsData: MoodAnalytics = {
+        averageMood: overview.average_mood,
+        moodTrend: overview.mood_trend as 'improving' | 'declining' | 'stable',
+        totalEntries: overview.total_entries,
+        streak: overview.streak,
+        weeklyPattern: overview.weekly_pattern,
+        monthlySummary: {
+          highestMood: overview.monthly_summary.highest_mood || 10,
+          lowestMood: overview.monthly_summary.lowest_mood || 1,
+          totalDaysTracked: overview.monthly_summary.total_days_tracked || 0,
+          mostCommonStressLevel: overview.monthly_summary.most_common_stress_level || 5
+        },
+        patterns: patterns.patterns || []
+      }
 
-    const insights = []
-    
-    // Analyze day of week patterns
-    const dayPattern = analyzeDayOfWeekTrends(weekMoods)
-    if (dayPattern) insights.push(dayPattern)
-    
-    // Analyze time of day patterns
-    const timePattern = analyzeTimeOfDayTrends(weekMoods)
-    if (timePattern) insights.push(timePattern)
-    
-    // Analyze trigger patterns
-    const triggerPattern = analyzeTriggerTrends(weekMoods)
-    if (triggerPattern) insights.push(triggerPattern)
+      setAnalytics(analyticsData)
+      
+    } catch (err) {
+      console.error('Failed to load analytics:', err)
+      setError('Failed to load analytics')
+    }
+  }, [])
 
-    return insights
-  }
+  // Load data on mount
+  useEffect(() => {
+    loadMoodEntries()
+    loadAnalytics()
+  }, [loadMoodEntries, loadAnalytics])
 
-  const getMoodPredictions = () => {
-    // Simple prediction based on historical patterns
-    const now = new Date()
-    const currentDay = now.getDay()
-    const currentHour = now.getHours()
+  // Add new mood entry
+  const addMoodEntry = useCallback(async (moodData: {
+    mood: number
+    energy?: number
+    stress?: number
+    sleep?: number
+    note?: string
+    tags?: string[]
+  }) => {
+    try {
+      setLoading(true)
+      setError(null)
+
+      const backendEntry = await apiService.createMoodEntry({
+        mood_score: moodData.mood,
+        energy_level: moodData.energy,
+        stress_level: moodData.stress,
+        sleep_quality: moodData.sleep,
+        notes: moodData.note,
+        context_tags: moodData.tags
+      })
+
+      // Convert and add to local state
+      const newEntry: MoodEntry = {
+        id: backendEntry.id,
+        mood: backendEntry.mood_score,
+        energy: backendEntry.energy_level || 5,
+        stress: backendEntry.stress_level || 5,
+        sleep: backendEntry.sleep_quality || 5,
+        note: backendEntry.notes || '',
+        tags: backendEntry.context_tags || [],
+        timestamp: backendEntry.created_at
+      }
+
+      setMoodEntries(prev => [newEntry, ...prev])
+      
+      // Refresh analytics
+      loadAnalytics()
+      
+      toast.success('Mood entry saved!')
+      return newEntry
+      
+    } catch (err) {
+      console.error('Failed to save mood entry:', err)
+      setError('Failed to save mood entry')
+      toast.error('Failed to save mood entry')
+      throw err
+    } finally {
+      setLoading(false)
+    }
+  }, [loadAnalytics])
+
+  // Get recent mood timeline for charts
+  const getRecentMoodTimeline = useCallback((days: number = 30) => {
+    const cutoff = new Date()
+    cutoff.setDate(cutoff.getDate() - days)
     
-    const similarMoods = moods.filter(mood => {
-      const moodDate = new Date(mood.timestamp)
-      return moodDate.getDay() === currentDay && 
-             Math.abs(moodDate.getHours() - currentHour) <= 2
+    return moodEntries
+      .filter(entry => new Date(entry.timestamp) >= cutoff)
+      .sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime())
+      .map(entry => ({
+        date: entry.timestamp.split('T')[0],
+        mood: entry.mood,
+        energy: entry.energy,
+        stress: entry.stress,
+        sleep: entry.sleep
+      }))
+  }, [moodEntries])
+
+  // Get mood by time of day
+  const getMoodByTimeOfDay = useCallback(() => {
+    const timeGroups = {
+      morning: [] as number[],
+      afternoon: [] as number[],
+      evening: [] as number[],
+      night: [] as number[]
+    }
+
+    moodEntries.forEach(entry => {
+      const hour = new Date(entry.timestamp).getHours()
+      if (hour >= 6 && hour < 12) timeGroups.morning.push(entry.mood)
+      else if (hour >= 12 && hour < 17) timeGroups.afternoon.push(entry.mood)
+      else if (hour >= 17 && hour < 22) timeGroups.evening.push(entry.mood)
+      else timeGroups.night.push(entry.mood)
     })
 
-    if (similarMoods.length < 3) return null
-
-    const moodValues = { 'very-low': 1, 'low': 2, 'neutral': 3, 'good': 4, 'excellent': 5 }
-    const avgMood = similarMoods.reduce((sum, mood) => sum + moodValues[mood.mood], 0) / similarMoods.length
-    
-    return {
-      predictedMood: avgMood,
-      confidence: Math.min(0.9, similarMoods.length / 10),
-      basedOnEntries: similarMoods.length
-    }
-  }
-
-  return {
-    getWeeklyInsights,
-    getMoodPredictions
-  }
-}
-
-export function useUserStats() {
-  const [stats, setStats] = useKV<UserStats>('user-stats', {
-    moodStreak: 0,
-    journalStreak: 0,
-    communityContributions: 0,
-    unlockedThemes: ['default'],
-    badges: [],
-    currentTheme: 'default'
-  })
-  
-  const updateStats = (updates: Partial<UserStats> | ((current: UserStats) => UserStats)) => {
-    if (typeof updates === 'function') {
-      setStats(updates)
-    } else {
-      setStats(current => ({ ...current, ...updates }))
-    }
-  }
-  
-  return { stats, updateStats }
-}
-
-function analyzeDayOfWeekTrends(moods: MoodEntry[]) {
-  const dayMoods = moods.reduce((acc, mood) => {
-    const day = mood.dayOfWeek || new Date(mood.timestamp).getDay()
-    if (!acc[day]) acc[day] = []
-    acc[day].push(mood.mood)
-    return acc
-  }, {} as Record<number, string[]>)
-
-  const dayNames = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday']
-  const moodValues = { 'very-low': 1, 'low': 2, 'neutral': 3, 'good': 4, 'excellent': 5 }
-  
-  let bestDay = -1
-  let worstDay = -1
-  let bestAvg = 0
-  let worstAvg = 6
-  
-  Object.entries(dayMoods).forEach(([day, dayMoodList]) => {
-    if (dayMoodList.length < 2) return
-    const avg = dayMoodList.reduce((sum, mood) => sum + moodValues[mood], 0) / dayMoodList.length
-    if (avg > bestAvg) {
-      bestAvg = avg
-      bestDay = parseInt(day)
-    }
-    if (avg < worstAvg) {
-      worstAvg = avg
-      worstDay = parseInt(day)
-    }
-  })
-
-  if (bestDay === -1 || Math.abs(bestAvg - worstAvg) < 0.8) return null
-
-  return {
-    type: 'day-pattern',
-    insight: `Your mood tends to be ${bestAvg > worstAvg ? 'higher' : 'lower'} on ${dayNames[bestDay]}s`,
-    recommendation: bestDay < worstDay 
-      ? `Plan self-care for ${dayNames[worstDay]}s`
-      : `Use ${dayNames[bestDay]} energy for challenging tasks`,
-    confidence: Math.min(0.9, Math.abs(bestAvg - worstAvg) / 2)
-  }
-}
-
-function analyzeTimeOfDayTrends(moods: MoodEntry[]) {
-  const timeMoods = moods.reduce((acc, mood) => {
-    const time = mood.timeOfDay || getTimeOfDayFromTimestamp(mood.timestamp)
-    if (!acc[time]) acc[time] = []
-    acc[time].push(mood.mood)
-    return acc
-  }, {} as Record<string, string[]>)
-
-  const moodValues = { 'very-low': 1, 'low': 2, 'neutral': 3, 'good': 4, 'excellent': 5 }
-  const timeAverages = Object.entries(timeMoods).map(([time, moodList]) => ({
-    time,
-    average: moodList.reduce((sum, mood) => sum + moodValues[mood], 0) / moodList.length,
-    count: moodList.length
-  })).filter(item => item.count >= 2)
-
-  if (timeAverages.length < 2) return null
-
-  const bestTime = timeAverages.reduce((a, b) => a.average > b.average ? a : b)
-  const worstTime = timeAverages.reduce((a, b) => a.average < b.average ? a : b)
-
-  if (Math.abs(bestTime.average - worstTime.average) < 0.8) return null
-
-  return {
-    type: 'time-pattern',
-    insight: `You tend to feel best during ${bestTime.time} and lowest during ${worstTime.time}`,
-    recommendation: `Schedule important activities during ${bestTime.time}, and plan self-care for ${worstTime.time}`,
-    confidence: Math.min(0.8, Math.abs(bestTime.average - worstTime.average) / 2)
-  }
-}
-
-function analyzeTriggerTrends(moods: MoodEntry[]) {
-  const triggeredMoods = moods.filter(m => m.triggers && m.triggers.length > 0)
-  if (triggeredMoods.length < 3) return null
-
-  const triggerImpact = triggeredMoods.reduce((acc, mood) => {
-    mood.triggers!.forEach(trigger => {
-      if (!acc[trigger]) acc[trigger] = { total: 0, count: 0 }
-      acc[trigger].total += { 'very-low': 1, 'low': 2, 'neutral': 3, 'good': 4, 'excellent': 5 }[mood.mood]
-      acc[trigger].count++
-    })
-    return acc
-  }, {} as Record<string, { total: number, count: number }>)
-
-  const triggerAverages = Object.entries(triggerImpact)
-    .map(([trigger, data]) => ({
-      trigger,
-      average: data.total / data.count,
-      count: data.count
+    return Object.entries(timeGroups).map(([time, moods]) => ({
+      time,
+      averageMood: moods.length > 0 ? moods.reduce((sum, mood) => sum + mood, 0) / moods.length : 0,
+      count: moods.length
     }))
-    .filter(item => item.count >= 2)
-    .sort((a, b) => b.count - a.count)
+  }, [moodEntries])
 
-  if (triggerAverages.length === 0) return null
-
-  const mostCommon = triggerAverages[0]
-  const impact = mostCommon.average > 3 ? 'positive' : 'negative'
+  // Get current mood state for theme
+  const getCurrentMoodState = useCallback(() => {
+    if (moodEntries.length === 0) return 'neutral'
+    
+    const recentEntries = moodEntries.slice(0, 3) // Last 3 entries
+    const averageRecentMood = recentEntries.reduce((sum, entry) => sum + entry.mood, 0) / recentEntries.length
+    
+    if (averageRecentMood >= 8) return 'excellent'
+    if (averageRecentMood >= 6) return 'good'
+    if (averageRecentMood >= 4) return 'neutral'
+    if (averageRecentMood >= 2) return 'low'
+    return 'very-low'
+  }, [moodEntries])
 
   return {
-    type: 'trigger-pattern',
-    insight: `"${mostCommon.trigger}" appears frequently and has a ${impact} impact on your mood`,
-    recommendation: impact === 'positive' 
-      ? `Try to incorporate "${mostCommon.trigger}" more often`
-      : `Consider strategies to manage "${mostCommon.trigger}" triggers`,
-    confidence: Math.min(0.9, mostCommon.count / triggeredMoods.length)
+    moodEntries,
+    analytics,
+    loading,
+    error,
+    actions: {
+      addMoodEntry,
+      loadMoodEntries,
+      loadAnalytics,
+      getRecentMoodTimeline,
+      getMoodByTimeOfDay,
+      getCurrentMoodState,
+      refresh: () => {
+        loadMoodEntries()
+        loadAnalytics()
+      }
+    }
   }
-}
-
-function getTimeOfDayFromTimestamp(timestamp: number): 'morning' | 'afternoon' | 'evening' | 'night' {
-  const hour = new Date(timestamp).getHours()
-  if (hour >= 5 && hour < 12) return 'morning'
-  if (hour >= 12 && hour < 17) return 'afternoon'
-  if (hour >= 17 && hour < 21) return 'evening'
-  return 'night'
 }

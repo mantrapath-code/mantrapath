@@ -1,35 +1,35 @@
 """
-Auth Service - Authentication, authorization, and user management
+Authentication Service - Handles user registration, login, and token management
 """
-
-from fastapi import FastAPI, Depends, HTTPException, status, BackgroundTasks
+from fastapi import FastAPI, Depends, HTTPException, status
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
 from sqlalchemy.orm import Session
-from sqlalchemy import and_, or_
-from typing import List, Optional, Dict, Any
-from datetime import datetime, timedelta
-import uuid
-from pydantic import BaseModel, EmailStr, UUID4, Field
-import json
-import redis
-
-# Import shared modules
+from pydantic import BaseModel, EmailStr
+from typing import Optional
 import sys
 import os
-sys.path.append(os.path.join(os.path.dirname(__file__), '..', '..'))
 
-from shared.database import get_db
+# Add parent directories to path
+sys.path.append('/app')
+sys.path.append('/app/shared')
+
+from shared.database import get_database, engine
+from shared.models import User, UserProfile, Base
 from shared.auth import (
-    hash_password, verify_password, create_access_token, create_refresh_token,
-    verify_token, blacklist_token, get_current_user, require_admin,
-    cache_user_data, clear_user_cache
+    verify_password, 
+    get_password_hash, 
+    create_access_token, 
+    create_refresh_token,
+    verify_token,
+    get_current_user
 )
-from shared.models import User, UserProfile
+
+# Create tables
+Base.metadata.create_all(bind=engine)
 
 app = FastAPI(
     title="MantraPath Auth Service",
-    description="Authentication, authorization, and user management",
+    description="Authentication and user management service",
     version="1.0.0"
 )
 
@@ -41,309 +41,144 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Redis for caching and sessions
-redis_client = redis.from_url(os.getenv("REDIS_URL", "redis://localhost:6379"))
-
-# OAuth2 scheme
-oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/login")
-
 # Pydantic models
-class UserCreate(BaseModel):
+class UserRegister(BaseModel):
     email: EmailStr
-    password: str = Field(..., min_length=8, max_length=100)
-    full_name: str = Field(..., min_length=2, max_length=100)
+    username: str
+    password: str
+    first_name: Optional[str] = None
+    last_name: Optional[str] = None
 
-class UserResponse(BaseModel):
-    id: UUID4
-    email: str
-    full_name: str
-    is_active: bool
-    is_verified: bool
-    role: str
-    created_at: datetime
-
-class LoginRequest(BaseModel):
+class UserLogin(BaseModel):
     email: EmailStr
     password: str
 
-class LoginResponse(BaseModel):
+class Token(BaseModel):
     access_token: str
     refresh_token: str
-    token_type: str
-    expires_in: int
-    user: UserResponse
+    token_type: str = "bearer"
 
-class TokenResponse(BaseModel):
-    access_token: str
-    token_type: str
-    expires_in: int
+class UserResponse(BaseModel):
+    id: str
+    email: str
+    username: str
+    is_active: bool
+    role: str
 
-class RefreshTokenRequest(BaseModel):
-    refresh_token: str
-
-class PasswordChangeRequest(BaseModel):
-    current_password: str
-    new_password: str = Field(..., min_length=8, max_length=100)
-
-class PasswordResetRequest(BaseModel):
-    email: EmailStr
-
-class PasswordResetConfirm(BaseModel):
-    token: str
-    new_password: str = Field(..., min_length=8, max_length=100)
-
-class UserUpdate(BaseModel):
-    full_name: Optional[str] = None
-    is_active: Optional[bool] = None
-    role: Optional[str] = None
-
-# Core authentication endpoints
-@app.post("/register", response_model=LoginResponse)
-async def register(
-    user_data: UserCreate,
-    background_tasks: BackgroundTasks,
-    db: Session = Depends(get_db)
-):
-    """Register a new user"""
+# Auth endpoints
+@app.post("/register", response_model=Token)
+async def register(user_data: UserRegister, db: Session = Depends(get_database)):
+    """Register new user"""
     
-    # Check if email already exists
-    existing_user = db.query(User).filter(User.email == user_data.email).first()
+    # Check if user exists
+    existing_user = db.query(User).filter(
+        (User.email == user_data.email) | (User.username == user_data.username)
+    ).first()
+    
     if existing_user:
         raise HTTPException(
-            status_code=400,
-            detail="Email already registered"
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Email or username already registered"
         )
     
     # Create user
-    hashed_password = hash_password(user_data.password)
-    user = User(
-        id=uuid.uuid4(),
+    hashed_password = get_password_hash(user_data.password)
+    db_user = User(
         email=user_data.email,
+        username=user_data.username,
         hashed_password=hashed_password,
-        full_name=user_data.full_name,
-        is_active=True,
-        is_verified=False,  # Require email verification
-        role="user"
+        is_verified=True  # Auto-verify for demo
     )
     
-    db.add(user)
+    db.add(db_user)
     db.commit()
-    db.refresh(user)
+    db.refresh(db_user)
     
-    # Create default profile
+    # Create profile
     profile = UserProfile(
-        id=uuid.uuid4(),
-        user_id=user.id,
-        theme="light",
-        privacy_level="private",
-        email_notifications=True,
-        push_notifications=True,
-        mood_reminders=True,
-        weekly_reports=True
+        user_id=db_user.id,
+        first_name=user_data.first_name,
+        last_name=user_data.last_name
     )
     
     db.add(profile)
     db.commit()
     
-    # Generate tokens
-    token_data = {
-        "sub": str(user.id),
-        "email": user.email,
-        "role": user.role,
-        "full_name": user.full_name,
-        "is_active": user.is_active
-    }
-    
-    access_token = create_access_token(token_data)
-    refresh_token = create_refresh_token({"sub": str(user.id)})
-    
-    # Cache user data
-    cache_user_data(str(user.id), {
-        "id": str(user.id),
-        "email": user.email,
-        "full_name": user.full_name,
-        "role": user.role,
-        "is_active": user.is_active
+    # Create tokens
+    access_token = create_access_token(data={
+        "sub": str(db_user.id),
+        "email": db_user.email,
+        "role": db_user.role
     })
+    refresh_token = create_refresh_token(data={"sub": str(db_user.id)})
     
-    # Send verification email in background
-    background_tasks.add_task(send_verification_email, user.email, str(user.id))
-    
-    user_response = UserResponse(
-        id=user.id,
-        email=user.email,
-        full_name=user.full_name,
-        is_active=user.is_active,
-        is_verified=user.is_verified,
-        role=user.role,
-        created_at=user.created_at
-    )
-    
-    return LoginResponse(
-        access_token=access_token,
-        refresh_token=refresh_token,
-        token_type="bearer",
-        expires_in=30 * 60,  # 30 minutes
-        user=user_response
-    )
+    return Token(access_token=access_token, refresh_token=refresh_token)
 
-@app.post("/login", response_model=LoginResponse)
-async def login(
-    login_data: LoginRequest,
-    db: Session = Depends(get_db)
-):
+@app.post("/login", response_model=Token)
+async def login(user_data: UserLogin, db: Session = Depends(get_database)):
     """Login user"""
     
-    # Find user by email
-    user = db.query(User).filter(User.email == login_data.email).first()
+    user = db.query(User).filter(User.email == user_data.email).first()
     
-    if not user or not verify_password(login_data.password, user.hashed_password):
+    if not user or not verify_password(user_data.password, user.hashed_password):
         raise HTTPException(
-            status_code=401,
-            detail="Invalid email or password"
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Incorrect email or password"
         )
     
     if not user.is_active:
         raise HTTPException(
-            status_code=401,
+            status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Account is deactivated"
         )
     
-    # Generate tokens
-    token_data = {
+    # Create tokens
+    access_token = create_access_token(data={
         "sub": str(user.id),
         "email": user.email,
-        "role": user.role,
-        "full_name": user.full_name,
-        "is_active": user.is_active
-    }
-    
-    access_token = create_access_token(token_data)
-    refresh_token = create_refresh_token({"sub": str(user.id)})
-    
-    # Cache user data
-    cache_user_data(str(user.id), {
-        "id": str(user.id),
-        "email": user.email,
-        "full_name": user.full_name,
-        "role": user.role,
-        "is_active": user.is_active
+        "role": user.role
     })
+    refresh_token = create_refresh_token(data={"sub": str(user.id)})
     
-    user_response = UserResponse(
-        id=user.id,
-        email=user.email,
-        full_name=user.full_name,
-        is_active=user.is_active,
-        is_verified=user.is_verified,
-        role=user.role,
-        created_at=user.created_at
-    )
-    
-    return LoginResponse(
-        access_token=access_token,
-        refresh_token=refresh_token,
-        token_type="bearer",
-        expires_in=30 * 60,  # 30 minutes
-        user=user_response
-    )
+    return Token(access_token=access_token, refresh_token=refresh_token)
 
-@app.post("/logout")
-async def logout(
-    current_user: Dict[str, Any] = Depends(get_current_user),
-    token: str = Depends(oauth2_scheme)
-):
-    """Logout user (blacklist current token)"""
-    
-    # Blacklist the token
-    blacklist_token(token)
-    
-    # Clear user cache
-    clear_user_cache(current_user["user_id"])
-    
-    return {"message": "Successfully logged out"}
-
-@app.post("/logout-all")
-async def logout_all_devices(
-    current_user: Dict[str, Any] = Depends(get_current_user),
-    db: Session = Depends(get_db)
-):
-    """Logout from all devices"""
-    
-    # In a real implementation, you'd track all user tokens
-    # For now, just clear the user cache
-    clear_user_cache(current_user["user_id"])
-    
-    return {"message": "Successfully logged out from all devices"}
-
-@app.post("/refresh-token", response_model=TokenResponse)
-async def refresh_access_token(
-    refresh_data: RefreshTokenRequest,
-    db: Session = Depends(get_db)
-):
+@app.post("/refresh-token", response_model=Token)
+async def refresh_token(token_data: dict):
     """Refresh access token"""
     
-    # Verify refresh token
-    try:
-        payload = verify_token(refresh_data.refresh_token, "refresh")
-        user_id = payload.get("sub")
-        
-        if not user_id:
-            raise HTTPException(status_code=401, detail="Invalid refresh token")
-        
-        # Get user from database
-        user = db.query(User).filter(User.id == user_id).first()
-        if not user or not user.is_active:
-            raise HTTPException(status_code=401, detail="User not found or inactive")
-        
-        # Generate new access token
-        token_data = {
-            "sub": str(user.id),
-            "email": user.email,
-            "role": user.role,
-            "full_name": user.full_name,
-            "is_active": user.is_active
-        }
-        
-        access_token = create_access_token(token_data)
-        
-        return TokenResponse(
-            access_token=access_token,
-            token_type="bearer",
-            expires_in=30 * 60
+    refresh_token = token_data.get("refresh_token")
+    if not refresh_token:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Refresh token required"
         )
     
-    except Exception:
-        raise HTTPException(status_code=401, detail="Invalid refresh token")
-
-@app.post("/revoke-token")
-async def revoke_refresh_token(
-    refresh_data: RefreshTokenRequest,
-    current_user: Dict[str, Any] = Depends(get_current_user)
-):
-    """Revoke refresh token"""
+    # Verify refresh token
+    payload = verify_token(refresh_token, "refresh")
+    user_id = payload.get("sub")
     
-    # Blacklist the refresh token
-    blacklist_token(refresh_data.refresh_token)
+    # Get user from database
+    db = next(get_database())
+    user = db.query(User).filter(User.id == user_id).first()
     
-    return {"message": "Refresh token revoked successfully"}
+    if not user or not user.is_active:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid token"
+        )
+    
+    # Create new tokens
+    access_token = create_access_token(data={
+        "sub": str(user.id),
+        "email": user.email,
+        "role": user.role
+    })
+    new_refresh_token = create_refresh_token(data={"sub": str(user.id)})
+    
+    return Token(access_token=access_token, refresh_token=new_refresh_token)
 
-@app.post("/validate")
-async def validate_token(
-    current_user: Dict[str, Any] = Depends(get_current_user)
-):
-    """Validate current token and return user info"""
-    return {
-        "valid": True,
-        "user": current_user
-    }
-
-# User management endpoints
 @app.get("/me", response_model=UserResponse)
-async def get_current_user_info(
-    current_user: Dict[str, Any] = Depends(get_current_user),
-    db: Session = Depends(get_db)
-):
+async def get_current_user_info(current_user: dict = Depends(get_current_user), db: Session = Depends(get_database)):
     """Get current user information"""
     
     user = db.query(User).filter(User.id == current_user["user_id"]).first()
@@ -351,282 +186,22 @@ async def get_current_user_info(
         raise HTTPException(status_code=404, detail="User not found")
     
     return UserResponse(
-        id=user.id,
+        id=str(user.id),
         email=user.email,
-        full_name=user.full_name,
+        username=user.username,
         is_active=user.is_active,
-        is_verified=user.is_verified,
-        role=user.role,
-        created_at=user.created_at
+        role=user.role
     )
 
-@app.get("/users/{user_id}", response_model=UserResponse)
-async def get_user_by_id(
-    user_id: UUID4,
-    db: Session = Depends(get_db),
-    current_user: Dict[str, Any] = Depends(get_current_user)
-):
-    """Get user by ID (own profile or admin only)"""
-    
-    # Users can only view their own profile unless they're admin
-    if str(user_id) != current_user["user_id"] and current_user["role"] != "admin":
-        raise HTTPException(status_code=403, detail="Access denied")
-    
-    user = db.query(User).filter(User.id == user_id).first()
-    if not user:
-        raise HTTPException(status_code=404, detail="User not found")
-    
-    return UserResponse(
-        id=user.id,
-        email=user.email,
-        full_name=user.full_name,
-        is_active=user.is_active,
-        is_verified=user.is_verified,
-        role=user.role,
-        created_at=user.created_at
-    )
+@app.post("/logout")
+async def logout():
+    """Logout user (token invalidation handled client-side)"""
+    return {"message": "Successfully logged out"}
 
-@app.put("/users/{user_id}", response_model=UserResponse)
-async def update_user(
-    user_id: UUID4,
-    user_update: UserUpdate,
-    db: Session = Depends(get_db),
-    current_user: Dict[str, Any] = Depends(get_current_user)
-):
-    """Update user (own profile or admin only)"""
-    
-    # Users can only update their own profile unless they're admin
-    if str(user_id) != current_user["user_id"] and current_user["role"] != "admin":
-        raise HTTPException(status_code=403, detail="Access denied")
-    
-    user = db.query(User).filter(User.id == user_id).first()
-    if not user:
-        raise HTTPException(status_code=404, detail="User not found")
-    
-    # Regular users can only update their name
-    if current_user["role"] != "admin":
-        if user_update.is_active is not None or user_update.role is not None:
-            raise HTTPException(status_code=403, detail="Insufficient permissions")
-    
-    # Update user fields
-    if user_update.full_name is not None:
-        user.full_name = user_update.full_name
-    
-    if user_update.is_active is not None and current_user["role"] == "admin":
-        user.is_active = user_update.is_active
-    
-    if user_update.role is not None and current_user["role"] == "admin":
-        user.role = user_update.role
-    
-    db.commit()
-    db.refresh(user)
-    
-    # Clear user cache
-    clear_user_cache(str(user.id))
-    
-    return UserResponse(
-        id=user.id,
-        email=user.email,
-        full_name=user.full_name,
-        is_active=user.is_active,
-        is_verified=user.is_verified,
-        role=user.role,
-        created_at=user.created_at
-    )
-
-@app.post("/change-password")
-async def change_password(
-    password_data: PasswordChangeRequest,
-    db: Session = Depends(get_db),
-    current_user: Dict[str, Any] = Depends(get_current_user)
-):
-    """Change user password"""
-    
-    user = db.query(User).filter(User.id == current_user["user_id"]).first()
-    if not user:
-        raise HTTPException(status_code=404, detail="User not found")
-    
-    # Verify current password
-    if not verify_password(password_data.current_password, user.hashed_password):
-        raise HTTPException(status_code=400, detail="Current password is incorrect")
-    
-    # Update password
-    user.hashed_password = hash_password(password_data.new_password)
-    db.commit()
-    
-    # Clear user cache to force re-authentication
-    clear_user_cache(current_user["user_id"])
-    
-    return {"message": "Password changed successfully"}
-
-# Password reset endpoints
-@app.post("/password-reset/request")
-async def request_password_reset(
-    reset_request: PasswordResetRequest,
-    background_tasks: BackgroundTasks,
-    db: Session = Depends(get_db)
-):
-    """Request password reset"""
-    
-    user = db.query(User).filter(User.email == reset_request.email).first()
-    
-    # Don't reveal if email exists or not
-    message = "If the email address is registered, you will receive password reset instructions."
-    
-    if user:
-        # Generate reset token
-        reset_token = create_access_token(
-            {"sub": str(user.id), "purpose": "password_reset"},
-            expires_delta=timedelta(hours=1)  # 1 hour expiry
-        )
-        
-        # Send reset email in background
-        background_tasks.add_task(
-            send_password_reset_email, 
-            user.email, 
-            reset_token
-        )
-    
-    return {"message": message}
-
-@app.post("/password-reset/confirm")
-async def confirm_password_reset(
-    reset_data: PasswordResetConfirm,
-    db: Session = Depends(get_db)
-):
-    """Confirm password reset with token"""
-    
-    try:
-        # Verify reset token
-        payload = verify_token(reset_data.token)
-        user_id = payload.get("sub")
-        purpose = payload.get("purpose")
-        
-        if not user_id or purpose != "password_reset":
-            raise HTTPException(status_code=400, detail="Invalid reset token")
-        
-        # Get user
-        user = db.query(User).filter(User.id == user_id).first()
-        if not user:
-            raise HTTPException(status_code=400, detail="User not found")
-        
-        # Update password
-        user.hashed_password = hash_password(reset_data.new_password)
-        db.commit()
-        
-        # Clear user cache
-        clear_user_cache(str(user.id))
-        
-        return {"message": "Password reset successfully"}
-    
-    except Exception:
-        raise HTTPException(status_code=400, detail="Invalid or expired reset token")
-
-# Admin endpoints
-@app.get("/admin/users", response_model=List[UserResponse])
-async def get_all_users(
-    skip: int = 0,
-    limit: int = 50,
-    search: Optional[str] = None,
-    role: Optional[str] = None,
-    active_only: Optional[bool] = None,
-    db: Session = Depends(get_db),
-    current_user: Dict[str, Any] = Depends(require_admin)
-):
-    """Get all users (admin only)"""
-    
-    query = db.query(User)
-    
-    # Apply filters
-    if search:
-        query = query.filter(
-            or_(
-                User.email.ilike(f"%{search}%"),
-                User.full_name.ilike(f"%{search}%")
-            )
-        )
-    
-    if role:
-        query = query.filter(User.role == role)
-    
-    if active_only is not None:
-        query = query.filter(User.is_active == active_only)
-    
-    users = query.order_by(User.created_at.desc()).offset(skip).limit(limit).all()
-    
-    return [
-        UserResponse(
-            id=user.id,
-            email=user.email,
-            full_name=user.full_name,
-            is_active=user.is_active,
-            is_verified=user.is_verified,
-            role=user.role,
-            created_at=user.created_at
-        )
-        for user in users
-    ]
-
-@app.post("/admin/users", response_model=UserResponse)
-async def create_user_admin(
-    user_data: UserCreate,
-    role: str = "user",
-    db: Session = Depends(get_db),
-    current_user: Dict[str, Any] = Depends(require_admin)
-):
-    """Create user (admin only)"""
-    
-    # Check if email already exists
-    existing_user = db.query(User).filter(User.email == user_data.email).first()
-    if existing_user:
-        raise HTTPException(status_code=400, detail="Email already registered")
-    
-    # Create user
-    user = User(
-        id=uuid.uuid4(),
-        email=user_data.email,
-        hashed_password=hash_password(user_data.password),
-        full_name=user_data.full_name,
-        is_active=True,
-        is_verified=True,  # Admin-created users are auto-verified
-        role=role
-    )
-    
-    db.add(user)
-    db.commit()
-    db.refresh(user)
-    
-    return UserResponse(
-        id=user.id,
-        email=user.email,
-        full_name=user.full_name,
-        is_active=user.is_active,
-        is_verified=user.is_verified,
-        role=user.role,
-        created_at=user.created_at
-    )
-
-# Background tasks
-async def send_verification_email(email: str, user_id: str):
-    """Send email verification (placeholder)"""
-    print(f"📧 Sending verification email to {email} for user {user_id}")
-    # In real implementation: send email via SendGrid, SES, etc.
-
-async def send_password_reset_email(email: str, reset_token: str):
-    """Send password reset email (placeholder)"""
-    print(f"📧 Sending password reset email to {email}")
-    print(f"🔗 Reset link: /reset-password?token={reset_token}")
-    # In real implementation: send email with reset link
-
-# Health check
 @app.get("/health")
 async def health_check():
-    """Service health check"""
-    return {
-        "status": "healthy",
-        "service": "auth_service",
-        "timestamp": datetime.utcnow().isoformat()
-    }
+    """Health check endpoint"""
+    return {"status": "healthy", "service": "auth-service"}
 
 if __name__ == "__main__":
     import uvicorn

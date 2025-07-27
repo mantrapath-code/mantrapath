@@ -1,81 +1,71 @@
 """
 Shared database configuration and utilities
 """
-
 from sqlalchemy import create_engine
-from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession
 from sqlalchemy.orm import sessionmaker, Session
-from sqlalchemy.pool import StaticPool
+from sqlalchemy.ext.declarative import declarative_base
 import os
-from typing import AsyncGenerator, Generator
-from .models import Base
+from typing import Generator
+import redis
+from contextlib import contextmanager
 
-class DatabaseConfig:
+# Database configuration
+DATABASE_URL = os.getenv("DATABASE_URL", "postgresql://mantrapath:mantrapath123@localhost:5432/mantrapath")
+REDIS_URL = os.getenv("REDIS_URL", "redis://localhost:6379")
+
+# SQLAlchemy setup
+engine = create_engine(DATABASE_URL)
+SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
+Base = declarative_base()
+
+# Redis setup
+redis_client = redis.from_url(REDIS_URL, decode_responses=True)
+
+def get_database() -> Generator[Session, None, None]:
+    """Dependency for getting database session"""
+    db = SessionLocal()
+    try:
+        yield db
+    finally:
+        db.close()
+
+@contextmanager
+def get_db_context():
+    """Context manager for database session"""
+    db = SessionLocal()
+    try:
+        yield db
+        db.commit()
+    except Exception:
+        db.rollback()
+        raise
+    finally:
+        db.close()
+
+def get_redis():
+    """Get Redis client"""
+    return redis_client
+
+class CacheService:
+    """Redis caching service"""
+    
     def __init__(self):
-        self.database_url = os.getenv("DATABASE_URL", "postgresql://mantrapath:password@localhost:5432/mantrapath")
-        self.async_database_url = self.database_url.replace("postgresql://", "postgresql+asyncpg://")
-        
-        # Create engines
-        self.engine = create_engine(
-            self.database_url,
-            pool_size=20,
-            max_overflow=30,
-            pool_pre_ping=True,
-            pool_recycle=3600,
-        )
-        
-        self.async_engine = create_async_engine(
-            self.async_database_url,
-            pool_size=20,
-            max_overflow=30,
-            pool_pre_ping=True,
-            pool_recycle=3600,
-        )
-        
-        # Create session factories
-        self.SessionLocal = sessionmaker(
-            autocommit=False,
-            autoflush=False,
-            bind=self.engine
-        )
-        
-        self.AsyncSessionLocal = sessionmaker(
-            bind=self.async_engine,
-            class_=AsyncSession,
-            autocommit=False,
-            autoflush=False,
-        )
+        self.redis = get_redis()
     
-    def create_tables(self):
-        """Create all tables"""
-        Base.metadata.create_all(bind=self.engine)
+    async def get(self, key: str):
+        """Get value from cache"""
+        return self.redis.get(key)
     
-    def drop_tables(self):
-        """Drop all tables"""
-        Base.metadata.drop_all(bind=self.engine)
+    async def set(self, key: str, value: str, expiration: int = 3600):
+        """Set value in cache with expiration"""
+        return self.redis.setex(key, expiration, value)
     
-    def get_session(self) -> Generator[Session, None, None]:
-        """Get synchronous database session"""
-        session = self.SessionLocal()
-        try:
-            yield session
-        finally:
-            session.close()
+    async def delete(self, key: str):
+        """Delete key from cache"""
+        return self.redis.delete(key)
     
-    async def get_async_session(self) -> AsyncGenerator[AsyncSession, None]:
-        """Get asynchronous database session"""
-        async with self.AsyncSessionLocal() as session:
-            yield session
+    async def exists(self, key: str):
+        """Check if key exists in cache"""
+        return self.redis.exists(key)
 
-# Global database instance
-db_config = DatabaseConfig()
-
-# Dependency functions for FastAPI
-def get_db() -> Generator[Session, None, None]:
-    """FastAPI dependency for synchronous database sessions"""
-    yield from db_config.get_session()
-
-async def get_async_db() -> AsyncGenerator[AsyncSession, None]:
-    """FastAPI dependency for asynchronous database sessions"""
-    async for session in db_config.get_async_session():
-        yield session
+cache_service = CacheService()

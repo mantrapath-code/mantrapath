@@ -1,240 +1,172 @@
 version: '3.8'
 
 services:
-  # Infrastructure
   postgres:
     image: postgres:15
     environment:
-      POSTGRES_USER: mantrapath
-      POSTGRES_PASSWORD: password
       POSTGRES_DB: mantrapath
+      POSTGRES_USER: mantrapath
+      POSTGRES_PASSWORD: mantrapath123
     ports:
       - "5432:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
-      - ./scripts/init_db.sql:/docker-entrypoint-initdb.d/init_db.sql
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U mantrapath"]
-      interval: 5s
-      timeout: 5s
-      retries: 5
 
   redis:
     image: redis:7-alpine
     ports:
       - "6379:6379"
+    command: redis-server --appendonly yes
     volumes:
       - redis_data:/data
-    healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
-      interval: 5s
-      timeout: 3s
-      retries: 5
 
-  # API Gateway
-  api_gateway:
+  api-gateway:
     build:
       context: .
       dockerfile: services/api_gateway/Dockerfile
     ports:
       - "8000:8000"
-    environment:
-      - REDIS_URL=redis://redis:6379
-      - AUTH_SERVICE_URL=http://auth_service:8001
     depends_on:
+      - postgres
       - redis
-      - auth_service
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
+    environment:
+      - DATABASE_URL=postgresql://mantrapath:mantrapath123@postgres:5432/mantrapath
+      - REDIS_URL=redis://redis:6379
+    volumes:
+      - ./services:/app/services
+      - ./shared:/app/shared
 
-  # Auth Service
-  auth_service:
+  auth-service:
     build:
       context: .
       dockerfile: services/auth_service/Dockerfile
     ports:
       - "8001:8001"
-    environment:
-      - DATABASE_URL=postgresql://mantrapath:password@postgres:5432/mantrapath
-      - REDIS_URL=redis://redis:6379
-      - JWT_SECRET_KEY=your-super-secret-jwt-key-change-in-production
-      - JWT_ALGORITHM=HS256
     depends_on:
-      postgres:
-        condition: service_healthy
-      redis:
-        condition: service_healthy
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8001/health"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
+      - postgres
+      - redis
+    environment:
+      - DATABASE_URL=postgresql://mantrapath:mantrapath123@postgres:5432/mantrapath
+      - REDIS_URL=redis://redis:6379
+    volumes:
+      - ./services:/app/services
+      - ./shared:/app/shared
 
-  # Profile Service
-  profile_service:
+  profile-service:
     build:
       context: .
       dockerfile: services/profile_service/Dockerfile
     ports:
       - "8002:8002"
-    environment:
-      - DATABASE_URL=postgresql://mantrapath:password@postgres:5432/mantrapath
-      - REDIS_URL=redis://redis:6379
-      - AUTH_SERVICE_URL=http://auth_service:8001
     depends_on:
-      postgres:
-        condition: service_healthy
-      redis:
-        condition: service_healthy
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8002/health"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
+      - postgres
+      - redis
+    environment:
+      - DATABASE_URL=postgresql://mantrapath:mantrapath123@postgres:5432/mantrapath
+      - REDIS_URL=redis://redis:6379
+    volumes:
+      - ./services:/app/services
+      - ./shared:/app/shared
 
-  # Mood Service
-  mood_service:
+  mood-service:
     build:
       context: .
       dockerfile: services/mood_service/Dockerfile
     ports:
       - "8003:8003"
-    environment:
-      - DATABASE_URL=postgresql://mantrapath:password@postgres:5432/mantrapath
-      - REDIS_URL=redis://redis:6379
-      - AUTH_SERVICE_URL=http://auth_service:8001
     depends_on:
-      postgres:
-        condition: service_healthy
-      redis:
-        condition: service_healthy
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8003/health"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
+      - postgres
+      - redis
+    environment:
+      - DATABASE_URL=postgresql://mantrapath:mantrapath123@postgres:5432/mantrapath
+      - REDIS_URL=redis://redis:6379
+    volumes:
+      - ./services:/app/services
+      - ./shared:/app/shared
 
-  # Chatbot Service
-  chatbot_service:
+  chatbot-service:
     build:
       context: .
       dockerfile: services/chatbot_service/Dockerfile
     ports:
       - "8004:8004"
-    environment:
-      - DATABASE_URL=postgresql://mantrapath:password@postgres:5432/mantrapath
-      - REDIS_URL=redis://redis:6379
-      - AUTH_SERVICE_URL=http://auth_service:8001
-      - OPENAI_API_KEY=your-openai-api-key
     depends_on:
-      postgres:
-        condition: service_healthy
-      redis:
-        condition: service_healthy
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8004/health"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
+      - postgres
+      - redis
+    environment:
+      - DATABASE_URL=postgresql://mantrapath:mantrapath123@postgres:5432/mantrapath
+      - REDIS_URL=redis://redis:6379
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+    volumes:
+      - ./services:/app/services
+      - ./shared:/app/shared
 
-  # Content Service
-  content_service:
+  content-service:
     build:
       context: .
       dockerfile: services/content_service/Dockerfile
     ports:
       - "8005:8005"
-    environment:
-      - DATABASE_URL=postgresql://mantrapath:password@postgres:5432/mantrapath
-      - REDIS_URL=redis://redis:6379
-      - AUTH_SERVICE_URL=http://auth_service:8001
     depends_on:
-      postgres:
-        condition: service_healthy
-      redis:
-        condition: service_healthy
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8005/health"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
+      - postgres
+      - redis
+    environment:
+      - DATABASE_URL=postgresql://mantrapath:mantrapath123@postgres:5432/mantrapath
+      - REDIS_URL=redis://redis:6379
+    volumes:
+      - ./services:/app/services
+      - ./shared:/app/shared
 
-  # Community Service
-  community_service:
+  community-service:
     build:
       context: .
       dockerfile: services/community_service/Dockerfile
     ports:
       - "8006:8006"
-    environment:
-      - DATABASE_URL=postgresql://mantrapath:password@postgres:5432/mantrapath
-      - REDIS_URL=redis://redis:6379
-      - AUTH_SERVICE_URL=http://auth_service:8001
     depends_on:
-      postgres:
-        condition: service_healthy
-      redis:
-        condition: service_healthy
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8006/health"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
+      - postgres
+      - redis
+    environment:
+      - DATABASE_URL=postgresql://mantrapath:mantrapath123@postgres:5432/mantrapath
+      - REDIS_URL=redis://redis:6379
+    volumes:
+      - ./services:/app/services
+      - ./shared:/app/shared
 
-  # Notification Service
-  notification_service:
+  notification-service:
     build:
       context: .
       dockerfile: services/notification_service/Dockerfile
     ports:
       - "8007:8007"
-    environment:
-      - DATABASE_URL=postgresql://mantrapath:password@postgres:5432/mantrapath
-      - REDIS_URL=redis://redis:6379
-      - AUTH_SERVICE_URL=http://auth_service:8001
     depends_on:
-      postgres:
-        condition: service_healthy
-      redis:
-        condition: service_healthy
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8007/health"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
+      - postgres
+      - redis
+    environment:
+      - DATABASE_URL=postgresql://mantrapath:mantrapath123@postgres:5432/mantrapath
+      - REDIS_URL=redis://redis:6379
+    volumes:
+      - ./services:/app/services
+      - ./shared:/app/shared
 
-  # Media Service
-  media_service:
+  media-service:
     build:
       context: .
       dockerfile: services/media_service/Dockerfile
     ports:
       - "8009:8009"
-    environment:
-      - DATABASE_URL=postgresql://mantrapath:password@postgres:5432/mantrapath
-      - REDIS_URL=redis://redis:6379
-      - AUTH_SERVICE_URL=http://auth_service:8001
     depends_on:
-      postgres:
-        condition: service_healthy
-      redis:
-        condition: service_healthy
+      - postgres
+      - redis
+    environment:
+      - DATABASE_URL=postgresql://mantrapath:mantrapath123@postgres:5432/mantrapath
+      - REDIS_URL=redis://redis:6379
     volumes:
-      - media_storage:/app/media
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8009/health"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
+      - ./services:/app/services
+      - ./shared:/app/shared
+      - media_uploads:/app/uploads
 
 volumes:
   postgres_data:
   redis_data:
-  media_storage:
-
-networks:
-  default:
-    name: mantrapath_network
+  media_uploads:

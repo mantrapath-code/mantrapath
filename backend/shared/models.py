@@ -1,327 +1,200 @@
 """
-Shared database models and utilities for MantraPath microservices
+Shared database models across all microservices
 """
-
-from sqlalchemy import Column, Integer, String, DateTime, Boolean, Text, Float, ForeignKey, JSON
+from sqlalchemy import Column, Integer, String, DateTime, Text, Boolean, ForeignKey, JSON, Float
 from sqlalchemy.ext.declarative import declarative_base
-from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import relationship
-from datetime import datetime
+from sqlalchemy.sql import func
 import uuid
+from sqlalchemy.dialects.postgresql import UUID
 
 Base = declarative_base()
 
 class TimestampMixin:
-    """Mixin for created_at and updated_at timestamps"""
-    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), onupdate=func.now())
 
 class User(Base, TimestampMixin):
-    """Core user model - shared across services"""
     __tablename__ = "users"
     
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    email = Column(String(255), unique=True, nullable=False, index=True)
-    hashed_password = Column(String(255), nullable=False)
-    full_name = Column(String(255), nullable=False)
+    email = Column(String, unique=True, index=True, nullable=False)
+    username = Column(String, unique=True, index=True, nullable=False)
+    hashed_password = Column(String, nullable=False)
     is_active = Column(Boolean, default=True)
     is_verified = Column(Boolean, default=False)
-    role = Column(String(50), default="user")  # user, moderator, admin
+    role = Column(String, default="user")
     
-    # Profile relationship
+    # Relationships
     profile = relationship("UserProfile", back_populates="user", uselist=False)
+    moods = relationship("MoodEntry", back_populates="user")
+    journal_entries = relationship("JournalEntry", back_populates="user")
+    chat_sessions = relationship("ChatSession", back_populates="user")
 
 class UserProfile(Base, TimestampMixin):
-    """Extended user profile information"""
     __tablename__ = "user_profiles"
     
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    user_id = Column(UUID(as_uuid=True), ForeignKey("users.id"), unique=True, nullable=False)
-    
-    # Profile data
+    user_id = Column(UUID(as_uuid=True), ForeignKey("users.id"), unique=True)
+    first_name = Column(String)
+    last_name = Column(String)
+    avatar_url = Column(String)
     bio = Column(Text)
-    avatar_url = Column(String(500))
-    timezone = Column(String(50), default="UTC")
-    date_of_birth = Column(DateTime)
-    location = Column(String(255))
-    
-    # Preferences
-    theme = Column(String(50), default="light")
-    privacy_level = Column(String(50), default="private")  # public, friends, private
-    
-    # Notification preferences
-    email_notifications = Column(Boolean, default=True)
-    push_notifications = Column(Boolean, default=True)
-    mood_reminders = Column(Boolean, default=True)
-    weekly_reports = Column(Boolean, default=True)
+    timezone = Column(String, default="UTC")
+    preferences = Column(JSON, default={})
     
     user = relationship("User", back_populates="profile")
 
 class MoodEntry(Base, TimestampMixin):
-    """User mood tracking entries"""
     __tablename__ = "mood_entries"
     
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    user_id = Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=False, index=True)
-    
-    # Mood data
+    user_id = Column(UUID(as_uuid=True), ForeignKey("users.id"))
     mood_score = Column(Integer, nullable=False)  # 1-10 scale
     energy_level = Column(Integer)  # 1-10 scale
-    anxiety_level = Column(Integer)  # 1-10 scale
     stress_level = Column(Integer)  # 1-10 scale
-    
-    # Context
-    context_tags = Column(JSON)  # ["work", "exercise", "social"]
+    sleep_quality = Column(Integer)  # 1-10 scale
     notes = Column(Text)
-    location = Column(String(255))
-    weather = Column(String(100))
+    context_tags = Column(JSON, default=[])
+    location = Column(String)
+    weather = Column(String)
     
-    # Analysis
-    sentiment_score = Column(Float)
-    detected_emotions = Column(JSON)
+    user = relationship("User", back_populates="moods")
 
 class JournalEntry(Base, TimestampMixin):
-    """User journal entries"""
     __tablename__ = "journal_entries"
     
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    user_id = Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=False, index=True)
-    
-    title = Column(String(255))
+    user_id = Column(UUID(as_uuid=True), ForeignKey("users.id"))
+    title = Column(String)
     content = Column(Text, nullable=False)
-    mood_before = Column(Integer)  # 1-10
-    mood_after = Column(Integer)   # 1-10
-    
-    # Analysis
+    mood_before = Column(Integer)
+    mood_after = Column(Integer)
     sentiment_score = Column(Float)
-    key_themes = Column(JSON)
-    word_count = Column(Integer)
-    
-    # Privacy
+    sentiment_label = Column(String)
+    themes = Column(JSON, default=[])
     is_private = Column(Boolean, default=True)
-    tags = Column(JSON)
-
-class Habit(Base, TimestampMixin):
-    """User habit tracking"""
-    __tablename__ = "habits"
     
-    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    user_id = Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=False, index=True)
-    
-    name = Column(String(255), nullable=False)
-    description = Column(Text)
-    category = Column(String(100))  # exercise, mindfulness, sleep, etc.
-    target_frequency = Column(String(50))  # daily, weekly, etc.
-    is_active = Column(Boolean, default=True)
-    
-    # Tracking
-    current_streak = Column(Integer, default=0)
-    longest_streak = Column(Integer, default=0)
-    total_completions = Column(Integer, default=0)
-
-class HabitEvent(Base, TimestampMixin):
-    """Individual habit completion events"""
-    __tablename__ = "habit_events"
-    
-    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    habit_id = Column(UUID(as_uuid=True), ForeignKey("habits.id"), nullable=False, index=True)
-    user_id = Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=False, index=True)
-    
-    completed_at = Column(DateTime, default=datetime.utcnow)
-    notes = Column(Text)
-    rating = Column(Integer)  # How did it go? 1-5
-    duration_minutes = Column(Integer)
+    user = relationship("User", back_populates="journal_entries")
 
 class ChatSession(Base, TimestampMixin):
-    """Chatbot conversation sessions"""
     __tablename__ = "chat_sessions"
     
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    user_id = Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=False, index=True)
-    
-    title = Column(String(255))
+    user_id = Column(UUID(as_uuid=True), ForeignKey("users.id"))
+    title = Column(String)
+    session_type = Column(String, default="general")  # general, crisis, breathing, etc.
     is_active = Column(Boolean, default=True)
-    session_type = Column(String(50), default="general")  # general, crisis, guided
     
-    # Analytics
-    message_count = Column(Integer, default=0)
-    avg_sentiment = Column(Float)
-    topics_discussed = Column(JSON)
+    user = relationship("User", back_populates="chat_sessions")
+    messages = relationship("ChatMessage", back_populates="session")
 
 class ChatMessage(Base, TimestampMixin):
-    """Individual chat messages"""
     __tablename__ = "chat_messages"
     
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    session_id = Column(UUID(as_uuid=True), ForeignKey("chat_sessions.id"), nullable=False, index=True)
-    
+    session_id = Column(UUID(as_uuid=True), ForeignKey("chat_sessions.id"))
+    sender = Column(String, nullable=False)  # 'user' or 'assistant'
     content = Column(Text, nullable=False)
-    is_user_message = Column(Boolean, nullable=False)
-    message_type = Column(String(50), default="text")  # text, image, exercise
+    message_type = Column(String, default="text")  # text, breathing_exercise, etc.
+    metadata = Column(JSON, default={})
     
-    # Analysis
-    sentiment_score = Column(Float)
-    detected_emotions = Column(JSON)
-    crisis_indicators = Column(JSON)
+    session = relationship("ChatSession", back_populates="messages")
 
 class Forum(Base, TimestampMixin):
-    """Community forums"""
     __tablename__ = "forums"
     
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    name = Column(String(255), nullable=False)
+    name = Column(String, nullable=False)
     description = Column(Text)
-    category = Column(String(100))
-    is_public = Column(Boolean, default=True)
-    
-    # Moderation
-    requires_approval = Column(Boolean, default=False)
-    moderator_ids = Column(JSON)
-    
-    # Stats
-    thread_count = Column(Integer, default=0)
+    category = Column(String)
+    is_private = Column(Boolean, default=False)
     member_count = Column(Integer, default=0)
+    
+    threads = relationship("ForumThread", back_populates="forum")
+    memberships = relationship("ForumMembership", back_populates="forum")
+
+class ForumMembership(Base, TimestampMixin):
+    __tablename__ = "forum_memberships"
+    
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    user_id = Column(UUID(as_uuid=True), ForeignKey("users.id"))
+    forum_id = Column(UUID(as_uuid=True), ForeignKey("forums.id"))
+    role = Column(String, default="member")  # member, moderator, admin
+    
+    forum = relationship("Forum", back_populates="memberships")
 
 class ForumThread(Base, TimestampMixin):
-    """Forum discussion threads"""
     __tablename__ = "forum_threads"
     
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    forum_id = Column(UUID(as_uuid=True), ForeignKey("forums.id"), nullable=False, index=True)
-    user_id = Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=False, index=True)
-    
-    title = Column(String(255), nullable=False)
-    content = Column(Text, nullable=False)
+    forum_id = Column(UUID(as_uuid=True), ForeignKey("forums.id"))
+    author_id = Column(UUID(as_uuid=True), ForeignKey("users.id"))
+    title = Column(String, nullable=False)
+    content = Column(Text)
     is_pinned = Column(Boolean, default=False)
     is_locked = Column(Boolean, default=False)
-    
-    # Engagement
     view_count = Column(Integer, default=0)
     reply_count = Column(Integer, default=0)
-    like_count = Column(Integer, default=0)
     
-    # Moderation
-    is_approved = Column(Boolean, default=True)
-    tags = Column(JSON)
+    forum = relationship("Forum", back_populates="threads")
+    replies = relationship("ForumReply", back_populates="thread")
 
-class ForumPost(Base, TimestampMixin):
-    """Replies to forum threads"""
-    __tablename__ = "forum_posts"
+class ForumReply(Base, TimestampMixin):
+    __tablename__ = "forum_replies"
     
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    thread_id = Column(UUID(as_uuid=True), ForeignKey("forum_threads.id"), nullable=False, index=True)
-    user_id = Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=False, index=True)
-    
+    thread_id = Column(UUID(as_uuid=True), ForeignKey("forum_threads.id"))
+    author_id = Column(UUID(as_uuid=True), ForeignKey("users.id"))
     content = Column(Text, nullable=False)
-    like_count = Column(Integer, default=0)
-    is_approved = Column(Boolean, default=True)
-
-class Like(Base, TimestampMixin):
-    """Universal like system"""
-    __tablename__ = "likes"
+    parent_id = Column(UUID(as_uuid=True), ForeignKey("forum_replies.id"))
     
-    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    user_id = Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=False, index=True)
-    
-    content_type = Column(String(50), nullable=False)  # thread, post, content
-    content_id = Column(UUID(as_uuid=True), nullable=False, index=True)
+    thread = relationship("ForumThread", back_populates="replies")
+    parent = relationship("ForumReply", remote_side="ForumReply.id")
 
 class Content(Base, TimestampMixin):
-    """Wellness content (articles, videos, etc.)"""
     __tablename__ = "content"
     
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    title = Column(String(255), nullable=False)
-    content = Column(Text, nullable=False)
-    content_type = Column(String(50), nullable=False)  # article, video, audio, exercise
-    category = Column(String(100))
-    
-    # Metadata
-    author = Column(String(255))
-    source_url = Column(String(500))
-    duration_minutes = Column(Integer)
-    difficulty_level = Column(String(50))  # beginner, intermediate, advanced
-    
-    # Engagement
+    title = Column(String, nullable=False)
+    description = Column(Text)
+    content = Column(Text)
+    content_type = Column(String)  # article, meditation, exercise, affirmation
+    category = Column(String)
+    tags = Column(JSON, default=[])
+    is_premium = Column(Boolean, default=False)
+    is_published = Column(Boolean, default=True)
     view_count = Column(Integer, default=0)
-    like_count = Column(Integer, default=0)
-    bookmark_count = Column(Integer, default=0)
     
-    # Content properties
-    tags = Column(JSON)
-    is_published = Column(Boolean, default=False)
-
-class Affirmation(Base, TimestampMixin):
-    """Daily affirmations"""
-    __tablename__ = "affirmations"
+class Like(Base, TimestampMixin):
+    __tablename__ = "likes"
     
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    text = Column(Text, nullable=False)
-    category = Column(String(100))
-    mood_context = Column(JSON)  # When to show this affirmation
+    user_id = Column(UUID(as_uuid=True), ForeignKey("users.id"))
+    content_type = Column(String)  # thread, reply, content
+    content_id = Column(UUID(as_uuid=True))
     
-    # Usage stats
-    view_count = Column(Integer, default=0)
-    like_count = Column(Integer, default=0)
-
 class Notification(Base, TimestampMixin):
-    """User notifications"""
     __tablename__ = "notifications"
     
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    user_id = Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=False, index=True)
-    
-    title = Column(String(255), nullable=False)
+    user_id = Column(UUID(as_uuid=True), ForeignKey("users.id"))
+    title = Column(String, nullable=False)
     message = Column(Text, nullable=False)
-    notification_type = Column(String(50), nullable=False)  # mood_reminder, insight, community
-    
-    # Delivery
+    notification_type = Column(String)  # mood_pattern, community, system
     is_read = Column(Boolean, default=False)
-    is_sent = Column(Boolean, default=False)
-    sent_at = Column(DateTime)
-    
-    # Metadata
-    action_url = Column(String(500))
-    priority = Column(String(50), default="normal")  # low, normal, high, urgent
+    metadata = Column(JSON, default={})
 
-class MediaFile(Base, TimestampMixin):
-    """User uploaded media files"""
-    __tablename__ = "media_files"
+class Media(Base, TimestampMixin):
+    __tablename__ = "media"
     
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    user_id = Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=False, index=True)
-    
-    filename = Column(String(255), nullable=False)
-    file_path = Column(String(500), nullable=False)
-    file_size = Column(Integer, nullable=False)
-    content_type = Column(String(100), nullable=False)
-    
-    # Processing
-    is_processed = Column(Boolean, default=False)
-    is_approved = Column(Boolean, default=False)
-    thumbnail_path = Column(String(500))
-    
-    # Metadata
-    alt_text = Column(String(500))
-    caption = Column(Text)
-    tags = Column(JSON)
-
-# Indexes for better performance
-from sqlalchemy import Index
-
-# User indexes
-Index('idx_users_email', User.email)
-Index('idx_users_role', User.role)
-
-# Mood tracking indexes
-Index('idx_mood_entries_user_date', MoodEntry.user_id, MoodEntry.created_at)
-Index('idx_journal_entries_user_date', JournalEntry.user_id, JournalEntry.created_at)
-
-# Community indexes
-Index('idx_forum_threads_forum_date', ForumThread.forum_id, ForumThread.created_at)
-Index('idx_forum_posts_thread_date', ForumPost.thread_id, ForumPost.created_at)
-Index('idx_likes_content', Like.content_type, Like.content_id)
-
-# Notification indexes
-Index('idx_notifications_user_unread', Notification.user_id, Notification.is_read)
-Index('idx_notifications_type_date', Notification.notification_type, Notification.created_at)
+    user_id = Column(UUID(as_uuid=True), ForeignKey("users.id"))
+    filename = Column(String, nullable=False)
+    original_filename = Column(String)
+    file_path = Column(String, nullable=False)
+    file_size = Column(Integer)
+    mime_type = Column(String)
+    media_type = Column(String)  # image, video, audio
+    status = Column(String, default="pending")  # pending, approved, rejected
+    moderation_reason = Column(Text)

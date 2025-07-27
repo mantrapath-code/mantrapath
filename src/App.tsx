@@ -1,18 +1,21 @@
 import { useState, useEffect } from "react"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Button } from "@/components/ui/button"
-import { ChatCircle, X } from "@phosphor-icons/react"
+import { ChatCircle, X, SignOut } from "@phosphor-icons/react"
 import { MoodTracker } from "@/components/MoodTracker"
 import { JournalSection } from "@/components/JournalSection"
 import { ChatBot } from "@/components/ChatBot"
 import { CommunitySection } from "@/components/CommunitySection"
 import { WellnessDashboard } from "@/components/WellnessDashboard"
 import { MoodPatternNotifications } from "@/components/MoodPatternNotifications"
+import { AuthScreen } from "@/components/AuthScreen"
+import { AuthProvider, useAuth } from "@/hooks/useAuth"
 import { useMoodBasedTheme } from "@/hooks/useMoodTheme"
 import { motion, AnimatePresence } from "framer-motion"
 import { Toaster } from "@/components/ui/sonner"
 
-function App() {
+function AppContent() {
+  const { user, logout, isAuthenticated, loading } = useAuth()
   const [activeTab, setActiveTab] = useState("dashboard")
   const [showChat, setShowChat] = useState(false)
   const [isMobile, setIsMobile] = useState(false)
@@ -29,6 +32,25 @@ function App() {
     window.addEventListener('resize', checkMobile)
     return () => window.removeEventListener('resize', checkMobile)
   }, [])
+
+  // Show loading screen while checking authentication
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-background flex items-center justify-center">
+        <div className="text-center">
+          <div className="w-16 h-16 mood-ring mx-auto mb-4 flex items-center justify-center">
+            <span className="text-white font-bold text-2xl">M</span>
+          </div>
+          <p className="text-muted-foreground">Loading MantraPath...</p>
+        </div>
+      </div>
+    )
+  }
+
+  // Show auth screen if not authenticated
+  if (!isAuthenticated) {
+    return <AuthScreen />
+  }
   
   return (
     <div className="min-h-screen bg-background">
@@ -45,18 +67,30 @@ function App() {
               </div>
               <div>
                 <h1 className="text-2xl font-bold text-foreground">MantraPath</h1>
-                <p className="text-sm text-muted-foreground">Your wellness companion</p>
+                <p className="text-sm text-muted-foreground">Welcome back, {user?.username}!</p>
               </div>
             </motion.div>
             
-            <Button
-              onClick={() => setShowChat(!showChat)}
-              className="lg:hidden"
-              size="sm"
-              variant={showChat ? "secondary" : "default"}
-            >
-              <ChatCircle size={16} />
-            </Button>
+            <div className="flex items-center gap-2">
+              <Button
+                onClick={() => setShowChat(!showChat)}
+                className="lg:hidden"
+                size="sm"
+                variant={showChat ? "secondary" : "default"}
+              >
+                <ChatCircle size={16} />
+              </Button>
+              
+              <Button
+                onClick={logout}
+                variant="ghost"
+                size="sm"
+                className="text-muted-foreground hover:text-foreground"
+              >
+                <SignOut size={16} />
+                <span className="hidden sm:inline ml-2">Logout</span>
+              </Button>
+            </div>
           </div>
         </div>
       </header>
@@ -197,6 +231,14 @@ function App() {
         closeButton
       />
     </div>
+  )
+}
+
+function App() {
+  return (
+    <AuthProvider>
+      <AppContent />
+    </AuthProvider>
   )
 }
 

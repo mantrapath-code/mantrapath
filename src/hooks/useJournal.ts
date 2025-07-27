@@ -1,247 +1,228 @@
 import { useState, useEffect, useCallback } from 'react'
 import { toast } from 'sonner'
-import { analyzeSentiment, extractKeywords } from '@/utils/sentimentAnalysis'
-import type { 
-  JournalEntry, 
-  JournalAnalytics
-} from '@/types'
+import { apiService } from '@/services/api'
 
-// Enhanced journal hook with backend integration
+export interface JournalEntry {
+  id: string
+  title?: string
+  content: string
+  timestamp: string
+  moodBefore?: number
+  moodAfter?: number
+  tags: string[]
+  isPrivate: boolean
+  sentiment?: {
+    score: number
+    label: 'positive' | 'negative' | 'neutral'
+  }
+  themes?: string[]
+}
+
+export interface JournalAnalytics {
+  totalEntries: number
+  averageSentiment: number
+  mostCommonThemes: string[]
+  writingStreak: number
+  monthlyProgress: Record<string, number>
+  sentimentTrend: Array<{
+    date: string
+    sentiment: number
+  }>
+}
+
 export function useJournal() {
   const [entries, setEntries] = useState<JournalEntry[]>([])
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [analytics, setAnalytics] = useState<JournalAnalytics | null>(null)
-  const [hasMore, setHasMore] = useState(true)
-  const [currentPage, setCurrentPage] = useState(1)
-  
-  // Offline fallback using local storage
-  const [offlineEntries, setOfflineEntries] = useState<JournalEntry[]>([])
-  const [isOnline, setIsOnline] = useState(navigator.onLine)
 
-  // Monitor online status
-  useEffect(() => {
-    const handleOnline = () => setIsOnline(true)
-    const handleOffline = () => setIsOnline(false)
-
-    window.addEventListener('online', handleOnline)
-    window.addEventListener('offline', handleOffline)
-
-    return () => {
-      window.removeEventListener('online', handleOnline)
-      window.removeEventListener('offline', handleOffline)
-    }
-  }, [])
-
-  // Load entries (simplified mock version for now)
-  const loadEntries = useCallback(async (page = 1, append = false) => {
+  // Load journal entries from backend
+  const loadEntries = useCallback(async () => {
     try {
       setLoading(true)
       setError(null)
 
-      // Mock delay
-      await new Promise(resolve => setTimeout(resolve, 500))
-
-      // Mock data with more entries
-      const mockEntries: JournalEntry[] = [
-        {
-          id: '1',
-          title: 'Grateful for Today',
-          content: 'Had a wonderful day with friends. Feeling grateful for the support system around me. Sometimes it\'s easy to forget how blessed we are with the people in our lives.',
-          sentiment: 'positive',
-          timestamp: Date.now() - 1000 * 60 * 60 * 24,
-          keywords: ['grateful', 'friends', 'support'],
-          tags: ['gratitude', 'social'],
-          word_count: 28
-        },
-        {
-          id: '2',
-          title: 'Processing Work Stress',
-          content: 'Work has been overwhelming lately. Need to find better ways to manage my stress levels. Maybe it\'s time to try meditation or take short breaks throughout the day.',
-          sentiment: 'negative',
-          timestamp: Date.now() - 1000 * 60 * 60 * 48,
-          keywords: ['work', 'stress', 'overwhelming', 'meditation'],
-          tags: ['work', 'stress', 'mindfulness'],
-          word_count: 29
-        },
-        {
-          id: '3',
-          title: 'Peaceful Morning',
-          content: 'Woke up feeling refreshed today. The sunrise was beautiful and I took some time to just appreciate the moment. These quiet times are becoming more important to me.',
-          sentiment: 'positive',
-          timestamp: Date.now() - 1000 * 60 * 60 * 72,
-          keywords: ['peaceful', 'sunrise', 'refreshed'],
-          tags: ['peace', 'nature', 'mindfulness'],
-          word_count: 30
-        }
-      ]
-
-      if (page > 1) {
-        setHasMore(false)
-        return
-      }
-
-      if (append) {
-        setEntries(prev => [...prev, ...mockEntries])
-      } else {
-        setEntries(mockEntries)
-        setOfflineEntries(mockEntries)
-      }
-
-      setHasMore(mockEntries.length >= 3)
-      setCurrentPage(page)
-
-    } catch (error) {
-      console.error('Failed to load journal entries:', error)
-      setError('Failed to load journal entries')
-      setEntries(offlineEntries)
-    } finally {
-      setLoading(false)
-    }
-  }, [offlineEntries])
-
-  // Load more entries (pagination)
-  const loadMore = useCallback(() => {
-    if (!loading && hasMore && isOnline) {
-      loadEntries(currentPage + 1, true)
-    }
-  }, [loading, hasMore, isOnline, currentPage, loadEntries])
-
-  // Create new journal entry
-  const addEntry = useCallback(async (title: string, content: string, options?: {
-    mood_id?: string
-    tags?: string[]
-    is_private?: boolean
-  }) => {
-    if (!title.trim() || !content.trim()) {
-      toast.error('Title and content are required')
-      return null
-    }
-
-    try {
-      setLoading(true)
-
-      const newEntry: JournalEntry = {
-        id: Date.now().toString(),
-        title: title.trim(),
-        content: content.trim(),
-        sentiment: analyzeSentiment(content.trim()),
-        timestamp: Date.now(),
-        keywords: extractKeywords(content.trim()),
-        tags: options?.tags || [],
-        is_private: options?.is_private || false,
-        word_count: content.trim().split(/\s+/).length
-      }
-
-      setEntries(prev => [newEntry, ...prev])
-      setOfflineEntries(prev => [newEntry, ...prev])
+      const backendEntries = await apiService.getJournalEntries(50)
       
-      toast.success('Journal entry saved!')
-      return newEntry
+      // Convert backend format to frontend format
+      const formattedEntries: JournalEntry[] = backendEntries.map(entry => ({
+        id: entry.id,
+        title: entry.title || '',
+        content: entry.content,
+        timestamp: entry.created_at,
+        moodBefore: entry.mood_before,
+        moodAfter: entry.mood_after,
+        tags: entry.themes || [],
+        isPrivate: entry.is_private,
+        sentiment: entry.sentiment_score !== undefined ? {
+          score: entry.sentiment_score,
+          label: entry.sentiment_label as 'positive' | 'negative' | 'neutral'
+        } : undefined,
+        themes: entry.themes
+      }))
 
-    } catch (error) {
-      console.error('Failed to save journal entry:', error)
-      toast.error('Failed to save journal entry')
-      return null
+      setEntries(formattedEntries)
+      generateAnalytics(formattedEntries)
+      
+    } catch (err) {
+      console.error('Failed to load journal entries:', err)
+      setError('Failed to load journal entries')
+      toast.error('Failed to load journal entries')
     } finally {
       setLoading(false)
     }
   }, [])
 
-  // Update existing entry
-  const updateEntry = useCallback(async (entryId: string, updates: {
-    title?: string
-    content?: string
-    tags?: string[]
-    is_private?: boolean
-  }) => {
-    try {
-      setLoading(true)
-
-      const updatedEntry = { ...updates, id: entryId }
-      setEntries(prev => prev.map(entry => 
-        entry.id === entryId ? { ...entry, ...updatedEntry } : entry
-      ))
-      setOfflineEntries(prev => prev.map(entry => 
-        entry.id === entryId ? { ...entry, ...updatedEntry } : entry
-      ))
-
-      toast.success('Entry updated!')
-      return updatedEntry
-
-    } catch (error) {
-      console.error('Failed to update entry:', error)
-      toast.error('Failed to update entry')
-      return null
-    } finally {
-      setLoading(false)
-    }
-  }, [])
-
-  // Delete entry
-  const deleteEntry = useCallback(async (entryId: string) => {
-    try {
-      setLoading(true)
-
-      setEntries(prev => prev.filter(entry => entry.id !== entryId))
-      setOfflineEntries(prev => prev.filter(entry => entry.id !== entryId))
-
-      toast.success('Entry deleted')
-
-    } catch (error) {
-      console.error('Failed to delete entry:', error)
-      toast.error('Failed to delete entry')
-    } finally {
-      setLoading(false)
-    }
-  }, [])
-
-  // Search entries
-  const searchEntries = useCallback(async (query: string) => {
-    if (!query.trim()) {
-      loadEntries()
-      return
-    }
-
-    try {
-      setLoading(true)
-
-      // Search offline entries for now
-      const filtered = offlineEntries.filter(entry =>
-        entry.title.toLowerCase().includes(query.toLowerCase()) ||
-        entry.content.toLowerCase().includes(query.toLowerCase()) ||
-        entry.keywords.some(keyword => keyword.toLowerCase().includes(query.toLowerCase()))
-      )
-      setEntries(filtered)
-
-    } catch (error) {
-      console.error('Search failed:', error)
-      toast.error('Search failed')
-    } finally {
-      setLoading(false)
-    }
-  }, [offlineEntries, loadEntries])
-
-  // Initial load
+  // Load entries on mount
   useEffect(() => {
     loadEntries()
   }, [loadEntries])
 
-  // Load analytics when entries change
-  useEffect(() => {
-    if (entries.length > 0) {
-      setAnalytics({
-        total_entries: entries.length,
-        average_word_count: entries.reduce((sum, entry) => sum + (entry.word_count || 0), 0) / entries.length,
-        sentiment_distribution: {
-          positive: entries.filter(e => e.sentiment === 'positive').length,
-          neutral: entries.filter(e => e.sentiment === 'neutral').length,
-          negative: entries.filter(e => e.sentiment === 'negative').length
-        },
-        writing_streak: calculateWritingStreak(entries),
-        entries_by_month: groupEntriesByMonth(entries)
+  // Add new journal entry
+  const addEntry = useCallback(async (entryData: {
+    title?: string
+    content: string
+    moodBefore?: number
+    moodAfter?: number
+    isPrivate?: boolean
+  }) => {
+    try {
+      setLoading(true)
+      setError(null)
+
+      const backendEntry = await apiService.createJournalEntry({
+        title: entryData.title,
+        content: entryData.content,
+        mood_before: entryData.moodBefore,
+        mood_after: entryData.moodAfter,
+        is_private: entryData.isPrivate ?? true
       })
+
+      // Convert and add to local state
+      const newEntry: JournalEntry = {
+        id: backendEntry.id,
+        title: backendEntry.title || '',
+        content: backendEntry.content,
+        timestamp: backendEntry.created_at,
+        moodBefore: backendEntry.mood_before,
+        moodAfter: backendEntry.mood_after,
+        tags: backendEntry.themes || [],
+        isPrivate: backendEntry.is_private,
+        sentiment: backendEntry.sentiment_score !== undefined ? {
+          score: backendEntry.sentiment_score,
+          label: backendEntry.sentiment_label as 'positive' | 'negative' | 'neutral'
+        } : undefined,
+        themes: backendEntry.themes
+      }
+
+      setEntries(prev => [newEntry, ...prev])
+      toast.success('Journal entry saved!')
+      
+      // Regenerate analytics
+      const updatedEntries = [newEntry, ...entries]
+      generateAnalytics(updatedEntries)
+
+      return newEntry
+      
+    } catch (err) {
+      console.error('Failed to save journal entry:', err)
+      setError('Failed to save journal entry')
+      toast.error('Failed to save journal entry')
+      throw err
+    } finally {
+      setLoading(false)
     }
+  }, [entries])
+
+  // Generate analytics from entries
+  const generateAnalytics = useCallback((entriesData: JournalEntry[]) => {
+    if (entriesData.length === 0) {
+      setAnalytics(null)
+      return
+    }
+
+    const totalEntries = entriesData.length
+    
+    // Calculate average sentiment
+    const sentimentScores = entriesData
+      .filter(entry => entry.sentiment?.score !== undefined)
+      .map(entry => entry.sentiment!.score)
+    
+    const averageSentiment = sentimentScores.length > 0 
+      ? sentimentScores.reduce((sum, score) => sum + score, 0) / sentimentScores.length
+      : 0
+
+    // Find most common themes
+    const themeCount: Record<string, number> = {}
+    entriesData.forEach(entry => {
+      entry.themes?.forEach(theme => {
+        themeCount[theme] = (themeCount[theme] || 0) + 1
+      })
+    })
+    
+    const mostCommonThemes = Object.entries(themeCount)
+      .sort(([,a], [,b]) => b - a)
+      .slice(0, 5)
+      .map(([theme]) => theme)
+
+    // Calculate writing streak
+    const writingStreak = calculateWritingStreak(entriesData)
+
+    // Generate monthly progress
+    const monthlyProgress = groupEntriesByMonth(entriesData)
+
+    // Generate sentiment trend
+    const sentimentTrend = entriesData
+      .filter(entry => entry.sentiment?.score !== undefined)
+      .slice(0, 30) // Last 30 entries
+      .reverse()
+      .map(entry => ({
+        date: entry.timestamp.split('T')[0],
+        sentiment: entry.sentiment!.score
+      }))
+
+    setAnalytics({
+      totalEntries,
+      averageSentiment,
+      mostCommonThemes,
+      writingStreak,
+      monthlyProgress,
+      sentimentTrend
+    })
+  }, [])
+
+  // Delete entry
+  const deleteEntry = useCallback(async (id: string) => {
+    // Note: Backend delete endpoint would need to be implemented
+    setEntries(prev => prev.filter(entry => entry.id !== id))
+    toast.success('Journal entry deleted')
+  }, [])
+
+  // Search entries
+  const searchEntries = useCallback((query: string) => {
+    if (!query.trim()) return entries
+    
+    const searchTerms = query.toLowerCase().split(' ')
+    
+    return entries.filter(entry => {
+      const searchText = `${entry.title} ${entry.content}`.toLowerCase()
+      return searchTerms.some(term => searchText.includes(term))
+    })
+  }, [entries])
+
+  // Filter entries by mood range
+  const filterByMood = useCallback((minMood: number, maxMood: number) => {
+    return entries.filter(entry => {
+      const mood = entry.moodBefore || entry.moodAfter
+      return mood !== undefined && mood >= minMood && mood <= maxMood
+    })
+  }, [entries])
+
+  // Get entries by theme
+  const getEntriesByTheme = useCallback((theme: string) => {
+    return entries.filter(entry => 
+      entry.themes?.includes(theme) || entry.tags.includes(theme)
+    )
   }, [entries])
 
   return {
@@ -249,34 +230,49 @@ export function useJournal() {
     loading,
     error,
     analytics,
-    hasMore,
-    isOnline,
-    addEntry,
-    updateEntry,
-    deleteEntry,
-    searchEntries,
-    loadMore,
-    refresh: () => loadEntries()
+    actions: {
+      loadEntries,
+      addEntry,
+      deleteEntry,
+      searchEntries,
+      filterByMood,
+      getEntriesByTheme,
+      refreshAnalytics: () => generateAnalytics(entries)
+    }
   }
 }
 
+// Helper functions
 function calculateWritingStreak(entries: JournalEntry[]): number {
   if (entries.length === 0) return 0
   
-  const sortedEntries = entries.sort((a, b) => b.timestamp - a.timestamp)
-  let streak = 1
-  let lastDate = new Date(sortedEntries[0].timestamp).toDateString()
+  const today = new Date()
+  today.setHours(0, 0, 0, 0)
   
-  for (let i = 1; i < sortedEntries.length; i++) {
-    const currentDate = new Date(sortedEntries[i].timestamp).toDateString()
-    const dayDiff = Math.floor((new Date(lastDate).getTime() - new Date(currentDate).getTime()) / (1000 * 60 * 60 * 24))
+  let streak = 0
+  let currentDate = new Date(today)
+  
+  // Sort entries by date (newest first)
+  const sortedEntries = entries.sort((a, b) => 
+    new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()
+  )
+  
+  // Check each day going backwards
+  for (let i = 0; i < 365; i++) { // Maximum of 1 year
+    const hasEntryOnDate = sortedEntries.some(entry => {
+      const entryDate = new Date(entry.timestamp)
+      entryDate.setHours(0, 0, 0, 0)
+      return entryDate.getTime() === currentDate.getTime()
+    })
     
-    if (dayDiff === 1) {
+    if (hasEntryOnDate) {
       streak++
-      lastDate = currentDate
     } else {
       break
     }
+    
+    // Move to previous day
+    currentDate.setDate(currentDate.getDate() - 1)
   }
   
   return streak
