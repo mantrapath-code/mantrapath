@@ -94,7 +94,7 @@ export interface BackendInsight {
 export interface ChatMessage {
   id: string
   content: string
-  sender: 'user' | 'mitra'
+  sender: 'user' | 'assistant'
   timestamp: number
   context?: {
     suggestedMood?: MoodEntry['mood']

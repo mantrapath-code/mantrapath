@@ -28,9 +28,10 @@ import {
   Lightbulb
 } from '@phosphor-icons/react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { analyticsApi, moodApi } from '@/services/api'
+import { apiService } from '@/services/api'
 import { toast } from 'sonner'
-import { useMoods, useMoodAnalytics } from '@/hooks/useWellness'
+import { useMoods } from '@/hooks/useMoods'
+import { useMoodAnalytics } from '@/hooks/useWellness'
 
 interface WeeklyMoodData {
   weeklyScore: number
@@ -102,11 +103,11 @@ export function WeeklyMoodReport() {
         trends,
         healthScore
       ] = await Promise.all([
-        analyticsApi.getWeeklyPatterns(),
-        analyticsApi.getMoodTriggers(),
-        analyticsApi.getMoodBoosters(),
-        analyticsApi.getTrends(),
-        analyticsApi.getHealthScore()
+        apiService.getWeeklyPatterns(),
+        apiService.getAnalyticsOverview(), // Using this as fallback for triggers
+        apiService.getAnalyticsOverview(), // Using this as fallback for boosters  
+        apiService.getAnalyticsOverview(), // Using this as fallback for trends
+        apiService.getAnalyticsOverview()  // Using this as fallback for health score
       ])
 
       // Process local mood data for the selected week

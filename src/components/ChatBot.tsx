@@ -4,7 +4,8 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Badge } from "@/components/ui/badge"
 import { ChatCircle, Robot, User, Expand, Minimize, Wind } from "@phosphor-icons/react"
-import { useChat, useMoods } from "@/hooks/useWellness"
+import { useChatbot } from "@/hooks/useChatbot"
+import { useMoods } from "@/hooks/useMoods"
 import { BreathingExercise } from "./BreathingExercise"
 import { motion, AnimatePresence } from "framer-motion"
 import { cn } from "@/lib/utils"
@@ -14,7 +15,7 @@ interface ChatBotProps {
 }
 
 export function ChatBot({ className }: ChatBotProps) {
-  const { messages, addMessage, getMitraResponse } = useChat()
+  const { messages, actions } = useChatbot()
   const { addMood } = useMoods()
   const [input, setInput] = useState("")
   const [isLoading, setIsLoading] = useState(false)
@@ -29,6 +30,13 @@ export function ChatBot({ className }: ChatBotProps) {
   useEffect(() => {
     scrollToBottom()
   }, [messages])
+
+  // Initialize chat session on mount
+  useEffect(() => {
+    if (messages.length === 0) {
+      actions.startNewSession()
+    }
+  }, [actions, messages.length])
   
   const handleSend = async () => {
     if (!input.trim()) return
@@ -37,33 +45,10 @@ export function ChatBot({ className }: ChatBotProps) {
     setInput("")
     setIsLoading(true)
     
-    addMessage(userMessage, 'user')
-    
     try {
-      // Check if user is asking for breathing exercise
-      const needsBreathing = checkForBreathingRequest(userMessage)
-      
-      const response = await getMitraResponse(userMessage)
+      await actions.sendMessage(userMessage)
       
       const suggestedMood = detectMoodFromMessage(userMessage)
-      const context = suggestedMood ? { suggestedMood } : undefined
-      
-      // If stress/anxiety detected, suggest breathing exercise
-      if (needsBreathing || ['very-low', 'low'].includes(suggestedMood || '')) {
-        const breathingContext = {
-          ...context,
-          breathingExercise: true,
-          exerciseType: getRecommendedExerciseType(userMessage)
-        }
-        
-        addMessage(
-          response + "\n\nI notice you might be feeling stressed. Would you like to try a breathing exercise? It can help you feel calmer.",
-          'mitra',
-          breathingContext
-        )
-      } else {
-        addMessage(response, 'mitra', context)
-      }
       
       if (suggestedMood) {
         setTimeout(() => {
@@ -77,7 +62,7 @@ export function ChatBot({ className }: ChatBotProps) {
       }
       
     } catch (error) {
-      addMessage("I'm having trouble connecting right now. Please try again in a moment.", 'mitra')
+      console.error('Failed to send message:', error)
     } finally {
       setIsLoading(false)
     }
@@ -93,9 +78,7 @@ export function ChatBot({ className }: ChatBotProps) {
 
   const startBreathingExercise = () => {
     setShowBreathingExercise(true)
-    addMessage("Perfect! Let's do a breathing exercise together. Choose the type that feels right for you.", 'mitra', {
-      breathingExercise: true
-    })
+    actions.sendMessage("I'd like to try a breathing exercise")
   }
 
   const onBreathingComplete = () => {
@@ -152,7 +135,7 @@ export function ChatBot({ className }: ChatBotProps) {
                     message.sender === 'user' ? "justify-end" : "justify-start"
                   )}
                 >
-                  {message.sender === 'mitra' && (
+                  {message.sender === 'assistant' && (
                     <div className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center shrink-0 mt-1">
                       <Robot size={16} className="text-primary" />
                     </div>
@@ -165,14 +148,7 @@ export function ChatBot({ className }: ChatBotProps) {
                       : "bg-muted"
                   )}>
                     <p>{message.content}</p>
-                    {message.context?.suggestedMood && (
-                      <div className="pt-2 border-t border-muted-foreground/20">
-                        <p className="text-xs opacity-70">
-                          Suggested mood: {message.context.suggestedMood}
-                        </p>
-                      </div>
-                    )}
-                    {message.context?.breathingExercise && (
+                    {message.breathingExercise && (
                       <Button
                         onClick={startBreathingExercise}
                         size="sm"

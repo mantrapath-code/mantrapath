@@ -34,7 +34,8 @@ import {
 } from '@phosphor-icons/react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { toast } from 'sonner'
-import { useMoods, useMoodAnalytics } from '@/hooks/useWellness'
+import { useMoods } from "@/hooks/useMoods"
+import { useMoodAnalytics } from "@/hooks/useWellness"
 import { useKV } from '@github/spark/hooks'
 
 interface SharedMoodPattern {

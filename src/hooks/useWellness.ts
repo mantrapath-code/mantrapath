@@ -259,3 +259,21 @@ export const useUserStats = () => {
     updateStats: () => {}
   }
 }
+
+export const useMoodAnalytics = () => {
+  const getWeeklyInsights = useCallback(() => {
+    // Mock weekly insights for now - this should connect to backend analytics
+    return {
+      averageMood: 4.2,
+      moodVariability: 0.8,
+      dominantMood: 'good',
+      patterns: [],
+      insights: [],
+      recommendations: []
+    }
+  }, [])
+
+  return {
+    getWeeklyInsights
+  }
+}

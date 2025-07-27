@@ -33,7 +33,7 @@ import {
 import { motion, AnimatePresence } from 'framer-motion'
 import { analyticsApi, moodApi } from '@/services/api'
 import { toast } from 'sonner'
-import { useMoods } from '@/hooks/useWellness'
+import { useMoods } from '@/hooks/useMoods'
 import { useKV } from '@github/spark/hooks'
 
 interface NotificationSchedule {

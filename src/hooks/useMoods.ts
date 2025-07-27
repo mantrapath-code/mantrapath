@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react'
+import { useState, useCallback, useEffect } from 'react'
 import { toast } from 'sonner'
 import { apiService } from '@/services/api'
 import { MoodEntry } from '@/types'
@@ -8,6 +8,7 @@ import { MoodEntry } from '@/types'
  * Connects to the backend API for real-time data
  */
 export function useMoods() {
+  const [moods, setMoods] = useState<MoodEntry[]>([])
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
@@ -65,6 +66,9 @@ export function useMoods() {
         triggers,
         created_at: backendEntry.created_at
       }
+
+      // Update local state
+      setMoods(prev => [moodEntry, ...prev])
 
       toast.success(`Mood logged as ${mood}!`)
       return moodEntry
@@ -132,7 +136,7 @@ export function useMoods() {
       setLoading(true)
       const entries = await apiService.getMoodEntries(limit)
       
-      return entries.map(entry => ({
+      const formattedMoods = entries.map(entry => ({
         id: entry.id,
         mood: numberToMood(entry.mood_score),
         mood_level: entry.mood_score,
@@ -141,6 +145,9 @@ export function useMoods() {
         triggers: entry.context_tags,
         created_at: entry.created_at
       })) as MoodEntry[]
+
+      setMoods(formattedMoods)
+      return formattedMoods
       
     } catch (err) {
       console.error('Failed to get recent moods:', err)
@@ -151,7 +158,13 @@ export function useMoods() {
     }
   }, [])
 
+  // Load moods on mount
+  useEffect(() => {
+    getRecentMoods()
+  }, [getRecentMoods])
+
   return {
+    moods,
     addMood,
     getMoodTrend,
     getMoodAnalytics,
