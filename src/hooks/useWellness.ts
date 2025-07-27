@@ -62,28 +62,8 @@ export function useMoods() {
   return { moods, addMood, getMoodTrend }
 }
 
-export function useJournal() {
-  const [entries, setEntries] = useKV<JournalEntry[]>('journal-entries', [])
-  
-  const addEntry = (title: string, content: string) => {
-    const sentiment = analyzeSentiment(content)
-    const keywords = extractKeywords(content)
-    
-    const newEntry: JournalEntry = {
-      id: Date.now().toString(),
-      title,
-      content,
-      sentiment,
-      timestamp: Date.now(),
-      keywords
-    }
-    
-    setEntries(current => [newEntry, ...current])
-    return newEntry
-  }
-  
-  return { entries, addEntry }
-}
+// Re-export the enhanced journal hook
+export { useJournal } from './useJournal'
 
 export function useChat() {
   const [messages, setMessages] = useKV<ChatMessage[]>('chat-messages', [])
