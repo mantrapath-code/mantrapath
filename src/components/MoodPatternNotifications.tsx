@@ -52,6 +52,29 @@ export function MoodPatternNotifications() {
     const currentHour = new Date().getHours()
     const currentDay = new Date().getDay()
     
+    // Weekly trend analysis
+    const weeklyAnalysis = analyzeWeeklyTrends()
+    if (weeklyAnalysis) {
+      weeklyAnalysis.forEach(pattern => {
+        const patternId = `weekly-${pattern.type}-${Math.floor(now / (24 * 60 * 60 * 1000))}`
+        if (!dismissedPatterns.includes(patternId)) {
+          notifications.push({
+            id: patternId,
+            type: 'pattern-alert',
+            category: pattern.severity === 'high' ? 'urgent' : 'preventive',
+            message: pattern.message,
+            recommendation: pattern.recommendation,
+            actionItems: pattern.actionItems,
+            severity: pattern.severity,
+            timestamp: now,
+            confidence: pattern.confidence,
+            basedOn: pattern.basedOn,
+            preventiveAction: pattern.preventiveAction
+          })
+        }
+      })
+    }
+    
     // Enhanced declining trend detection
     const recentMoods = moods.slice(0, 5) // Look at last 5 entries
     if (recentMoods.length >= 3) {
@@ -88,6 +111,27 @@ export function MoodPatternNotifications() {
             }
           })
         }
+      }
+    }
+    
+    // Weekly comparison and trend insights
+    const weeklyComparison = analyzeWeeklyComparison()
+    if (weeklyComparison) {
+      const patternId = `weekly-comparison-${Math.floor(now / (7 * 24 * 60 * 60 * 1000))}`
+      if (!dismissedPatterns.includes(patternId)) {
+        notifications.push({
+          id: patternId,
+          type: 'pattern-alert',
+          category: weeklyComparison.trend === 'declining' ? 'preventive' : 'supportive',
+          message: weeklyComparison.message,
+          recommendation: weeklyComparison.recommendation,
+          actionItems: weeklyComparison.actionItems,
+          severity: weeklyComparison.trend === 'declining' ? 'medium' : 'low',
+          timestamp: now,
+          confidence: weeklyComparison.confidence,
+          basedOn: weeklyComparison.basedOn,
+          preventiveAction: weeklyComparison.preventiveAction
+        })
       }
     }
 
@@ -164,6 +208,241 @@ export function MoodPatternNotifications() {
     }
 
     setActiveNotifications(notifications)
+  }
+
+  const analyzeWeeklyTrends = () => {
+    const patterns: any[] = []
+    const now = Date.now()
+    const oneWeek = 7 * 24 * 60 * 60 * 1000
+    const twoWeeks = 2 * oneWeek
+    const threeWeeks = 3 * oneWeek
+    
+    // Get mood data for different time periods
+    const thisWeek = moods.filter(m => m.timestamp >= now - oneWeek)
+    const lastWeek = moods.filter(m => m.timestamp >= now - twoWeeks && m.timestamp < now - oneWeek)
+    const twoWeeksAgo = moods.filter(m => m.timestamp >= now - threeWeeks && m.timestamp < now - twoWeeks)
+    
+    if (thisWeek.length < 2 || lastWeek.length < 2) return patterns
+    
+    const moodValues = { 'very-low': 1, 'low': 2, 'neutral': 3, 'good': 4, 'excellent': 5 }
+    
+    // Calculate weekly averages
+    const thisWeekAvg = thisWeek.reduce((sum, m) => sum + moodValues[m.mood], 0) / thisWeek.length
+    const lastWeekAvg = lastWeek.reduce((sum, m) => sum + moodValues[m.mood], 0) / lastWeek.length
+    const twoWeeksAvg = twoWeeksAgo.length > 1 ? 
+      twoWeeksAgo.reduce((sum, m) => sum + moodValues[m.mood], 0) / twoWeeksAgo.length : null
+    
+    // Analyze weekly progression
+    const weeklyChange = thisWeekAvg - lastWeekAvg
+    const isConsistentTrend = twoWeeksAvg ? 
+      (lastWeekAvg - twoWeeksAvg > 0) === (thisWeekAvg - lastWeekAvg > 0) : false
+    
+    // Declining trend over multiple weeks
+    if (weeklyChange < -0.5 && Math.abs(weeklyChange) > 0.3) {
+      patterns.push({
+        type: 'weekly-decline',
+        message: `Your weekly mood average has declined from ${lastWeekAvg.toFixed(1)} to ${thisWeekAvg.toFixed(1)}`,
+        recommendation: 'Let\'s identify what changed and create a support plan',
+        actionItems: [
+          'Review recent life changes or stressors',
+          'Increase self-care activities that worked before',
+          'Consider reaching out to friends or family',
+          'Explore relaxation techniques and stress management'
+        ],
+        severity: weeklyChange < -1 ? 'high' : 'medium' as const,
+        confidence: Math.min(0.9, Math.abs(weeklyChange) / 2),
+        basedOn: [`${thisWeek.length} entries this week`, `${lastWeek.length} entries last week`, `${weeklyChange.toFixed(2)} point decline`],
+        preventiveAction: {
+          type: 'mindfulness',
+          estimatedTime: '10-15 minutes',
+          benefits: ['Reduces anxiety', 'Improves self-awareness', 'Breaks negative thought cycles']
+        }
+      })
+    }
+    
+    // Improving trend recognition
+    if (weeklyChange > 0.5 && Math.abs(weeklyChange) > 0.3) {
+      patterns.push({
+        type: 'weekly-improvement',
+        message: `Great progress! Your weekly mood average improved from ${lastWeekAvg.toFixed(1)} to ${thisWeekAvg.toFixed(1)}`,
+        recommendation: 'Reflect on what\'s working well and build on it',
+        actionItems: [
+          'Identify the positive changes you\'ve made',
+          'Celebrate your progress with something meaningful',
+          'Share your success with supportive people',
+          'Plan to maintain these positive habits'
+        ],
+        severity: 'low' as const,
+        confidence: Math.min(0.9, Math.abs(weeklyChange) / 2),
+        basedOn: [`${thisWeek.length} entries this week`, `${lastWeek.length} entries last week`, `+${weeklyChange.toFixed(2)} point improvement`],
+        preventiveAction: {
+          type: 'social',
+          estimatedTime: '5-10 minutes',
+          benefits: ['Reinforces positive changes', 'Builds support network', 'Increases motivation']
+        }
+      })
+    }
+    
+    // Weekly pattern consistency analysis
+    if (isConsistentTrend && twoWeeksAvg) {
+      const overallTrend = thisWeekAvg - twoWeeksAvg
+      if (Math.abs(overallTrend) > 0.8) {
+        patterns.push({
+          type: 'consistent-trend',
+          message: `Your mood has been ${overallTrend > 0 ? 'consistently improving' : 'consistently declining'} over the past 3 weeks`,
+          recommendation: overallTrend > 0 ? 
+            'Keep up the momentum with what\'s working' : 
+            'This trend suggests you might benefit from additional support',
+          actionItems: overallTrend > 0 ? [
+            'Document what strategies are working',
+            'Share your success story to help others',
+            'Set new wellness goals to maintain progress'
+          ] : [
+            'Consider speaking with a counselor or therapist',
+            'Reach out to trusted friends or family',
+            'Review and adjust your self-care routine',
+            'Explore community support resources'
+          ],
+          severity: overallTrend > 0 ? 'low' : 'high' as const,
+          confidence: 0.8,
+          basedOn: [`3-week trend analysis`, `${overallTrend.toFixed(2)} point ${overallTrend > 0 ? 'improvement' : 'decline'}`],
+          preventiveAction: {
+            type: overallTrend > 0 ? 'mindfulness' : 'social',
+            estimatedTime: '10-20 minutes',
+            benefits: overallTrend > 0 ? 
+              ['Maintains positive momentum', 'Builds resilience', 'Enhances self-awareness'] :
+              ['Provides emotional support', 'Reduces isolation', 'Offers new perspectives']
+          }
+        })
+      }
+    }
+    
+    // Weekly volatility analysis
+    const thisWeekVolatility = calculateMoodVolatility(thisWeek)
+    const lastWeekVolatility = calculateMoodVolatility(lastWeek)
+    
+    if (thisWeekVolatility > 1.5 && thisWeekVolatility > lastWeekVolatility * 1.3) {
+      patterns.push({
+        type: 'mood-volatility',
+        message: 'Your mood has been more variable this week than usual',
+        recommendation: 'Focus on stability and routine to help smooth out mood swings',
+        actionItems: [
+          'Establish a consistent daily routine',
+          'Practice grounding techniques during mood swings',
+          'Identify triggers for mood changes',
+          'Consider mood tracking at specific times of day'
+        ],
+        severity: 'medium' as const,
+        confidence: 0.7,
+        basedOn: [`Mood volatility: ${thisWeekVolatility.toFixed(2)} this week vs ${lastWeekVolatility.toFixed(2)} last week`],
+        preventiveAction: {
+          type: 'routine',
+          estimatedTime: '20-30 minutes',
+          benefits: ['Stabilizes mood', 'Reduces anxiety', 'Improves predictability']
+        }
+      })
+    }
+    
+    return patterns
+  }
+  
+  const calculateMoodVolatility = (moodEntries: any[]) => {
+    if (moodEntries.length < 2) return 0
+    
+    const moodValues = { 'very-low': 1, 'low': 2, 'neutral': 3, 'good': 4, 'excellent': 5 }
+    const values = moodEntries.map(m => moodValues[m.mood])
+    const avg = values.reduce((sum, val) => sum + val, 0) / values.length
+    const variance = values.reduce((sum, val) => sum + Math.pow(val - avg, 2), 0) / values.length
+    
+    return Math.sqrt(variance)
+  }
+  
+  const analyzeWeeklyComparison = () => {
+    const now = Date.now()
+    const oneWeek = 7 * 24 * 60 * 60 * 1000
+    const twoWeeks = 2 * oneWeek
+    
+    const thisWeek = moods.filter(m => m.timestamp >= now - oneWeek)
+    const lastWeek = moods.filter(m => m.timestamp >= now - twoWeeks && m.timestamp < now - oneWeek)
+    
+    if (thisWeek.length < 2 || lastWeek.length < 2) return null
+    
+    const moodValues = { 'very-low': 1, 'low': 2, 'neutral': 3, 'good': 4, 'excellent': 5 }
+    
+    // Compare daily patterns
+    const thisWeekByDay = groupMoodsByDay(thisWeek)
+    const lastWeekByDay = groupMoodsByDay(lastWeek)
+    
+    const dayNames = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday']
+    const insights: string[] = []
+    
+    Object.keys(thisWeekByDay).forEach(day => {
+      const dayNum = parseInt(day)
+      const thisWeekDayAvg = thisWeekByDay[dayNum]?.reduce((sum, m) => sum + moodValues[m.mood], 0) / thisWeekByDay[dayNum].length || 0
+      const lastWeekDayAvg = lastWeekByDay[dayNum]?.reduce((sum, m) => sum + moodValues[m.mood], 0) / lastWeekByDay[dayNum].length || 0
+      
+      if (thisWeekDayAvg && lastWeekDayAvg && Math.abs(thisWeekDayAvg - lastWeekDayAvg) > 0.8) {
+        const change = thisWeekDayAvg > lastWeekDayAvg ? 'improved' : 'declined'
+        insights.push(`${dayNames[dayNum]}s have ${change} significantly`)
+      }
+    })
+    
+    // Overall weekly comparison
+    const thisWeekAvg = thisWeek.reduce((sum, m) => sum + moodValues[m.mood], 0) / thisWeek.length
+    const lastWeekAvg = lastWeek.reduce((sum, m) => sum + moodValues[m.mood], 0) / lastWeek.length
+    const weeklyDiff = thisWeekAvg - lastWeekAvg
+    
+    if (Math.abs(weeklyDiff) < 0.3 && insights.length === 0) return null
+    
+    const trend = weeklyDiff > 0.3 ? 'improving' : weeklyDiff < -0.3 ? 'declining' : 'stable'
+    
+    let message = `Weekly comparison: ${trend} trend`
+    if (insights.length > 0) {
+      message += ` (${insights.slice(0, 2).join(', ')})`
+    }
+    
+    const actionItems = trend === 'declining' ? [
+      'Review what changed from last week',
+      'Return to strategies that worked before',
+      'Increase social connection and support',
+      'Consider professional guidance if needed'
+    ] : trend === 'improving' ? [
+      'Identify the positive changes you\'ve made',
+      'Continue with strategies that are working',
+      'Build on this momentum with new goals',
+      'Share your success with others'
+    ] : [
+      'Maintain current positive habits',
+      'Look for small improvements to make',
+      'Stay consistent with your wellness routine'
+    ]
+    
+    return {
+      trend,
+      message,
+      recommendation: trend === 'declining' ? 
+        'Focus on returning to what worked before' : 
+        trend === 'improving' ? 'Build on your positive momentum' : 'Consistency is key - keep going',
+      actionItems,
+      confidence: Math.min(0.8, Math.abs(weeklyDiff) + 0.3),
+      basedOn: [`${thisWeek.length} entries this week`, `${lastWeek.length} entries last week`, insights.length > 0 ? `Day-specific changes: ${insights.join(', ')}` : 'Overall weekly patterns'],
+      preventiveAction: {
+        type: trend === 'declining' ? 'social' : 'mindfulness',
+        estimatedTime: '10-15 minutes',
+        benefits: trend === 'declining' ? 
+          ['Provides support', 'Offers perspective', 'Reduces isolation'] :
+          ['Maintains awareness', 'Reinforces positive patterns', 'Builds resilience']
+      }
+    }
+  }
+  
+  const groupMoodsByDay = (moodEntries: any[]) => {
+    return moodEntries.reduce((acc, mood) => {
+      const day = new Date(mood.timestamp).getDay()
+      if (!acc[day]) acc[day] = []
+      acc[day].push(mood)
+      return acc
+    }, {} as Record<number, any[]>)
   }
 
   const analyzeHistoricalPatterns = () => {
