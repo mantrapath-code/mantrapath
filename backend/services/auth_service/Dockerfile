@@ -6,18 +6,20 @@ WORKDIR /app
 RUN apt-get update && apt-get install -y \
     gcc \
     libpq-dev \
+    curl \
     && rm -rf /var/lib/apt/lists/*
 
-# Copy requirements first for better caching
+# Copy requirements
 COPY requirements.txt .
+
+# Install Python dependencies
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Copy application code
-COPY . .
+# Copy shared modules
+COPY shared/ ./shared/
 
-# Create non-root user
-RUN useradd -m -u 1000 appuser && chown -R appuser:appuser /app
-USER appuser
+# Copy service code
+COPY services/auth_service/ .
 
 # Expose port
 EXPOSE 8001
@@ -26,5 +28,5 @@ EXPOSE 8001
 HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
     CMD curl -f http://localhost:8001/health || exit 1
 
-# Start the application
+# Run the service
 CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8001"]

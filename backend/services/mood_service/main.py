@@ -1,50 +1,35 @@
 """
-Mood Service for MantraPath
-Handles mood tracking, journal entries, habits, insights, and analytics
+Mood Service - Comprehensive mood tracking, analytics, and insights
 """
 
-from fastapi import FastAPI, HTTPException, Depends, status, Header
+from fastapi import FastAPI, Depends, HTTPException, Query, BackgroundTasks
 from fastapi.middleware.cors import CORSMiddleware
-from sqlalchemy import create_engine, Column, String, Boolean, DateTime, Integer, Text, DECIMAL, ARRAY
-from sqlalchemy.ext.declarative import declarative_base
-from sqlalchemy.orm import sessionmaker, Session
-from sqlalchemy.dialects.postgresql import UUID, JSONB
+from sqlalchemy.orm import Session
+from sqlalchemy import desc, func, and_, or_, extract
+from typing import List, Optional, Dict, Any
 from datetime import datetime, timedelta, date
-from typing import Optional, List, Dict, Any
 import uuid
-import os
-import redis.asyncio as redis
+from pydantic import BaseModel, UUID4, Field
 import json
-import logging
-from pydantic import BaseModel, Field
+import redis
+import numpy as np
+from textblob import TextBlob
 import asyncio
-from collections import defaultdict
-import statistics
-import influxdb_client
-from influxdb_client.client.write_api import SYNCHRONOUS
 
-# Configure logging
-logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger(__name__)
+# Import shared modules
+import sys
+import os
+sys.path.append(os.path.join(os.path.dirname(__file__), '..', '..'))
 
-# Database setup
-DATABASE_URL = os.getenv("DATABASE_URL", "postgresql://mantrapath_user:mantrapath_password@postgres:5432/mantrapath")
-engine = create_engine(DATABASE_URL)
-SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
-Base = declarative_base()
-
-# Redis setup
-REDIS_URL = os.getenv("REDIS_URL", "redis://redis:6379/3")
-
-# InfluxDB setup for time-series analytics
-INFLUXDB_URL = os.getenv("INFLUXDB_URL", "http://influxdb:8086")
-INFLUXDB_TOKEN = os.getenv("INFLUXDB_TOKEN", "your_influxdb_token")
-INFLUXDB_ORG = os.getenv("INFLUXDB_ORG", "mantrapath")
-INFLUXDB_BUCKET = os.getenv("INFLUXDB_BUCKET", "mood_analytics")
+from shared.database import get_db
+from shared.auth import get_current_user
+from shared.models import (
+    MoodEntry, JournalEntry, Habit, HabitEvent, User
+)
 
 app = FastAPI(
     title="MantraPath Mood Service",
-    description="Mood tracking, journaling, habits, and wellness analytics",
+    description="Comprehensive mood tracking, analytics, and insights",
     version="1.0.0"
 )
 
@@ -56,600 +41,699 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Database Models
-class MoodEntry(Base):
-    __tablename__ = "mood_entries"
-    __table_args__ = {'schema': 'mood'}
-    
-    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    user_id = Column(UUID(as_uuid=True), nullable=False)
-    mood_value = Column(Integer, nullable=False)  # 1-10 scale
-    energy_level = Column(Integer)  # 1-10 scale
-    stress_level = Column(Integer)  # 1-10 scale
-    anxiety_level = Column(Integer)  # 1-10 scale
-    sleep_quality = Column(Integer)  # 1-10 scale
-    notes = Column(Text)
-    context_tags = Column(ARRAY(String))
-    weather = Column(String(50))
-    location = Column(String(100))
-    created_at = Column(DateTime, default=datetime.utcnow)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+# Redis for caching
+redis_client = redis.from_url(os.getenv("REDIS_URL", "redis://localhost:6379"))
 
-class JournalEntry(Base):
-    __tablename__ = "journal_entries"
-    __table_args__ = {'schema': 'mood'}
-    
-    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    user_id = Column(UUID(as_uuid=True), nullable=False)
-    title = Column(String(200))
-    content = Column(Text, nullable=False)
-    sentiment_score = Column(DECIMAL(3,2))  # -1.0 to 1.0
-    sentiment_label = Column(String(20))  # positive, negative, neutral
-    mood_id = Column(UUID(as_uuid=True))
-    tags = Column(ARRAY(String))
-    is_private = Column(Boolean, default=True)
-    created_at = Column(DateTime, default=datetime.utcnow)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
-
-class Habit(Base):
-    __tablename__ = "habits"
-    __table_args__ = {'schema': 'mood'}
-    
-    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    user_id = Column(UUID(as_uuid=True), nullable=False)
-    name = Column(String(100), nullable=False)
-    description = Column(Text)
-    category = Column(String(50))
-    target_frequency = Column(Integer, default=1)
-    frequency_unit = Column(String(10), default="daily")  # daily, weekly, monthly
-    is_active = Column(Boolean, default=True)
-    created_at = Column(DateTime, default=datetime.utcnow)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
-
-class HabitEvent(Base):
-    __tablename__ = "habit_events"
-    __table_args__ = {'schema': 'mood'}
-    
-    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    habit_id = Column(UUID(as_uuid=True), nullable=False)
-    user_id = Column(UUID(as_uuid=True), nullable=False)
-    completed_at = Column(DateTime, default=datetime.utcnow)
-    notes = Column(Text)
-    mood_impact = Column(Integer)  # -5 to 5 scale
-
-class Insight(Base):
-    __tablename__ = "insights"
-    __table_args__ = {'schema': 'mood'}
-    
-    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    user_id = Column(UUID(as_uuid=True), nullable=False)
-    type = Column(String(50), nullable=False)
-    title = Column(String(200), nullable=False)
-    content = Column(Text, nullable=False)
-    confidence_score = Column(DECIMAL(3,2))
-    data_points = Column(JSONB)
-    is_read = Column(Boolean, default=False)
-    created_at = Column(DateTime, default=datetime.utcnow)
-    expires_at = Column(DateTime)
-
-# Pydantic Models
-class MoodEntryCreate(BaseModel):
-    mood_value: int = Field(..., ge=1, le=10)
+# Pydantic models
+class MoodCreate(BaseModel):
+    mood_score: int = Field(..., ge=1, le=10)
     energy_level: Optional[int] = Field(None, ge=1, le=10)
-    stress_level: Optional[int] = Field(None, ge=1, le=10)
     anxiety_level: Optional[int] = Field(None, ge=1, le=10)
-    sleep_quality: Optional[int] = Field(None, ge=1, le=10)
-    notes: Optional[str] = None
+    stress_level: Optional[int] = Field(None, ge=1, le=10)
     context_tags: Optional[List[str]] = []
-    weather: Optional[str] = None
+    notes: Optional[str] = None
     location: Optional[str] = None
+    weather: Optional[str] = None
 
-class MoodEntryResponse(BaseModel):
-    id: str
-    user_id: str
-    mood_value: int
+class MoodResponse(BaseModel):
+    id: UUID4
+    mood_score: int
     energy_level: Optional[int]
-    stress_level: Optional[int]
     anxiety_level: Optional[int]
-    sleep_quality: Optional[int]
+    stress_level: Optional[int]
+    context_tags: List[str]
     notes: Optional[str]
-    context_tags: Optional[List[str]]
-    weather: Optional[str]
-    location: Optional[str]
+    sentiment_score: Optional[float]
+    detected_emotions: Optional[Dict[str, Any]]
     created_at: datetime
-    updated_at: datetime
 
-class JournalEntryCreate(BaseModel):
+class JournalCreate(BaseModel):
     title: Optional[str] = None
     content: str
-    mood_id: Optional[str] = None
-    tags: Optional[List[str]] = []
+    mood_before: Optional[int] = Field(None, ge=1, le=10)
+    mood_after: Optional[int] = Field(None, ge=1, le=10)
     is_private: bool = True
+    tags: Optional[List[str]] = []
 
-class JournalEntryResponse(BaseModel):
-    id: str
-    user_id: str
+class JournalResponse(BaseModel):
+    id: UUID4
     title: Optional[str]
     content: str
+    mood_before: Optional[int]
+    mood_after: Optional[int]
     sentiment_score: Optional[float]
-    sentiment_label: Optional[str]
-    mood_id: Optional[str]
-    tags: Optional[List[str]]
+    key_themes: Optional[List[str]]
+    word_count: int
     is_private: bool
+    tags: List[str]
     created_at: datetime
-    updated_at: datetime
 
 class HabitCreate(BaseModel):
     name: str
     description: Optional[str] = None
-    category: Optional[str] = None
-    target_frequency: int = 1
-    frequency_unit: str = "daily"
+    category: str
+    target_frequency: str = "daily"
 
 class HabitResponse(BaseModel):
-    id: str
-    user_id: str
+    id: UUID4
     name: str
     description: Optional[str]
-    category: Optional[str]
-    target_frequency: int
-    frequency_unit: str
+    category: str
+    target_frequency: str
     is_active: bool
+    current_streak: int
+    longest_streak: int
+    total_completions: int
     created_at: datetime
-    updated_at: datetime
 
 class HabitEventCreate(BaseModel):
-    habit_id: str
     notes: Optional[str] = None
-    mood_impact: Optional[int] = Field(None, ge=-5, le=5)
-
-class HabitEventResponse(BaseModel):
-    id: str
-    habit_id: str
-    user_id: str
-    completed_at: datetime
-    notes: Optional[str]
-    mood_impact: Optional[int]
-
-class InsightResponse(BaseModel):
-    id: str
-    user_id: str
-    type: str
-    title: str
-    content: str
-    confidence_score: Optional[float]
-    data_points: Optional[Dict[str, Any]]
-    is_read: bool
-    created_at: datetime
-    expires_at: Optional[datetime]
-
-class WeeklyAnalytics(BaseModel):
-    average_mood: float
-    mood_trend: str  # improving, declining, stable
-    total_journal_entries: int
-    habits_completed: int
-    stress_levels: List[int]
-    energy_levels: List[int]
-    insights_count: int
+    rating: Optional[int] = Field(None, ge=1, le=5)
+    duration_minutes: Optional[int] = None
 
 # Utility functions
-def get_db():
-    db = SessionLocal()
+def analyze_sentiment(text: str) -> float:
+    """Analyze sentiment of text (-1 to 1)"""
     try:
-        yield db
-    finally:
-        db.close()
+        blob = TextBlob(text)
+        return blob.sentiment.polarity
+    except:
+        return 0.0
 
-async def get_redis():
-    return redis.from_url(REDIS_URL, decode_responses=True)
-
-def get_user_id_from_header(x_user_id: str = Header(...)) -> str:
-    """Extract user ID from header set by API Gateway"""
-    if not x_user_id:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="User ID not found in request headers"
-        )
-    return x_user_id
-
-async def analyze_sentiment(text: str) -> tuple[float, str]:
-    """Simple sentiment analysis - replace with ML model in production"""
-    positive_words = ['happy', 'good', 'great', 'excellent', 'amazing', 'wonderful', 'fantastic', 'love', 'joy', 'excited']
-    negative_words = ['sad', 'bad', 'terrible', 'awful', 'horrible', 'hate', 'angry', 'depressed', 'anxious', 'worried']
+def extract_emotions(text: str) -> Dict[str, float]:
+    """Extract emotions from text using keyword matching"""
+    emotion_keywords = {
+        "joy": ["happy", "joyful", "excited", "cheerful", "glad", "delighted"],
+        "sadness": ["sad", "depressed", "down", "melancholy", "blue", "gloomy"],
+        "anger": ["angry", "mad", "furious", "irritated", "annoyed", "rage"],
+        "fear": ["afraid", "scared", "anxious", "worried", "terrified", "nervous"],
+        "surprise": ["surprised", "amazed", "shocked", "astonished", "stunned"],
+        "disgust": ["disgusted", "revolted", "repulsed", "sick", "nauseated"]
+    }
     
     text_lower = text.lower()
-    positive_count = sum(1 for word in positive_words if word in text_lower)
-    negative_count = sum(1 for word in negative_words if word in text_lower)
+    emotions = {}
     
-    total_words = len(text_lower.split())
-    if total_words == 0:
-        return 0.0, "neutral"
+    for emotion, keywords in emotion_keywords.items():
+        score = sum(1 for keyword in keywords if keyword in text_lower)
+        emotions[emotion] = min(1.0, score / len(keywords))
     
-    sentiment_score = (positive_count - negative_count) / max(total_words, 1)
-    sentiment_score = max(-1.0, min(1.0, sentiment_score))  # Clamp to [-1, 1]
+    return emotions
+
+def extract_themes(text: str) -> List[str]:
+    """Extract key themes from journal text"""
+    # Simple keyword-based theme extraction
+    theme_keywords = {
+        "work": ["job", "work", "career", "office", "boss", "colleague", "meeting"],
+        "relationships": ["friend", "family", "partner", "love", "relationship", "social"],
+        "health": ["health", "exercise", "diet", "sleep", "medical", "doctor"],
+        "stress": ["stress", "pressure", "overwhelmed", "busy", "deadline"],
+        "growth": ["learn", "growth", "improve", "achieve", "goal", "progress"],
+        "gratitude": ["grateful", "thankful", "blessed", "appreciate", "lucky"]
+    }
     
-    if sentiment_score > 0.1:
-        sentiment_label = "positive"
-    elif sentiment_score < -0.1:
-        sentiment_label = "negative"
+    text_lower = text.lower()
+    themes = []
+    
+    for theme, keywords in theme_keywords.items():
+        if any(keyword in text_lower for keyword in keywords):
+            themes.append(theme)
+    
+    return themes
+
+def calculate_health_score(mood_entries: List[MoodEntry], habits: List[Habit]) -> float:
+    """Calculate overall health score (0-100)"""
+    if not mood_entries:
+        return 50.0  # Default neutral score
+    
+    # Average mood score (1-10 scale)
+    avg_mood = sum(entry.mood_score for entry in mood_entries) / len(mood_entries)
+    mood_component = (avg_mood / 10) * 40  # 40% weight
+    
+    # Energy and stress levels
+    energy_scores = [entry.energy_level for entry in mood_entries if entry.energy_level]
+    stress_scores = [entry.stress_level for entry in mood_entries if entry.stress_level]
+    
+    avg_energy = sum(energy_scores) / len(energy_scores) if energy_scores else 5
+    avg_stress = sum(stress_scores) / len(stress_scores) if stress_scores else 5
+    
+    energy_component = (avg_energy / 10) * 20  # 20% weight
+    stress_component = ((10 - avg_stress) / 10) * 20  # 20% weight (inverted)
+    
+    # Habit consistency
+    active_habits = [h for h in habits if h.is_active]
+    if active_habits:
+        avg_streak = sum(h.current_streak for h in active_habits) / len(active_habits)
+        habit_component = min(20, avg_streak * 2)  # 20% weight, max 20
     else:
-        sentiment_label = "neutral"
+        habit_component = 10  # Default if no habits
     
-    return sentiment_score, sentiment_label
+    total_score = mood_component + energy_component + stress_component + habit_component
+    return min(100, max(0, total_score))
 
-async def write_to_influxdb(user_id: str, mood_data: dict):
-    """Write mood data to InfluxDB for analytics"""
-    try:
-        client = influxdb_client.InfluxDBClient(
-            url=INFLUXDB_URL,
-            token=INFLUXDB_TOKEN,
-            org=INFLUXDB_ORG
-        )
-        write_api = client.write_api(write_options=SYNCHRONOUS)
-        
-        point = influxdb_client.Point("mood_entry") \
-            .tag("user_id", user_id) \
-            .field("mood_value", mood_data["mood_value"]) \
-            .field("energy_level", mood_data.get("energy_level", 0)) \
-            .field("stress_level", mood_data.get("stress_level", 0)) \
-            .field("anxiety_level", mood_data.get("anxiety_level", 0)) \
-            .field("sleep_quality", mood_data.get("sleep_quality", 0)) \
-            .time(datetime.utcnow())
-        
-        write_api.write(bucket=INFLUXDB_BUCKET, org=INFLUXDB_ORG, record=point)
-        client.close()
-    except Exception as e:
-        logger.error(f"Failed to write to InfluxDB: {e}")
-
-# Routes
-@app.get("/")
-async def root():
-    return {"message": "MantraPath Mood Service", "version": "1.0.0"}
-
-# Mood Tracking Endpoints
-@app.post("/api/v1/mood/", response_model=MoodEntryResponse)
+# Mood tracking endpoints
+@app.post("/api/v1/mood/", response_model=MoodResponse)
 async def create_mood_entry(
-    mood_data: MoodEntryCreate,
-    user_id: str = Depends(get_user_id_from_header),
-    db: Session = Depends(get_db)
+    mood_data: MoodCreate,
+    background_tasks: BackgroundTasks,
+    db: Session = Depends(get_db),
+    current_user: Dict[str, Any] = Depends(get_current_user)
 ):
-    db_mood = MoodEntry(
-        user_id=uuid.UUID(user_id),
-        **mood_data.dict()
+    """Create a new mood entry"""
+    
+    # Analyze sentiment from notes
+    sentiment_score = None
+    detected_emotions = None
+    
+    if mood_data.notes:
+        sentiment_score = analyze_sentiment(mood_data.notes)
+        detected_emotions = extract_emotions(mood_data.notes)
+    
+    mood_entry = MoodEntry(
+        id=uuid.uuid4(),
+        user_id=current_user["user_id"],
+        mood_score=mood_data.mood_score,
+        energy_level=mood_data.energy_level,
+        anxiety_level=mood_data.anxiety_level,
+        stress_level=mood_data.stress_level,
+        context_tags=mood_data.context_tags,
+        notes=mood_data.notes,
+        location=mood_data.location,
+        weather=mood_data.weather,
+        sentiment_score=sentiment_score,
+        detected_emotions=detected_emotions
     )
     
-    db.add(db_mood)
+    db.add(mood_entry)
     db.commit()
-    db.refresh(db_mood)
+    db.refresh(mood_entry)
     
-    # Write to InfluxDB for analytics
-    await write_to_influxdb(user_id, mood_data.dict())
+    # Clear user's mood cache
+    redis_client.delete(f"mood_analytics:{current_user['user_id']}")
     
-    logger.info(f"Mood entry created for user {user_id}")
+    # Schedule analytics update in background
+    background_tasks.add_task(update_user_insights, current_user["user_id"], db)
     
-    return MoodEntryResponse(
-        id=str(db_mood.id),
-        user_id=str(db_mood.user_id),
-        mood_value=db_mood.mood_value,
-        energy_level=db_mood.energy_level,
-        stress_level=db_mood.stress_level,
-        anxiety_level=db_mood.anxiety_level,
-        sleep_quality=db_mood.sleep_quality,
-        notes=db_mood.notes,
-        context_tags=db_mood.context_tags or [],
-        weather=db_mood.weather,
-        location=db_mood.location,
-        created_at=db_mood.created_at,
-        updated_at=db_mood.updated_at
+    return MoodResponse(
+        id=mood_entry.id,
+        mood_score=mood_entry.mood_score,
+        energy_level=mood_entry.energy_level,
+        anxiety_level=mood_entry.anxiety_level,
+        stress_level=mood_entry.stress_level,
+        context_tags=mood_entry.context_tags or [],
+        notes=mood_entry.notes,
+        sentiment_score=mood_entry.sentiment_score,
+        detected_emotions=mood_entry.detected_emotions,
+        created_at=mood_entry.created_at
     )
 
-@app.get("/api/v1/mood/", response_model=List[MoodEntryResponse])
+@app.get("/api/v1/mood/", response_model=List[MoodResponse])
 async def get_mood_entries(
-    user_id: str = Depends(get_user_id_from_header),
-    limit: int = 50,
-    skip: int = 0,
-    db: Session = Depends(get_db)
+    skip: int = Query(0, ge=0),
+    limit: int = Query(50, ge=1, le=100),
+    start_date: Optional[date] = None,
+    end_date: Optional[date] = None,
+    db: Session = Depends(get_db),
+    current_user: Dict[str, Any] = Depends(get_current_user)
 ):
-    entries = db.query(MoodEntry).filter(
-        MoodEntry.user_id == uuid.UUID(user_id)
-    ).order_by(MoodEntry.created_at.desc()).offset(skip).limit(limit).all()
+    """Get mood entries for user"""
+    
+    query = db.query(MoodEntry).filter(MoodEntry.user_id == current_user["user_id"])
+    
+    # Apply date filters
+    if start_date:
+        query = query.filter(MoodEntry.created_at >= start_date)
+    if end_date:
+        query = query.filter(MoodEntry.created_at <= end_date + timedelta(days=1))
+    
+    mood_entries = query.order_by(desc(MoodEntry.created_at)).offset(skip).limit(limit).all()
     
     return [
-        MoodEntryResponse(
-            id=str(entry.id),
-            user_id=str(entry.user_id),
-            mood_value=entry.mood_value,
+        MoodResponse(
+            id=entry.id,
+            mood_score=entry.mood_score,
             energy_level=entry.energy_level,
-            stress_level=entry.stress_level,
             anxiety_level=entry.anxiety_level,
-            sleep_quality=entry.sleep_quality,
-            notes=entry.notes,
+            stress_level=entry.stress_level,
             context_tags=entry.context_tags or [],
-            weather=entry.weather,
-            location=entry.location,
-            created_at=entry.created_at,
-            updated_at=entry.updated_at
+            notes=entry.notes,
+            sentiment_score=entry.sentiment_score,
+            detected_emotions=entry.detected_emotions,
+            created_at=entry.created_at
         )
-        for entry in entries
+        for entry in mood_entries
     ]
 
-# Journal Endpoints
-@app.post("/api/v1/journal/", response_model=JournalEntryResponse)
+# Journal endpoints
+@app.post("/api/v1/journal/", response_model=JournalResponse)
 async def create_journal_entry(
-    journal_data: JournalEntryCreate,
-    user_id: str = Depends(get_user_id_from_header),
-    db: Session = Depends(get_db)
+    journal_data: JournalCreate,
+    background_tasks: BackgroundTasks,
+    db: Session = Depends(get_db),
+    current_user: Dict[str, Any] = Depends(get_current_user)
 ):
-    # Analyze sentiment
-    sentiment_score, sentiment_label = await analyze_sentiment(journal_data.content)
+    """Create a new journal entry"""
     
-    db_journal = JournalEntry(
-        user_id=uuid.UUID(user_id),
+    # Analyze the content
+    sentiment_score = analyze_sentiment(journal_data.content)
+    key_themes = extract_themes(journal_data.content)
+    word_count = len(journal_data.content.split())
+    
+    journal_entry = JournalEntry(
+        id=uuid.uuid4(),
+        user_id=current_user["user_id"],
         title=journal_data.title,
         content=journal_data.content,
+        mood_before=journal_data.mood_before,
+        mood_after=journal_data.mood_after,
         sentiment_score=sentiment_score,
-        sentiment_label=sentiment_label,
-        mood_id=uuid.UUID(journal_data.mood_id) if journal_data.mood_id else None,
-        tags=journal_data.tags,
-        is_private=journal_data.is_private
+        key_themes=key_themes,
+        word_count=word_count,
+        is_private=journal_data.is_private,
+        tags=journal_data.tags or []
     )
     
-    db.add(db_journal)
+    db.add(journal_entry)
     db.commit()
-    db.refresh(db_journal)
+    db.refresh(journal_entry)
     
-    logger.info(f"Journal entry created for user {user_id}")
+    # If mood before/after provided, create mood entries
+    if journal_data.mood_before or journal_data.mood_after:
+        if journal_data.mood_after:
+            mood_entry = MoodEntry(
+                id=uuid.uuid4(),
+                user_id=current_user["user_id"],
+                mood_score=journal_data.mood_after,
+                context_tags=["journaling"],
+                notes=f"After journaling: {journal_data.title or 'Untitled'}",
+                sentiment_score=sentiment_score
+            )
+            db.add(mood_entry)
+            db.commit()
     
-    return JournalEntryResponse(
-        id=str(db_journal.id),
-        user_id=str(db_journal.user_id),
-        title=db_journal.title,
-        content=db_journal.content,
-        sentiment_score=float(db_journal.sentiment_score) if db_journal.sentiment_score else None,
-        sentiment_label=db_journal.sentiment_label,
-        mood_id=str(db_journal.mood_id) if db_journal.mood_id else None,
-        tags=db_journal.tags or [],
-        is_private=db_journal.is_private,
-        created_at=db_journal.created_at,
-        updated_at=db_journal.updated_at
+    # Schedule insights update
+    background_tasks.add_task(update_user_insights, current_user["user_id"], db)
+    
+    return JournalResponse(
+        id=journal_entry.id,
+        title=journal_entry.title,
+        content=journal_entry.content,
+        mood_before=journal_entry.mood_before,
+        mood_after=journal_entry.mood_after,
+        sentiment_score=journal_entry.sentiment_score,
+        key_themes=journal_entry.key_themes or [],
+        word_count=journal_entry.word_count,
+        is_private=journal_entry.is_private,
+        tags=journal_entry.tags or [],
+        created_at=journal_entry.created_at
     )
 
-@app.get("/api/v1/journal/", response_model=List[JournalEntryResponse])
+@app.get("/api/v1/journal/", response_model=List[JournalResponse])
 async def get_journal_entries(
-    user_id: str = Depends(get_user_id_from_header),
-    limit: int = 50,
-    skip: int = 0,
-    db: Session = Depends(get_db)
+    skip: int = Query(0, ge=0),
+    limit: int = Query(20, ge=1, le=100),
+    search: Optional[str] = None,
+    tag: Optional[str] = None,
+    db: Session = Depends(get_db),
+    current_user: Dict[str, Any] = Depends(get_current_user)
 ):
-    entries = db.query(JournalEntry).filter(
-        JournalEntry.user_id == uuid.UUID(user_id)
-    ).order_by(JournalEntry.created_at.desc()).offset(skip).limit(limit).all()
+    """Get journal entries for user"""
+    
+    query = db.query(JournalEntry).filter(JournalEntry.user_id == current_user["user_id"])
+    
+    # Apply search filter
+    if search:
+        query = query.filter(
+            or_(
+                JournalEntry.title.ilike(f"%{search}%"),
+                JournalEntry.content.ilike(f"%{search}%")
+            )
+        )
+    
+    # Apply tag filter
+    if tag:
+        query = query.filter(JournalEntry.tags.contains([tag]))
+    
+    entries = query.order_by(desc(JournalEntry.created_at)).offset(skip).limit(limit).all()
     
     return [
-        JournalEntryResponse(
-            id=str(entry.id),
-            user_id=str(entry.user_id),
+        JournalResponse(
+            id=entry.id,
             title=entry.title,
             content=entry.content,
-            sentiment_score=float(entry.sentiment_score) if entry.sentiment_score else None,
-            sentiment_label=entry.sentiment_label,
-            mood_id=str(entry.mood_id) if entry.mood_id else None,
-            tags=entry.tags or [],
+            mood_before=entry.mood_before,
+            mood_after=entry.mood_after,
+            sentiment_score=entry.sentiment_score,
+            key_themes=entry.key_themes or [],
+            word_count=entry.word_count,
             is_private=entry.is_private,
-            created_at=entry.created_at,
-            updated_at=entry.updated_at
+            tags=entry.tags or [],
+            created_at=entry.created_at
         )
         for entry in entries
     ]
 
-# Habits Endpoints
+# Habit tracking endpoints
 @app.post("/api/v1/habits/", response_model=HabitResponse)
 async def create_habit(
     habit_data: HabitCreate,
-    user_id: str = Depends(get_user_id_from_header),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user: Dict[str, Any] = Depends(get_current_user)
 ):
-    db_habit = Habit(
-        user_id=uuid.UUID(user_id),
-        **habit_data.dict()
+    """Create a new habit"""
+    
+    habit = Habit(
+        id=uuid.uuid4(),
+        user_id=current_user["user_id"],
+        name=habit_data.name,
+        description=habit_data.description,
+        category=habit_data.category,
+        target_frequency=habit_data.target_frequency,
+        is_active=True
     )
     
-    db.add(db_habit)
+    db.add(habit)
     db.commit()
-    db.refresh(db_habit)
+    db.refresh(habit)
     
     return HabitResponse(
-        id=str(db_habit.id),
-        user_id=str(db_habit.user_id),
-        name=db_habit.name,
-        description=db_habit.description,
-        category=db_habit.category,
-        target_frequency=db_habit.target_frequency,
-        frequency_unit=db_habit.frequency_unit,
-        is_active=db_habit.is_active,
-        created_at=db_habit.created_at,
-        updated_at=db_habit.updated_at
+        id=habit.id,
+        name=habit.name,
+        description=habit.description,
+        category=habit.category,
+        target_frequency=habit.target_frequency,
+        is_active=habit.is_active,
+        current_streak=habit.current_streak,
+        longest_streak=habit.longest_streak,
+        total_completions=habit.total_completions,
+        created_at=habit.created_at
     )
 
 @app.get("/api/v1/habits/", response_model=List[HabitResponse])
 async def get_habits(
-    user_id: str = Depends(get_user_id_from_header),
-    db: Session = Depends(get_db)
+    active_only: bool = Query(True),
+    category: Optional[str] = None,
+    db: Session = Depends(get_db),
+    current_user: Dict[str, Any] = Depends(get_current_user)
 ):
-    habits = db.query(Habit).filter(
-        Habit.user_id == uuid.UUID(user_id),
-        Habit.is_active == True
-    ).all()
+    """Get user's habits"""
+    
+    query = db.query(Habit).filter(Habit.user_id == current_user["user_id"])
+    
+    if active_only:
+        query = query.filter(Habit.is_active == True)
+    
+    if category:
+        query = query.filter(Habit.category == category)
+    
+    habits = query.order_by(Habit.name).all()
     
     return [
         HabitResponse(
-            id=str(habit.id),
-            user_id=str(habit.user_id),
+            id=habit.id,
             name=habit.name,
             description=habit.description,
             category=habit.category,
             target_frequency=habit.target_frequency,
-            frequency_unit=habit.frequency_unit,
             is_active=habit.is_active,
-            created_at=habit.created_at,
-            updated_at=habit.updated_at
+            current_streak=habit.current_streak,
+            longest_streak=habit.longest_streak,
+            total_completions=habit.total_completions,
+            created_at=habit.created_at
         )
         for habit in habits
     ]
 
-@app.post("/api/v1/habits/{habit_id}/events", response_model=HabitEventResponse)
-async def create_habit_event(
-    habit_id: str,
+@app.post("/api/v1/habits/{habit_id}/events")
+async def complete_habit(
+    habit_id: UUID4,
     event_data: HabitEventCreate,
-    user_id: str = Depends(get_user_id_from_header),
-    db: Session = Depends(get_db)
+    background_tasks: BackgroundTasks,
+    db: Session = Depends(get_db),
+    current_user: Dict[str, Any] = Depends(get_current_user)
 ):
+    """Mark habit as completed"""
+    
     # Verify habit belongs to user
     habit = db.query(Habit).filter(
-        Habit.id == uuid.UUID(habit_id),
-        Habit.user_id == uuid.UUID(user_id)
+        and_(Habit.id == habit_id, Habit.user_id == current_user["user_id"])
     ).first()
     
     if not habit:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Habit not found"
+        raise HTTPException(status_code=404, detail="Habit not found")
+    
+    # Check if already completed today
+    today = date.today()
+    existing_event = db.query(HabitEvent).filter(
+        and_(
+            HabitEvent.habit_id == habit_id,
+            HabitEvent.user_id == current_user["user_id"],
+            func.date(HabitEvent.completed_at) == today
         )
+    ).first()
     
-    db_event = HabitEvent(
-        habit_id=uuid.UUID(habit_id),
-        user_id=uuid.UUID(user_id),
+    if existing_event:
+        raise HTTPException(status_code=400, detail="Habit already completed today")
+    
+    # Create habit event
+    event = HabitEvent(
+        id=uuid.uuid4(),
+        habit_id=habit_id,
+        user_id=current_user["user_id"],
         notes=event_data.notes,
-        mood_impact=event_data.mood_impact
+        rating=event_data.rating,
+        duration_minutes=event_data.duration_minutes
     )
     
-    db.add(db_event)
+    db.add(event)
+    
+    # Update habit statistics
+    habit.total_completions += 1
+    
+    # Calculate streak
+    yesterday = today - timedelta(days=1)
+    yesterday_event = db.query(HabitEvent).filter(
+        and_(
+            HabitEvent.habit_id == habit_id,
+            HabitEvent.user_id == current_user["user_id"],
+            func.date(HabitEvent.completed_at) == yesterday
+        )
+    ).first()
+    
+    if yesterday_event:
+        habit.current_streak += 1
+    else:
+        habit.current_streak = 1
+    
+    if habit.current_streak > habit.longest_streak:
+        habit.longest_streak = habit.current_streak
+    
     db.commit()
-    db.refresh(db_event)
     
-    return HabitEventResponse(
-        id=str(db_event.id),
-        habit_id=str(db_event.habit_id),
-        user_id=str(db_event.user_id),
-        completed_at=db_event.completed_at,
-        notes=db_event.notes,
-        mood_impact=db_event.mood_impact
-    )
+    # Schedule insights update
+    background_tasks.add_task(update_user_insights, current_user["user_id"], db)
+    
+    return {
+        "message": "Habit completed successfully",
+        "current_streak": habit.current_streak,
+        "total_completions": habit.total_completions
+    }
 
-# Analytics Endpoints
-@app.get("/api/v1/analytics/overview", response_model=WeeklyAnalytics)
-async def get_weekly_analytics(
-    user_id: str = Depends(get_user_id_from_header),
-    db: Session = Depends(get_db)
+# Analytics endpoints
+@app.get("/api/v1/analytics/overview")
+async def get_analytics_overview(
+    period: str = Query("week", regex="^(week|month|quarter|year)$"),
+    db: Session = Depends(get_db),
+    current_user: Dict[str, Any] = Depends(get_current_user)
 ):
-    # Get data from last 7 days
-    start_date = datetime.utcnow() - timedelta(days=7)
+    """Get comprehensive analytics overview"""
     
-    # Mood entries
+    # Check cache first
+    cache_key = f"mood_analytics:{current_user['user_id']}:{period}"
+    cached_data = redis_client.get(cache_key)
+    if cached_data:
+        return json.loads(cached_data)
+    
+    # Calculate date range
+    end_date = datetime.utcnow()
+    if period == "week":
+        start_date = end_date - timedelta(days=7)
+    elif period == "month":
+        start_date = end_date - timedelta(days=30)
+    elif period == "quarter":
+        start_date = end_date - timedelta(days=90)
+    else:  # year
+        start_date = end_date - timedelta(days=365)
+    
+    user_id = current_user["user_id"]
+    
+    # Get mood entries
     mood_entries = db.query(MoodEntry).filter(
-        MoodEntry.user_id == uuid.UUID(user_id),
-        MoodEntry.created_at >= start_date
+        and_(
+            MoodEntry.user_id == user_id,
+            MoodEntry.created_at >= start_date
+        )
     ).all()
     
-    # Journal entries
-    journal_count = db.query(JournalEntry).filter(
-        JournalEntry.user_id == uuid.UUID(user_id),
-        JournalEntry.created_at >= start_date
+    # Get journal entries
+    journal_entries = db.query(JournalEntry).filter(
+        and_(
+            JournalEntry.user_id == user_id,
+            JournalEntry.created_at >= start_date
+        )
     ).count()
     
-    # Habit events
-    habit_events_count = db.query(HabitEvent).filter(
-        HabitEvent.user_id == uuid.UUID(user_id),
-        HabitEvent.completed_at >= start_date
-    ).count()
+    # Get habits
+    habits = db.query(Habit).filter(
+        and_(Habit.user_id == user_id, Habit.is_active == True)
+    ).all()
     
-    # Insights
-    insights_count = db.query(Insight).filter(
-        Insight.user_id == uuid.UUID(user_id),
-        Insight.created_at >= start_date
-    ).count()
-    
-    # Calculate analytics
+    # Calculate metrics
     if mood_entries:
-        mood_values = [entry.mood_value for entry in mood_entries]
-        average_mood = statistics.mean(mood_values)
+        avg_mood = sum(entry.mood_score for entry in mood_entries) / len(mood_entries)
+        avg_energy = sum(entry.energy_level for entry in mood_entries if entry.energy_level) / max(1, len([e for e in mood_entries if e.energy_level]))
+        avg_stress = sum(entry.stress_level for entry in mood_entries if entry.stress_level) / max(1, len([e for e in mood_entries if e.stress_level]))
         
-        # Determine trend (simple comparison with previous week)
-        prev_start = start_date - timedelta(days=7)
-        prev_entries = db.query(MoodEntry).filter(
-            MoodEntry.user_id == uuid.UUID(user_id),
-            MoodEntry.created_at >= prev_start,
-            MoodEntry.created_at < start_date
-        ).all()
-        
-        if prev_entries:
-            prev_average = statistics.mean([entry.mood_value for entry in prev_entries])
-            if average_mood > prev_average + 0.5:
-                trend = "improving"
-            elif average_mood < prev_average - 0.5:
-                trend = "declining"
-            else:
-                trend = "stable"
+        # Mood trend
+        if len(mood_entries) >= 2:
+            recent_half = mood_entries[:len(mood_entries)//2]
+            older_half = mood_entries[len(mood_entries)//2:]
+            recent_avg = sum(entry.mood_score for entry in recent_half) / len(recent_half)
+            older_avg = sum(entry.mood_score for entry in older_half) / len(older_half)
+            mood_trend = "improving" if recent_avg > older_avg else "declining" if recent_avg < older_avg else "stable"
         else:
-            trend = "stable"
-        
-        stress_levels = [entry.stress_level for entry in mood_entries if entry.stress_level]
-        energy_levels = [entry.energy_level for entry in mood_entries if entry.energy_level]
+            mood_trend = "stable"
     else:
-        average_mood = 5.0
-        trend = "stable"
-        stress_levels = []
-        energy_levels = []
+        avg_mood = avg_energy = avg_stress = 0
+        mood_trend = "no_data"
     
-    return WeeklyAnalytics(
-        average_mood=round(average_mood, 1),
-        mood_trend=trend,
-        total_journal_entries=journal_count,
-        habits_completed=habit_events_count,
-        stress_levels=stress_levels,
-        energy_levels=energy_levels,
-        insights_count=insights_count
-    )
+    # Calculate health score
+    health_score = calculate_health_score(mood_entries, habits)
+    
+    # Habit completion rate
+    if habits:
+        total_possible_completions = len(habits) * 7  # Assuming daily habits for week
+        actual_completions = sum(habit.current_streak for habit in habits)
+        habit_completion_rate = min(100, (actual_completions / total_possible_completions) * 100)
+    else:
+        habit_completion_rate = 0
+    
+    analytics_data = {
+        "period": period,
+        "health_score": round(health_score, 1),
+        "mood_average": round(avg_mood, 1),
+        "energy_average": round(avg_energy, 1),
+        "stress_average": round(avg_stress, 1),
+        "mood_trend": mood_trend,
+        "mood_entries_count": len(mood_entries),
+        "journal_entries_count": journal_entries,
+        "active_habits_count": len(habits),
+        "habit_completion_rate": round(habit_completion_rate, 1),
+        "insights": generate_insights(mood_entries, habits, period)
+    }
+    
+    # Cache for 1 hour
+    redis_client.setex(cache_key, 3600, json.dumps(analytics_data))
+    
+    return analytics_data
 
+def generate_insights(mood_entries: List[MoodEntry], habits: List[Habit], period: str) -> List[str]:
+    """Generate personalized insights"""
+    insights = []
+    
+    if not mood_entries:
+        insights.append("Start logging your mood daily to get personalized insights!")
+        return insights
+    
+    avg_mood = sum(entry.mood_score for entry in mood_entries) / len(mood_entries)
+    
+    if avg_mood >= 7:
+        insights.append("You've been maintaining a positive mood! Keep up the great work.")
+    elif avg_mood <= 4:
+        insights.append("Your mood has been lower lately. Consider talking to someone or trying stress-reduction techniques.")
+    else:
+        insights.append("Your mood is in a neutral range. Small positive changes could make a big difference.")
+    
+    # Context tag analysis
+    all_tags = []
+    for entry in mood_entries:
+        if entry.context_tags:
+            all_tags.extend(entry.context_tags)
+    
+    if all_tags:
+        from collections import Counter
+        common_tags = Counter(all_tags).most_common(3)
+        insights.append(f"Your most common mood contexts: {', '.join([tag for tag, _ in common_tags])}")
+    
+    # Habit insights
+    if habits:
+        total_streak = sum(habit.current_streak for habit in habits)
+        avg_streak = total_streak / len(habits)
+        if avg_streak >= 7:
+            insights.append("Excellent habit consistency! Your routines are really paying off.")
+        elif avg_streak >= 3:
+            insights.append("Good habit progress. Try to maintain consistency for even better results.")
+        else:
+            insights.append("Focus on building consistent habits. Start small and gradually increase.")
+    
+    return insights
+
+async def update_user_insights(user_id: str, db: Session):
+    """Background task to update user insights"""
+    # This would contain logic to generate new insights
+    # For now, just clear the cache to force regeneration
+    redis_client.delete(f"mood_analytics:{user_id}:*")
+
+# Weekly patterns
 @app.get("/api/v1/analytics/patterns/weekly")
 async def get_weekly_patterns(
-    user_id: str = Depends(get_user_id_from_header),
-    weeks: int = 4,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user: Dict[str, Any] = Depends(get_current_user)
 ):
-    patterns = []
+    """Get weekly mood patterns"""
     
-    for week in range(weeks):
-        start_date = datetime.utcnow() - timedelta(days=(week + 1) * 7)
-        end_date = datetime.utcnow() - timedelta(days=week * 7)
-        
-        mood_entries = db.query(MoodEntry).filter(
-            MoodEntry.user_id == uuid.UUID(user_id),
-            MoodEntry.created_at >= start_date,
-            MoodEntry.created_at < end_date
-        ).all()
-        
-        if mood_entries:
-            avg_mood = statistics.mean([entry.mood_value for entry in mood_entries])
-            avg_energy = statistics.mean([entry.energy_level for entry in mood_entries if entry.energy_level])
-            avg_stress = statistics.mean([entry.stress_level for entry in mood_entries if entry.stress_level])
+    # Get mood entries from last 4 weeks
+    four_weeks_ago = datetime.utcnow() - timedelta(days=28)
+    mood_entries = db.query(MoodEntry).filter(
+        and_(
+            MoodEntry.user_id == current_user["user_id"],
+            MoodEntry.created_at >= four_weeks_ago
+        )
+    ).all()
+    
+    # Group by day of week
+    day_patterns = {i: [] for i in range(7)}  # 0=Monday, 6=Sunday
+    
+    for entry in mood_entries:
+        day_of_week = entry.created_at.weekday()
+        day_patterns[day_of_week].append(entry.mood_score)
+    
+    # Calculate averages
+    weekly_pattern = {}
+    days = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"]
+    
+    for day_num, scores in day_patterns.items():
+        if scores:
+            weekly_pattern[days[day_num]] = {
+                "average_mood": round(sum(scores) / len(scores), 1),
+                "entry_count": len(scores)
+            }
         else:
-            avg_mood = avg_energy = avg_stress = 0
-        
-        patterns.append({
-            "week": week + 1,
-            "start_date": start_date.isoformat(),
-            "end_date": end_date.isoformat(),
-            "average_mood": round(avg_mood, 1),
-            "average_energy": round(avg_energy, 1) if avg_energy else 0,
-            "average_stress": round(avg_stress, 1) if avg_stress else 0,
-            "entry_count": len(mood_entries)
-        })
+            weekly_pattern[days[day_num]] = {
+                "average_mood": None,
+                "entry_count": 0
+            }
     
-    return {"patterns": patterns}
+    return {
+        "weekly_pattern": weekly_pattern,
+        "analysis_period": "4_weeks",
+        "total_entries": len(mood_entries)
+    }
 
+# Health check
 @app.get("/health")
 async def health_check():
+    """Service health check"""
     return {
         "status": "healthy",
         "service": "mood_service",
