@@ -10,6 +10,7 @@ import { WellnessDashboard } from "@/components/WellnessDashboard"
 import { MoodPatternNotifications } from "@/components/MoodPatternNotifications"
 import { RealTimeNotifications } from "@/components/RealTimeNotifications"
 import { AuthScreen } from "@/components/AuthScreen"
+import { DevelopmentBanner } from "@/components/DevelopmentBanner"
 import { AuthProvider, useAuth } from "@/hooks/useAuth"
 import { useMoodBasedTheme } from "@/hooks/useMoodTheme"
 import { useWebSocket } from "@/hooks/useWebSocket"
@@ -103,6 +104,8 @@ function AppContent() {
       </header>
       
       <div className="container mx-auto px-4 py-6">
+        <DevelopmentBanner />
+        
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
           <div className="lg:col-span-2">
             <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">

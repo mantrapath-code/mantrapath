@@ -12,10 +12,45 @@ interface ApiError {
 class ApiService {
   private baseUrl: string
   private token: string | null = null
+  private isBackendAvailable: boolean = true
+  private backendCheckPromise: Promise<boolean> | null = null
 
   constructor(baseUrl: string = API_BASE_URL) {
     this.baseUrl = baseUrl
     this.token = localStorage.getItem('mantrapath_token')
+    this.checkBackendAvailability()
+  }
+
+  private async checkBackendAvailability(): Promise<boolean> {
+    if (this.backendCheckPromise) {
+      return this.backendCheckPromise
+    }
+
+    this.backendCheckPromise = new Promise(async (resolve) => {
+      try {
+        const response = await fetch(`${this.baseUrl}/health`, {
+          method: 'GET',
+          headers: { 'Content-Type': 'application/json' },
+          signal: AbortSignal.timeout(3000) // 3 second timeout
+        })
+        this.isBackendAvailable = response.ok
+        
+        if (this.isBackendAvailable) {
+          console.log('✅ Backend is available at', this.baseUrl)
+        } else {
+          console.warn('⚠️ Backend responded but not healthy')
+        }
+        
+        resolve(this.isBackendAvailable)
+      } catch (error) {
+        console.warn('🔧 Backend not available, using mock data mode. To start backend:')
+        console.warn('   cd backend && ./quick-start.sh')
+        this.isBackendAvailable = false
+        resolve(false)
+      }
+    })
+
+    return this.backendCheckPromise
   }
 
   private getHeaders(): HeadersInit {
@@ -56,6 +91,12 @@ class ApiService {
     endpoint: string,
     options: RequestInit = {}
   ): Promise<T> {
+    const backendAvailable = await this.checkBackendAvailability()
+    
+    if (!backendAvailable) {
+      return this.handleMockRequest<T>(endpoint, options)
+    }
+
     const url = `${this.baseUrl}${endpoint}`
     
     const config: RequestInit = {
@@ -70,9 +111,181 @@ class ApiService {
       const response = await fetch(url, config)
       return this.handleResponse<T>(response)
     } catch (error) {
-      console.error('API request failed:', error)
-      throw error
+      console.error('API request failed, falling back to mock data:', error)
+      this.isBackendAvailable = false
+      return this.handleMockRequest<T>(endpoint, options)
     }
+  }
+
+  private handleMockRequest<T>(endpoint: string, options: RequestInit = {}): Promise<T> {
+    console.log('🔧 Using mock data for:', endpoint)
+    
+    // Mock authentication responses
+    if (endpoint === '/login' && options.method === 'POST') {
+      return Promise.resolve({
+        access_token: 'mock_access_token_' + Date.now(),
+        refresh_token: 'mock_refresh_token_' + Date.now(),
+        token_type: 'bearer'
+      } as T)
+    }
+
+    if (endpoint === '/register' && options.method === 'POST') {
+      return Promise.resolve({
+        access_token: 'mock_access_token_' + Date.now(),
+        refresh_token: 'mock_refresh_token_' + Date.now(),
+        token_type: 'bearer'
+      } as T)
+    }
+
+    if (endpoint === '/me') {
+      return Promise.resolve({
+        id: 'mock_user_' + Date.now(),
+        email: 'user@example.com',
+        username: 'demo_user',
+        is_active: true,
+        role: 'user'
+      } as T)
+    }
+
+    // Mock mood data
+    if (endpoint.startsWith('/api/v1/mood/') && options.method !== 'POST') {
+      const mockMoods = Array.from({ length: 30 }, (_, i) => ({
+        id: `mood_${i}`,
+        mood_score: Math.floor(Math.random() * 10) + 1,
+        energy_level: Math.floor(Math.random() * 10) + 1,
+        stress_level: Math.floor(Math.random() * 10) + 1,
+        sleep_quality: Math.floor(Math.random() * 10) + 1,
+        notes: `Mock mood entry ${i}`,
+        context_tags: ['work', 'exercise', 'sleep'][Math.floor(Math.random() * 3)] ? ['work'] : [],
+        created_at: new Date(Date.now() - i * 24 * 60 * 60 * 1000).toISOString()
+      }))
+      return Promise.resolve(mockMoods as T)
+    }
+
+    if (endpoint.startsWith('/api/v1/mood/') && options.method === 'POST') {
+      return Promise.resolve({
+        id: 'mood_' + Date.now(),
+        message: 'Mood entry created successfully'
+      } as T)
+    }
+
+    // Mock journal data
+    if (endpoint.startsWith('/api/v1/journal/') && options.method !== 'POST') {
+      const mockJournals = Array.from({ length: 10 }, (_, i) => ({
+        id: `journal_${i}`,
+        title: `Journal Entry ${i + 1}`,
+        content: `This is a mock journal entry content for entry ${i + 1}. It contains reflective thoughts and daily experiences.`,
+        mood_before: Math.floor(Math.random() * 10) + 1,
+        mood_after: Math.floor(Math.random() * 10) + 1,
+        sentiment_score: Math.random() * 2 - 1,
+        sentiment_label: ['positive', 'neutral', 'negative'][Math.floor(Math.random() * 3)],
+        themes: ['gratitude', 'work', 'family', 'health'][Math.floor(Math.random() * 4)] ? ['gratitude'] : [],
+        is_private: false,
+        created_at: new Date(Date.now() - i * 24 * 60 * 60 * 1000).toISOString()
+      }))
+      return Promise.resolve(mockJournals as T)
+    }
+
+    if (endpoint.startsWith('/api/v1/journal/') && options.method === 'POST') {
+      return Promise.resolve({
+        id: 'journal_' + Date.now(),
+        message: 'Journal entry created successfully'
+      } as T)
+    }
+
+    // Mock analytics data
+    if (endpoint.startsWith('/api/v1/analytics/')) {
+      if (endpoint.includes('overview')) {
+        return Promise.resolve({
+          average_mood: 7.2,
+          mood_trend: 'improving',
+          total_entries: 45,
+          streak: 7,
+          weekly_pattern: {
+            'monday': 6.5,
+            'tuesday': 7.0,
+            'wednesday': 7.5,
+            'thursday': 7.2,
+            'friday': 8.0,
+            'saturday': 8.5,
+            'sunday': 7.8
+          },
+          monthly_summary: {
+            average_mood: 7.2,
+            best_day: 'Friday',
+            worst_day: 'Monday'
+          }
+        } as T)
+      }
+
+      if (endpoint.includes('patterns/weekly')) {
+        return Promise.resolve({
+          weekly_averages: {
+            'monday': 6.5,
+            'tuesday': 7.0,
+            'wednesday': 7.5,
+            'thursday': 7.2,
+            'friday': 8.0,
+            'saturday': 8.5,
+            'sunday': 7.8
+          },
+          patterns: [
+            {
+              type: 'improvement',
+              severity: 'mild',
+              message: 'Your mood tends to improve throughout the week',
+              recommendation: 'Keep up your weekend self-care routine'
+            }
+          ],
+          total_weeks: 6
+        } as T)
+      }
+    }
+
+    // Mock community data
+    if (endpoint.startsWith('/forums') && options.method !== 'POST') {
+      const mockForums = [
+        {
+          id: 'forum_1',
+          name: 'General Support',
+          description: 'A place for general mental health support and discussion',
+          category: 'support',
+          member_count: 1245,
+          is_joined: true
+        },
+        {
+          id: 'forum_2',
+          name: 'Anxiety & Stress',
+          description: 'Support group for anxiety and stress management',
+          category: 'mental-health',
+          member_count: 892,
+          is_joined: false
+        }
+      ]
+      return Promise.resolve(mockForums as T)
+    }
+
+    // Mock chatbot data
+    if (endpoint.startsWith('/api/chatbot/chat') && options.method === 'POST') {
+      const mockResponses = [
+        "Thank you for sharing that with me. How are you feeling right now?",
+        "I understand this might be challenging. Would you like to try a breathing exercise?",
+        "It sounds like you're going through a lot. Remember, it's okay to take things one step at a time.",
+        "Your feelings are valid. Have you tried any mindfulness practices before?"
+      ]
+      
+      return Promise.resolve({
+        response: mockResponses[Math.floor(Math.random() * mockResponses.length)],
+        session_id: 'mock_session_' + Date.now(),
+        message_type: 'text'
+      } as T)
+    }
+
+    // Default mock response
+    return Promise.resolve({
+      message: 'Mock response for ' + endpoint,
+      success: true
+    } as T)
   }
 
   // Auth methods
