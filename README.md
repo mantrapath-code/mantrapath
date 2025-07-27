@@ -22,6 +22,46 @@ MantraPath is a comprehensive AI-powered mental wellness platform that combines 
 
 ## 🚀 Quick Start
 
+### Frontend Only (Mock Data Mode)
+```bash
+npm install
+npm run dev
+```
+The app will run at http://localhost:5173 with simulated data.
+
+### Full Stack Development
+
+#### 1. Start Backend Services
+See [BACKEND_START_GUIDE.md](./BACKEND_START_GUIDE.md) for detailed instructions.
+
+**Quick version:**
+```bash
+# Terminal 1 - Setup
+cd backend
+python3 setup_backend.py
+
+# Terminal 2 - Auth Service  
+cd backend/services/auth
+python3 -m uvicorn main:app --port 8001 --reload
+
+# Terminal 3 - Mood Service
+cd backend/services/mood
+python3 -m uvicorn main:app --port 8003 --reload
+
+# Terminal 4 - API Gateway
+cd backend/services/gateway  
+python3 -m uvicorn main:app --port 8000 --reload
+```
+
+#### 2. Start Frontend
+```bash
+# Terminal 5 - Frontend
+npm install
+npm run dev
+```
+
+✅ **Full app with real backend:** http://localhost:5173
+
 ### Prerequisites
 - Node.js 18+ (for frontend)
 - Python 3.11+ (for backend)

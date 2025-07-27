@@ -13,7 +13,9 @@ import sys
 import os
 
 # Add shared modules to path
-sys.path.append('/app/shared')
+backend_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+shared_dir = os.path.join(backend_dir, "shared")
+sys.path.insert(0, shared_dir)
 
 from database import get_db, create_tables
 from auth import verify_token

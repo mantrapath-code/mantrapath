@@ -28,23 +28,33 @@ class ApiService {
 
     this.backendCheckPromise = new Promise(async (resolve) => {
       try {
+        console.log('🔍 Checking backend availability at:', this.baseUrl)
         const response = await fetch(`${this.baseUrl}/health`, {
           method: 'GET',
           headers: { 'Content-Type': 'application/json' },
-          signal: AbortSignal.timeout(3000) // 3 second timeout
+          signal: AbortSignal.timeout(5000) // 5 second timeout
         })
+        
         this.isBackendAvailable = response.ok
         
         if (this.isBackendAvailable) {
-          console.log('✅ Backend is available at', this.baseUrl)
+          console.log('✅ Backend is available and healthy at', this.baseUrl)
+          const healthData = await response.json()
+          console.log('Backend health data:', healthData)
         } else {
-          console.warn('⚠️ Backend responded but not healthy')
+          console.warn('⚠️ Backend responded but not healthy:', response.status)
         }
         
         resolve(this.isBackendAvailable)
       } catch (error) {
-        console.warn('🔧 Backend not available, using mock data mode. To start backend:')
-        console.warn('   cd backend && ./quick-start.sh')
+        console.warn('🔧 Backend not available at', this.baseUrl)
+        console.warn('To start the backend services:')
+        console.warn('   cd backend')
+        console.warn('   python3 simple_start.py')
+        console.warn('   # OR')
+        console.warn('   ./start_backend.sh')
+        console.warn('')
+        console.warn('Using mock data mode until backend is available...')
         this.isBackendAvailable = false
         resolve(false)
       }
