@@ -1,18 +1,19 @@
 """
-Notification Service - Push notifications, alerts, and messaging
+Notification Service - Push notifications, alerts, and messaging with WebSocket support
 """
 
-from fastapi import FastAPI, Depends, HTTPException, BackgroundTasks
+from fastapi import FastAPI, Depends, HTTPException, BackgroundTasks, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.orm import Session
 from sqlalchemy import desc, and_, or_
-from typing import List, Optional, Dict, Any
+from typing import List, Optional, Dict, Any, Set
 from datetime import datetime, timedelta
 import uuid
 from pydantic import BaseModel, UUID4, Field
 import json
 import redis
 import asyncio
+import logging
 
 # Import shared modules
 import sys
@@ -39,6 +40,45 @@ app.add_middleware(
 
 # Redis for queuing and caching
 redis_client = redis.from_url(os.getenv("REDIS_URL", "redis://localhost:6379"))
+
+# WebSocket connection manager
+class ConnectionManager:
+    def __init__(self):
+        self.active_connections: Dict[str, Set[WebSocket]] = {}
+        
+    async def connect(self, websocket: WebSocket, user_id: str):
+        await websocket.accept()
+        if user_id not in self.active_connections:
+            self.active_connections[user_id] = set()
+        self.active_connections[user_id].add(websocket)
+        logging.info(f"WebSocket connected for user {user_id}")
+        
+    def disconnect(self, websocket: WebSocket, user_id: str):
+        if user_id in self.active_connections:
+            self.active_connections[user_id].discard(websocket)
+            if not self.active_connections[user_id]:
+                del self.active_connections[user_id]
+        logging.info(f"WebSocket disconnected for user {user_id}")
+        
+    async def send_personal_message(self, message: dict, user_id: str):
+        if user_id in self.active_connections:
+            connections_to_remove = set()
+            for connection in self.active_connections[user_id].copy():
+                try:
+                    await connection.send_json(message)
+                except Exception as e:
+                    logging.error(f"Error sending message to user {user_id}: {e}")
+                    connections_to_remove.add(connection)
+            
+            # Remove failed connections
+            for connection in connections_to_remove:
+                self.active_connections[user_id].discard(connection)
+                
+    async def broadcast(self, message: dict):
+        for user_id, connections in self.active_connections.items():
+            await self.send_personal_message(message, user_id)
+
+manager = ConnectionManager()
 
 # Pydantic models
 class NotificationCreate(BaseModel):
@@ -76,6 +116,70 @@ class SendNotificationRequest(BaseModel):
     notification_type: str
     action_url: Optional[str] = None
     priority: str = "normal"
+
+class WebSocketMessage(BaseModel):
+    type: str  # 'notification', 'mood_update', 'chat_message', etc.
+    data: Dict[str, Any]
+    timestamp: datetime = Field(default_factory=datetime.utcnow)
+
+# WebSocket endpoint for real-time notifications
+@app.websocket("/ws/{user_id}")
+async def websocket_endpoint(websocket: WebSocket, user_id: str):
+    """WebSocket endpoint for real-time notifications"""
+    try:
+        await manager.connect(websocket, user_id)
+        
+        # Send welcome message
+        welcome_message = WebSocketMessage(
+            type="connection",
+            data={"message": "Connected to MantraPath notifications", "user_id": user_id}
+        )
+        await websocket.send_json(welcome_message.dict())
+        
+        # Keep connection alive and handle incoming messages
+        while True:
+            try:
+                # Wait for messages from client (heartbeat, status updates, etc.)
+                data = await websocket.receive_json()
+                
+                # Handle different message types from client
+                if data.get("type") == "heartbeat":
+                    heartbeat_response = WebSocketMessage(
+                        type="heartbeat_ack",
+                        data={"timestamp": datetime.utcnow().isoformat()}
+                    )
+                    await websocket.send_json(heartbeat_response.dict())
+                    
+                elif data.get("type") == "mark_read":
+                    # Handle marking notifications as read via WebSocket
+                    notification_id = data.get("notification_id")
+                    if notification_id:
+                        # Mark as read in database (you'd need to get db session here)
+                        response = WebSocketMessage(
+                            type="notification_read",
+                            data={"notification_id": notification_id, "status": "read"}
+                        )
+                        await websocket.send_json(response.dict())
+                        
+            except WebSocketDisconnect:
+                break
+            except Exception as e:
+                logging.error(f"Error in WebSocket communication: {e}")
+                break
+                
+    except Exception as e:
+        logging.error(f"WebSocket connection error: {e}")
+    finally:
+        manager.disconnect(websocket, user_id)
+
+@app.get("/ws/status")
+async def websocket_status():
+    """Get WebSocket connection status"""
+    return {
+        "connected_users": len(manager.active_connections),
+        "total_connections": sum(len(connections) for connections in manager.active_connections.values()),
+        "users": list(manager.active_connections.keys())
+    }
 
 # Notification management endpoints
 @app.post("/notify/send")
@@ -119,13 +223,15 @@ async def send_notification(
         background_tasks.add_task(
             process_notification_immediately, 
             str(notification.id), 
-            db
+            db,
+            user_id  # Pass user_id for WebSocket notification
         )
     else:
         # Queue for batch processing
         background_tasks.add_task(
             queue_notification_for_processing, 
-            str(notification.id)
+            str(notification.id),
+            user_id  # Pass user_id for WebSocket notification
         )
     
     return {
@@ -177,10 +283,12 @@ async def broadcast_notification(
     db.commit()
     
     # Queue all notifications for processing
-    for notification_id in notification_ids:
+    for i, notification_id in enumerate(notification_ids):
+        user_id = target_users[i].id if i < len(target_users) else None
         background_tasks.add_task(
             queue_notification_for_processing, 
-            notification_id
+            notification_id,
+            str(user_id) if user_id else None
         )
     
     return {
@@ -248,6 +356,20 @@ async def mark_notification_read(
     
     notification.is_read = True
     db.commit()
+    
+    # Send real-time update via WebSocket
+    asyncio.create_task(
+        manager.send_personal_message(
+            {
+                "type": "notification_read",
+                "data": {
+                    "notification_id": str(notification_id),
+                    "timestamp": datetime.utcnow().isoformat()
+                }
+            },
+            current_user["user_id"]
+        )
+    )
     
     return {"message": "Notification marked as read"}
 
@@ -386,7 +508,7 @@ def should_send_notification(notification_type: str, profile: UserProfile) -> bo
     
     return type_preference_map.get(notification_type, True)
 
-async def process_notification_immediately(notification_id: str, db: Session):
+async def process_notification_immediately(notification_id: str, db: Session, user_id: str = None):
     """Process notification for immediate delivery"""
     
     notification = db.query(Notification).filter(
@@ -409,12 +531,29 @@ async def process_notification_immediately(notification_id: str, db: Session):
         notification.is_sent = True
         notification.sent_at = datetime.utcnow()
         db.commit()
+        
+        # Send real-time notification via WebSocket
+        if user_id:
+            websocket_message = WebSocketMessage(
+                type="notification",
+                data={
+                    "id": str(notification.id),
+                    "title": notification.title,
+                    "message": notification.message,
+                    "notification_type": notification.notification_type,
+                    "action_url": notification.action_url,
+                    "priority": notification.priority,
+                    "created_at": notification.created_at.isoformat()
+                }
+            )
+            await manager.send_personal_message(websocket_message.dict(), user_id)
 
-async def queue_notification_for_processing(notification_id: str):
+async def queue_notification_for_processing(notification_id: str, user_id: str = None):
     """Queue notification for batch processing"""
     
     queue_data = {
         "notification_id": notification_id,
+        "user_id": user_id,
         "queued_at": datetime.utcnow().isoformat()
     }
     
@@ -522,7 +661,231 @@ async def health_check():
         "status": "healthy",
         "service": "notification_service",
         "timestamp": datetime.utcnow().isoformat(),
-        "queue_size": redis_client.llen("notification_queue")
+        "queue_size": redis_client.llen("notification_queue"),
+        "websocket_connections": len(manager.active_connections)
+    }
+
+# Real-time notification triggers
+@app.post("/notify/mood-pattern")
+async def trigger_mood_pattern_notification(
+    user_id: str,
+    pattern_type: str,
+    pattern_data: Dict[str, Any],
+    background_tasks: BackgroundTasks,
+    db: Session = Depends(get_db),
+    current_user: Dict[str, Any] = Depends(get_current_user)
+):
+    """Trigger mood pattern notification based on analytics"""
+    
+    # Generate personalized message based on pattern
+    if pattern_type == "negative_trend":
+        title = "Mood Pattern Alert"
+        message = f"We've noticed your mood has been trending downward over the past {pattern_data.get('days', 7)} days. Consider trying some wellness activities."
+        action_url = "/mood"
+    elif pattern_type == "positive_streak":
+        title = "Great Progress! 🎉"
+        message = f"Amazing! You've maintained a positive mood for {pattern_data.get('streak_days', 1)} days. Keep up the excellent work!"
+        action_url = "/dashboard"
+    elif pattern_type == "intervention_needed":
+        title = "Wellness Check-in"
+        message = "It might be a good time to use your coping strategies or reach out for support."
+        action_url = "/community"
+    else:
+        title = "Mood Insights Available"
+        message = "New insights about your mood patterns are ready to view."
+        action_url = "/dashboard"
+    
+    notification_data = NotificationCreate(
+        title=title,
+        message=message,
+        notification_type="mood_pattern",
+        action_url=action_url,
+        priority="high" if pattern_type == "intervention_needed" else "normal",
+        send_immediately=True
+    )
+    
+    # Create and send notification
+    notification = Notification(
+        id=uuid.uuid4(),
+        user_id=user_id,
+        title=notification_data.title,
+        message=notification_data.message,
+        notification_type=notification_data.notification_type,
+        action_url=notification_data.action_url,
+        priority=notification_data.priority,
+        is_sent=False
+    )
+    
+    db.add(notification)
+    db.commit()
+    db.refresh(notification)
+    
+    # Send immediately
+    background_tasks.add_task(
+        process_notification_immediately,
+        str(notification.id),
+        db,
+        user_id
+    )
+    
+    return {
+        "id": str(notification.id),
+        "message": "Mood pattern notification sent",
+        "pattern_type": pattern_type
+    }
+
+@app.post("/notify/weekly-report")
+async def send_weekly_report(
+    user_id: str,
+    report_data: Dict[str, Any],
+    background_tasks: BackgroundTasks,
+    db: Session = Depends(get_db),
+    current_user: Dict[str, Any] = Depends(get_current_user)
+):
+    """Send personalized weekly mood report"""
+    
+    # Generate report summary
+    avg_mood = report_data.get("average_mood", 0)
+    mood_trend = report_data.get("trend", "stable")
+    top_activities = report_data.get("helpful_activities", [])
+    
+    if mood_trend == "improving":
+        title = "Weekly Progress Report 📈"
+        emoji = "🌟"
+        trend_text = "improving"
+    elif mood_trend == "declining":
+        title = "Weekly Wellness Check 💙"
+        emoji = "🤗"
+        trend_text = "showing some challenges"
+    else:
+        title = "Weekly Mood Summary 📊"
+        emoji = "⚖️"
+        trend_text = "staying stable"
+    
+    activities_text = ""
+    if top_activities:
+        activities_text = f" Your most helpful activities were: {', '.join(top_activities[:3])}."
+    
+    message = (
+        f"{emoji} Your average mood this week was {avg_mood:.1f}/10, {trend_text}. "
+        f"{activities_text} Keep focusing on what works for you!"
+    )
+    
+    notification_data = NotificationCreate(
+        title=title,
+        message=message,
+        notification_type="weekly_report",
+        action_url="/dashboard",
+        priority="normal",
+        send_immediately=True
+    )
+    
+    # Create and send notification
+    notification = Notification(
+        id=uuid.uuid4(),
+        user_id=user_id,
+        title=notification_data.title,
+        message=notification_data.message,
+        notification_type=notification_data.notification_type,
+        action_url=notification_data.action_url,
+        priority=notification_data.priority,
+        is_sent=False
+    )
+    
+    db.add(notification)
+    db.commit()
+    db.refresh(notification)
+    
+    # Send immediately
+    background_tasks.add_task(
+        process_notification_immediately,
+        str(notification.id),
+        db,
+        user_id
+    )
+    
+    return {
+        "id": str(notification.id),
+        "message": "Weekly report notification sent",
+        "report_summary": {
+            "average_mood": avg_mood,
+            "trend": mood_trend,
+            "helpful_activities": top_activities
+        }
+    }
+
+@app.post("/notify/intervention-alert")
+async def send_intervention_alert(
+    user_id: str,
+    alert_data: Dict[str, Any],
+    background_tasks: BackgroundTasks,
+    db: Session = Depends(get_db),
+    current_user: Dict[str, Any] = Depends(get_current_user)
+):
+    """Send smart intervention alert based on optimal timing"""
+    
+    alert_type = alert_data.get("type", "general")
+    optimal_time = alert_data.get("optimal_time", "now")
+    
+    if alert_type == "breathing":
+        title = "Time for a Breathing Break 🌬️"
+        message = "Your patterns suggest this might be a good time for a quick breathing exercise."
+        action_url = "/chatbot?action=breathing"
+    elif alert_type == "journaling":
+        title = "Reflection Opportunity ✍️"
+        message = "Consider taking a moment to journal about your current thoughts and feelings."
+        action_url = "/journal"
+    elif alert_type == "community":
+        title = "Connect with Others 🤝"
+        message = "Your community has new supportive messages. Sometimes connecting helps!"
+        action_url = "/community"
+    elif alert_type == "movement":
+        title = "Movement Break 🚶"
+        message = "A short walk or stretch might help boost your mood right now."
+        action_url = "/dashboard"
+    else:
+        title = "Wellness Check-in 💜"
+        message = "Take a moment to check in with yourself. You're doing great!"
+        action_url = "/dashboard"
+    
+    notification_data = NotificationCreate(
+        title=title,
+        message=message,
+        notification_type="intervention",
+        action_url=action_url,
+        priority="high",
+        send_immediately=True
+    )
+    
+    # Create and send notification
+    notification = Notification(
+        id=uuid.uuid4(),
+        user_id=user_id,
+        title=notification_data.title,
+        message=notification_data.message,
+        notification_type=notification_data.notification_type,
+        action_url=notification_data.action_url,
+        priority=notification_data.priority,
+        is_sent=False
+    )
+    
+    db.add(notification)
+    db.commit()
+    db.refresh(notification)
+    
+    # Send immediately
+    background_tasks.add_task(
+        process_notification_immediately,
+        str(notification.id),
+        db,
+        user_id
+    )
+    
+    return {
+        "id": str(notification.id),
+        "message": "Intervention alert sent",
+        "alert_type": alert_type,
+        "optimal_time": optimal_time
     }
 
 if __name__ == "__main__":

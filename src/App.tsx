@@ -8,9 +8,11 @@ import { ChatBot } from "@/components/ChatBot"
 import { CommunitySection } from "@/components/CommunitySection"
 import { WellnessDashboard } from "@/components/WellnessDashboard"
 import { MoodPatternNotifications } from "@/components/MoodPatternNotifications"
+import { RealTimeNotifications } from "@/components/RealTimeNotifications"
 import { AuthScreen } from "@/components/AuthScreen"
 import { AuthProvider, useAuth } from "@/hooks/useAuth"
 import { useMoodBasedTheme } from "@/hooks/useMoodTheme"
+import { useWebSocket } from "@/hooks/useWebSocket"
 import { motion, AnimatePresence } from "framer-motion"
 import { Toaster } from "@/components/ui/sonner"
 
@@ -22,6 +24,9 @@ function AppContent() {
   
   // Initialize mood-based theme system
   const { currentTheme } = useMoodBasedTheme()
+  
+  // Initialize WebSocket connection for real-time features
+  const { isConnected, connectionError } = useWebSocket()
   
   useEffect(() => {
     const checkMobile = () => {
@@ -72,6 +77,8 @@ function AppContent() {
             </motion.div>
             
             <div className="flex items-center gap-2">
+              <RealTimeNotifications />
+              
               <Button
                 onClick={() => setShowChat(!showChat)}
                 className="lg:hidden"
