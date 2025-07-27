@@ -245,6 +245,20 @@ export const useMoodData = () => {
   }
 }
 
+// Export for components expecting useMoods from useWellness
+export const useMoods = () => {
+  const wellness = useWellness()
+  return {
+    moods: wellness.moodEntries,
+    addMood: wellness.actions.addMoodEntry,
+    getMoodTrend: () => wellness.analytics?.moodTrend || 'stable',
+    getMoodAnalytics: wellness.analytics,
+    getRecentMoods: wellness.actions.loadMoodEntries,
+    loading: wellness.loading,
+    error: wellness.error
+  }
+}
+
 export const useUserStats = () => {
   // Mock user stats for now - this should connect to backend later
   return {

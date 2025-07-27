@@ -1,17 +1,20 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import { Badge } from '@/components/ui/badge'
 import { useAuth } from '@/hooks/useAuth'
+import { apiService } from '@/services/api'
 import { toast } from 'sonner'
-import { Eye, EyeSlash } from '@phosphor-icons/react'
+import { Eye, EyeSlash, CheckCircle, X, Warning } from '@phosphor-icons/react'
 
 export function AuthScreen() {
   const { login, register } = useAuth()
   const [loading, setLoading] = useState(false)
   const [showPassword, setShowPassword] = useState(false)
+  const [backendStatus, setBackendStatus] = useState<'checking' | 'connected' | 'disconnected'>('checking')
   
   // Login form state
   const [loginData, setLoginData] = useState({
@@ -28,6 +31,20 @@ export function AuthScreen() {
     last_name: ''
   })
 
+  // Check backend connection on mount
+  useEffect(() => {
+    const checkBackend = async () => {
+      try {
+        await apiService.healthCheck()
+        setBackendStatus('connected')
+      } catch (error) {
+        setBackendStatus('disconnected')
+      }
+    }
+    
+    checkBackend()
+  }, [])
+
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault()
     
@@ -38,10 +55,20 @@ export function AuthScreen() {
 
     try {
       setLoading(true)
+      console.log('🔐 Attempting login for:', loginData.email)
       await login(loginData.email, loginData.password)
       toast.success('Welcome back!')
     } catch (error: any) {
-      toast.error(error.message || 'Failed to login')
+      console.error('Login failed:', error)
+      const errorMessage = error.message || 'Failed to login'
+      toast.error(errorMessage)
+      
+      // Provide helpful hints for common issues
+      if (error.status === 0 || errorMessage.includes('fetch')) {
+        toast.error('Backend connection issue - using demo mode', {
+          description: 'Try the demo account or start the backend services'
+        })
+      }
     } finally {
       setLoading(false)
     }
@@ -62,10 +89,20 @@ export function AuthScreen() {
 
     try {
       setLoading(true)
+      console.log('📝 Attempting registration for:', registerData.email)
       await register(registerData)
       toast.success('Welcome to MantraPath!')
     } catch (error: any) {
-      toast.error(error.message || 'Failed to create account')
+      console.error('Registration failed:', error)
+      const errorMessage = error.message || 'Failed to create account'
+      toast.error(errorMessage)
+      
+      // Provide helpful hints for common issues
+      if (error.status === 0 || errorMessage.includes('fetch')) {
+        toast.error('Backend connection issue - using demo mode', {
+          description: 'Try the demo account or start the backend services'
+        })
+      }
     } finally {
       setLoading(false)
     }
@@ -74,9 +111,11 @@ export function AuthScreen() {
   const handleDemoLogin = async () => {
     try {
       setLoading(true)
+      console.log('🎯 Attempting demo login...')
       await login('demo@mantrapath.com', 'demo123')
       toast.success('Welcome to the demo!')
-    } catch (error) {
+    } catch (error: any) {
+      console.log('Demo login failed, trying to create demo account...')
       // If demo account doesn't exist, create it
       try {
         await register({
@@ -88,7 +127,8 @@ export function AuthScreen() {
         })
         toast.success('Demo account created! Welcome!')
       } catch (registerError: any) {
-        toast.error('Failed to access demo account')
+        console.error('Demo account creation failed:', registerError)
+        toast.error(`Demo access failed: ${registerError.message || 'Unknown error'}`)
       }
     } finally {
       setLoading(false)
@@ -104,6 +144,28 @@ export function AuthScreen() {
           </div>
           <h1 className="text-3xl font-bold text-foreground">MantraPath</h1>
           <p className="text-muted-foreground mt-2">Your AI-powered wellness companion</p>
+          
+          {/* Backend Status Badge */}
+          <div className="flex justify-center mt-3">
+            {backendStatus === 'checking' && (
+              <Badge variant="secondary" className="gap-2">
+                <div className="w-2 h-2 bg-current rounded-full animate-pulse" />
+                Checking backend...
+              </Badge>
+            )}
+            {backendStatus === 'connected' && (
+              <Badge variant="default" className="gap-2 bg-green-600">
+                <CheckCircle size={12} />
+                Backend Connected
+              </Badge>
+            )}
+            {backendStatus === 'disconnected' && (
+              <Badge variant="destructive" className="gap-2">
+                <Warning size={12} />
+                Using Demo Mode
+              </Badge>
+            )}
+          </div>
         </div>
 
         <Card className="backdrop-blur-sm bg-card/80">
@@ -261,6 +323,25 @@ export function AuthScreen() {
               By creating an account, you agree to our terms of service and privacy policy.
               MantraPath is designed to complement, not replace, professional mental health care.
             </p>
+            
+            {/* Backend Instructions for Disconnected State */}
+            {backendStatus === 'disconnected' && (
+              <div className="mt-4 p-3 bg-amber-50 border border-amber-200 rounded-lg">
+                <h4 className="text-sm font-medium text-amber-800 mb-2">🔧 Demo Mode Active</h4>
+                <p className="text-xs text-amber-700 mb-2">
+                  The backend is not running. You can still explore with demo data.
+                </p>
+                <details className="text-xs text-amber-600">
+                  <summary className="cursor-pointer hover:text-amber-800">Start Backend Services</summary>
+                  <div className="mt-2 p-2 bg-amber-100 rounded font-mono text-xs">
+                    <div>1. Open terminal in backend directory</div>
+                    <div>2. Run: <code>python3 simple_start.py</code></div>
+                    <div>3. Or use: <code>./start-backend.sh</code></div>
+                    <div>4. Refresh this page</div>
+                  </div>
+                </details>
+              </div>
+            )}
           </CardContent>
         </Card>
       </div>

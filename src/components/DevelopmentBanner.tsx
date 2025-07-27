@@ -40,9 +40,9 @@ export function DevelopmentBanner() {
               <strong>Development Mode:</strong> Backend not detected. Using mock data.
               <br />
               <span className="text-sm">
-                To start backend: <code className="bg-amber-100 px-1 rounded">cd backend && python3 setup_backend.py</code>
+                To start backend: <code className="bg-amber-100 px-1 rounded">cd backend && python3 simple_start.py</code>
                 <br />
-                Then manually start services as shown in the output.
+                Or see <code>start-backend-dev.md</code> for detailed instructions.
               </span>
             </div>
             <Button
