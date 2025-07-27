@@ -1,6 +1,16 @@
+/**
+ * Wellness-related hooks for mood tracking, chat functionality, analytics, and user stats
+ * 
+ * Exports:
+ * - useMoods: Mood tracking and management
+ * - useChat: Chat functionality with Mantra-Mitra
+ * - useMoodAnalytics: Mood analytics and insights  
+ * - useUserStats: User statistics and achievements
+ * 
+ * Note: useJournal is exported from './useJournal' separately
+ */
+
 import { useKV } from '@github/spark/hooks'
-import { analyzeSentiment, extractKeywords } from '@/utils/sentimentAnalysis'
-import { useJournal } from './useJournal'
 import { MoodEntry, JournalEntry, ChatMessage, CommunityPost, UserStats } from '@/types'
 
 export function useMoods() {
@@ -96,7 +106,7 @@ export function useChat() {
 
 export function useMoodAnalytics() {
   const { moods } = useMoods()
-  const { entries } = useJournal()
+  // Note: Journal entries would be imported from useJournal if needed
 
   const getWeeklyInsights = () => {
     const oneWeekAgo = Date.now() - (7 * 24 * 60 * 60 * 1000)
