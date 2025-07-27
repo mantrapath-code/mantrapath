@@ -158,9 +158,12 @@ export function useMoods() {
     }
   }, [])
 
-  // Load moods on mount
+  // Load moods on mount with error handling
   useEffect(() => {
-    getRecentMoods()
+    getRecentMoods().catch(err => {
+      // Silently handle the error - the hook will work with empty state
+      console.log('Backend not available, using local state only')
+    })
   }, [getRecentMoods])
 
   return {

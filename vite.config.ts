@@ -22,23 +22,4 @@ export default defineConfig({
       '@': resolve(projectRoot, 'src')
     }
   },
-  server: {
-    port: 5173,
-    host: true,
-    proxy: {
-      '/api': {
-        target: 'http://localhost:8000',
-        changeOrigin: true,
-      },
-      '/ws': {
-        target: 'ws://localhost:8007',
-        ws: true,
-        changeOrigin: true,
-      }
-    }
-  },
-  define: {
-    'process.env.VITE_API_BASE_URL': JSON.stringify(process.env.VITE_API_BASE_URL || 'http://localhost:8000'),
-    'process.env.VITE_WS_BASE_URL': JSON.stringify(process.env.VITE_WS_BASE_URL || 'ws://localhost:8007'),
-  }
 });

@@ -148,7 +148,8 @@ export function useMoodBasedTheme() {
   const [isThemeChanging, setIsThemeChanging] = useState(false)
 
   const getCurrentMood = () => {
-    if (moods.length === 0) return 'neutral'
+    // Handle case when moods array is empty or backend is not available
+    if (!moods || moods.length === 0) return 'neutral'
     return moods[0].mood
   }
 

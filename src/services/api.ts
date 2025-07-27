@@ -579,14 +579,3 @@ class ApiService {
 
 export const apiService = new ApiService()
 export default apiService
-
-// Re-export specific APIs for backward compatibility
-export { communityApi, authApi, profileApi, moodApi, chatbotApi, contentApi, notificationApi, healthCheck } from '@/lib/api'
-
-// Export moodApi analytics functions as analyticsApi for backward compatibility  
-export const analyticsApi = {
-  getTrends: () => moodApi.getTrends(),
-  getWeeklyPatterns: () => moodApi.getWeeklyPatterns(),
-  getHealthScore: () => moodApi.getHealthScore(),
-  getAnalyticsOverview: () => moodApi.getAnalyticsOverview()
-}
