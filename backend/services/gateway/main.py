@@ -13,14 +13,14 @@ from contextlib import asynccontextmanager
 
 # Service URLs mapping
 SERVICES = {
-    "auth": os.getenv("AUTH_SERVICE_URL", "http://auth-service:8001"),
-    "profile": os.getenv("PROFILE_SERVICE_URL", "http://profile-service:8002"), 
-    "mood": os.getenv("MOOD_SERVICE_URL", "http://mood-service:8003"),
-    "chatbot": os.getenv("CHATBOT_SERVICE_URL", "http://chatbot-service:8004"),
-    "content": os.getenv("CONTENT_SERVICE_URL", "http://content-service:8005"),
-    "community": os.getenv("COMMUNITY_SERVICE_URL", "http://community-service:8006"),
-    "notification": os.getenv("NOTIFICATION_SERVICE_URL", "http://notification-service:8007"),
-    "media": os.getenv("MEDIA_SERVICE_URL", "http://media-service:8009"),
+    "auth": os.getenv("AUTH_SERVICE_URL", "http://localhost:8001"),
+    "profile": os.getenv("PROFILE_SERVICE_URL", "http://localhost:8002"), 
+    "mood": os.getenv("MOOD_SERVICE_URL", "http://localhost:8003"),
+    "chatbot": os.getenv("CHATBOT_SERVICE_URL", "http://localhost:8004"),
+    "content": os.getenv("CONTENT_SERVICE_URL", "http://localhost:8005"),
+    "community": os.getenv("COMMUNITY_SERVICE_URL", "http://localhost:8006"),
+    "notification": os.getenv("NOTIFICATION_SERVICE_URL", "http://localhost:8007"),
+    "media": os.getenv("MEDIA_SERVICE_URL", "http://localhost:8009"),
 }
 
 @asynccontextmanager

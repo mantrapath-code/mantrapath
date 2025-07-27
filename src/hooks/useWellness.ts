@@ -234,9 +234,6 @@ export function useWellness() {
   }
 }
 
-// Export the actual useMoods hook from its file
-export { useMoods } from './useMoods'
-
 // Export legacy hook names for backward compatibility  
 export const useMoodData = () => {
   const wellness = useWellness()
