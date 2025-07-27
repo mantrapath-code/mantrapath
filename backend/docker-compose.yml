@@ -1,0 +1,284 @@
+# MantraPath Backend Services
+version: '3.8'
+
+services:
+  # Redis for caching and sessions
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    command: redis-server --appendonly yes
+    volumes:
+      - redis_data:/data
+    networks:
+      - mantrapath_network
+
+  # PostgreSQL primary database
+  postgres:
+    image: postgres:15-alpine
+    ports:
+      - "5432:5432"
+    environment:
+      POSTGRES_DB: mantrapath
+      POSTGRES_USER: mantrapath_user
+      POSTGRES_PASSWORD: mantrapath_password
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./database/init.sql:/docker-entrypoint-initdb.d/init.sql
+    networks:
+      - mantrapath_network
+
+  # MongoDB for flexible content storage
+  mongodb:
+    image: mongo:7.0
+    ports:
+      - "27017:27017"
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: mantrapath_user
+      MONGO_INITDB_ROOT_PASSWORD: mantrapath_password
+      MONGO_INITDB_DATABASE: mantrapath
+    volumes:
+      - mongodb_data:/data/db
+    networks:
+      - mantrapath_network
+
+  # InfluxDB for time-series analytics
+  influxdb:
+    image: influxdb:2.7-alpine
+    ports:
+      - "8086:8086"
+    environment:
+      INFLUXDB_DB: mantrapath_analytics
+      INFLUXDB_ADMIN_USER: admin
+      INFLUXDB_ADMIN_PASSWORD: admin_password
+      INFLUXDB_USER: mantrapath_user
+      INFLUXDB_USER_PASSWORD: user_password
+    volumes:
+      - influxdb_data:/var/lib/influxdb2
+    networks:
+      - mantrapath_network
+
+  # API Gateway
+  api_gateway:
+    build:
+      context: ./services/api_gateway
+      dockerfile: Dockerfile
+    ports:
+      - "8000:8000"
+    environment:
+      - AUTH_SERVICE_URL=http://auth_service:8001
+      - PROFILE_SERVICE_URL=http://profile_service:8002
+      - MOOD_SERVICE_URL=http://mood_service:8003
+      - CHATBOT_SERVICE_URL=http://chatbot_service:8004
+      - CONTENT_SERVICE_URL=http://content_service:8005
+      - COMMUNITY_SERVICE_URL=http://community_service:8006
+      - NOTIFICATION_SERVICE_URL=http://notification_service:8007
+      - MEDIA_SERVICE_URL=http://media_service:8009
+      - ANALYTICS_SERVICE_URL=http://analytics_service:8010
+      - REDIS_URL=redis://redis:6379/0
+    depends_on:
+      - redis
+      - auth_service
+    networks:
+      - mantrapath_network
+
+  # Authentication Service
+  auth_service:
+    build:
+      context: ./services/auth_service
+      dockerfile: Dockerfile
+    ports:
+      - "8001:8001"
+    environment:
+      - DATABASE_URL=postgresql://mantrapath_user:mantrapath_password@postgres:5432/mantrapath
+      - REDIS_URL=redis://redis:6379/1
+      - JWT_SECRET_KEY=your_jwt_secret_key_here
+      - JWT_ALGORITHM=HS256
+      - JWT_EXPIRATION_HOURS=24
+    depends_on:
+      - postgres
+      - redis
+    networks:
+      - mantrapath_network
+
+  # Profile Service
+  profile_service:
+    build:
+      context: ./services/profile_service
+      dockerfile: Dockerfile
+    ports:
+      - "8002:8002"
+    environment:
+      - DATABASE_URL=postgresql://mantrapath_user:mantrapath_password@postgres:5432/mantrapath
+      - REDIS_URL=redis://redis:6379/2
+      - AUTH_SERVICE_URL=http://auth_service:8001
+    depends_on:
+      - postgres
+      - redis
+      - auth_service
+    networks:
+      - mantrapath_network
+
+  # Mood Service
+  mood_service:
+    build:
+      context: ./services/mood_service
+      dockerfile: Dockerfile
+    ports:
+      - "8003:8003"
+    environment:
+      - DATABASE_URL=postgresql://mantrapath_user:mantrapath_password@postgres:5432/mantrapath
+      - INFLUXDB_URL=http://influxdb:8086
+      - INFLUXDB_TOKEN=your_influxdb_token
+      - INFLUXDB_ORG=mantrapath
+      - INFLUXDB_BUCKET=mood_analytics
+      - REDIS_URL=redis://redis:6379/3
+      - AUTH_SERVICE_URL=http://auth_service:8001
+    depends_on:
+      - postgres
+      - influxdb
+      - redis
+      - auth_service
+    networks:
+      - mantrapath_network
+
+  # Chatbot Service
+  chatbot_service:
+    build:
+      context: ./services/chatbot_service
+      dockerfile: Dockerfile
+    ports:
+      - "8004:8004"
+    environment:
+      - DATABASE_URL=postgresql://mantrapath_user:mantrapath_password@postgres:5432/mantrapath
+      - REDIS_URL=redis://redis:6379/4
+      - AUTH_SERVICE_URL=http://auth_service:8001
+      - OPENAI_API_KEY=your_openai_api_key
+      - MOOD_SERVICE_URL=http://mood_service:8003
+    depends_on:
+      - postgres
+      - redis
+      - auth_service
+    networks:
+      - mantrapath_network
+
+  # Content Service
+  content_service:
+    build:
+      context: ./services/content_service
+      dockerfile: Dockerfile
+    ports:
+      - "8005:8005"
+    environment:
+      - DATABASE_URL=postgresql://mantrapath_user:mantrapath_password@postgres:5432/mantrapath
+      - MONGODB_URL=mongodb://mantrapath_user:mantrapath_password@mongodb:27017/mantrapath
+      - REDIS_URL=redis://redis:6379/5
+      - AUTH_SERVICE_URL=http://auth_service:8001
+    depends_on:
+      - postgres
+      - mongodb
+      - redis
+      - auth_service
+    networks:
+      - mantrapath_network
+
+  # Community Service
+  community_service:
+    build:
+      context: ./services/community_service
+      dockerfile: Dockerfile
+    ports:
+      - "8006:8006"
+    environment:
+      - DATABASE_URL=postgresql://mantrapath_user:mantrapath_password@postgres:5432/mantrapath
+      - MONGODB_URL=mongodb://mantrapath_user:mantrapath_password@mongodb:27017/mantrapath
+      - REDIS_URL=redis://redis:6379/6
+      - AUTH_SERVICE_URL=http://auth_service:8001
+      - MEDIA_SERVICE_URL=http://media_service:8009
+    depends_on:
+      - postgres
+      - mongodb
+      - redis
+      - auth_service
+    networks:
+      - mantrapath_network
+
+  # Notification Service
+  notification_service:
+    build:
+      context: ./services/notification_service
+      dockerfile: Dockerfile
+    ports:
+      - "8007:8007"
+    environment:
+      - DATABASE_URL=postgresql://mantrapath_user:mantrapath_password@postgres:5432/mantrapath
+      - REDIS_URL=redis://redis:6379/7
+      - AUTH_SERVICE_URL=http://auth_service:8001
+      - SMTP_HOST=your_smtp_host
+      - SMTP_PORT=587
+      - SMTP_USERNAME=your_smtp_username
+      - SMTP_PASSWORD=your_smtp_password
+    depends_on:
+      - postgres
+      - redis
+      - auth_service
+    networks:
+      - mantrapath_network
+
+  # Media Service
+  media_service:
+    build:
+      context: ./services/media_service
+      dockerfile: Dockerfile
+    ports:
+      - "8009:8009"
+    environment:
+      - DATABASE_URL=postgresql://mantrapath_user:mantrapath_password@postgres:5432/mantrapath
+      - MONGODB_URL=mongodb://mantrapath_user:mantrapath_password@mongodb:27017/mantrapath
+      - REDIS_URL=redis://redis:6379/9
+      - AUTH_SERVICE_URL=http://auth_service:8001
+      - UPLOAD_DIR=/app/uploads
+    depends_on:
+      - postgres
+      - mongodb
+      - redis
+      - auth_service
+    volumes:
+      - media_uploads:/app/uploads
+    networks:
+      - mantrapath_network
+
+  # Analytics Service
+  analytics_service:
+    build:
+      context: ./services/analytics_service
+      dockerfile: Dockerfile
+    ports:
+      - "8010:8010"
+    environment:
+      - DATABASE_URL=postgresql://mantrapath_user:mantrapath_password@postgres:5432/mantrapath
+      - INFLUXDB_URL=http://influxdb:8086
+      - INFLUXDB_TOKEN=your_influxdb_token
+      - INFLUXDB_ORG=mantrapath
+      - INFLUXDB_BUCKET=analytics
+      - REDIS_URL=redis://redis:6379/10
+      - AUTH_SERVICE_URL=http://auth_service:8001
+      - MOOD_SERVICE_URL=http://mood_service:8003
+    depends_on:
+      - postgres
+      - influxdb
+      - redis
+      - auth_service
+    networks:
+      - mantrapath_network
+
+volumes:
+  postgres_data:
+  mongodb_data:
+  influxdb_data:
+  redis_data:
+  media_uploads:
+
+networks:
+  mantrapath_network:
+    driver: bridge
