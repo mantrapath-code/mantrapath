@@ -233,3 +233,29 @@ export function useWellness() {
     }
   }
 }
+
+// Export legacy hook names for backward compatibility
+export const useMoods = () => {
+  const wellness = useWellness()
+  return {
+    moods: wellness.moodEntries,
+    getMoodTrend: () => wellness.analytics?.moodTrend || 'stable',
+    addMood: wellness.actions.addMoodEntry,
+    loading: wellness.loading
+  }
+}
+
+export const useUserStats = () => {
+  // Mock user stats for now - this should connect to backend later
+  return {
+    stats: {
+      moodStreak: 5,
+      journalStreak: 3,
+      communityContributions: 12,
+      unlockedThemes: ['default', 'calm'],
+      badges: ['early-bird', 'consistent-tracker'],
+      currentTheme: 'default'
+    },
+    updateStats: () => {}
+  }
+}

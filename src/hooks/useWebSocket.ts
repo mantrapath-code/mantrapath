@@ -1,250 +1,165 @@
 import { useEffect, useRef, useState, useCallback } from 'react'
-import { useAuth } from './useAuth'
 import { toast } from 'sonner'
 
-interface WebSocketMessage {
+export interface WebSocketMessage {
   type: string
   data: any
   timestamp: string
 }
 
-interface NotificationData {
-  id: string
-  title: string
-  message: string
-  notification_type: string
-  action_url?: string
-  priority: string
-  created_at: string
-}
-
-interface UseWebSocketReturn {
+export interface WebSocketHookReturn {
   isConnected: boolean
+  connectionError: string | null
   sendMessage: (message: any) => void
   lastMessage: WebSocketMessage | null
-  connectionError: string | null
 }
 
-export function useWebSocket(): UseWebSocketReturn {
-  const { user, isAuthenticated } = useAuth()
+/**
+ * WebSocket hook for real-time notifications and updates
+ * Connects to the backend WebSocket endpoint for live features
+ */
+export function useWebSocket(url?: string): WebSocketHookReturn {
   const [isConnected, setIsConnected] = useState(false)
-  const [lastMessage, setLastMessage] = useState<WebSocketMessage | null>(null)
   const [connectionError, setConnectionError] = useState<string | null>(null)
-  const ws = useRef<WebSocket | null>(null)
+  const [lastMessage, setLastMessage] = useState<WebSocketMessage | null>(null)
+  
+  const wsRef = useRef<WebSocket | null>(null)
+  const reconnectTimeoutRef = useRef<NodeJS.Timeout | null>(null)
   const reconnectAttempts = useRef(0)
   const maxReconnectAttempts = 5
-  const reconnectDelay = useRef(1000)
+
+  const wsUrl = url || `ws://localhost:8000/ws`
 
   const connect = useCallback(() => {
-    if (!isAuthenticated || !user?.id) {
-      return
-    }
-
     try {
-      const wsBaseUrl = process.env.VITE_WS_BASE_URL || 'ws://localhost:8007'
-      const wsUrl = `${wsBaseUrl}/ws/${user.id}`
-      ws.current = new WebSocket(wsUrl)
+      // Get auth token for WebSocket connection
+      const token = localStorage.getItem('mantrapath_token')
+      const wsUrlWithAuth = token ? `${wsUrl}?token=${token}` : wsUrl
 
-      ws.current.onopen = () => {
-        console.log('WebSocket connected')
+      wsRef.current = new WebSocket(wsUrlWithAuth)
+
+      wsRef.current.onopen = () => {
+        console.log('🔗 WebSocket connected')
         setIsConnected(true)
         setConnectionError(null)
         reconnectAttempts.current = 0
-        reconnectDelay.current = 1000
-
-        // Send heartbeat every 30 seconds
-        const heartbeatInterval = setInterval(() => {
-          if (ws.current?.readyState === WebSocket.OPEN) {
-            sendMessage({ type: 'heartbeat' })
-          } else {
-            clearInterval(heartbeatInterval)
-          }
-        }, 30000)
       }
 
-      ws.current.onmessage = (event) => {
+      wsRef.current.onmessage = (event) => {
         try {
           const message: WebSocketMessage = JSON.parse(event.data)
           setLastMessage(message)
-          handleMessage(message)
+          
+          // Handle different message types
+          switch (message.type) {
+            case 'notification':
+              toast.info(message.data.title, {
+                description: message.data.message
+              })
+              break
+            case 'mood_pattern_alert':
+              toast.warning('Mood Pattern Alert', {
+                description: message.data.message
+              })
+              break
+            case 'breathing_reminder':
+              toast('Breathing Exercise Reminder', {
+                description: 'Take a moment to breathe and center yourself'
+              })
+              break
+            case 'weekly_report':
+              toast.success('Weekly Report Ready', {
+                description: 'Your weekly wellness report is now available'
+              })
+              break
+            default:
+              console.log('📥 Received WebSocket message:', message)
+          }
         } catch (error) {
-          console.error('Error parsing WebSocket message:', error)
+          console.error('Failed to parse WebSocket message:', error)
         }
       }
 
-      ws.current.onclose = () => {
-        console.log('WebSocket disconnected')
+      wsRef.current.onclose = (event) => {
+        console.log('🔌 WebSocket disconnected:', event.code, event.reason)
         setIsConnected(false)
         
-        // Attempt to reconnect
-        if (reconnectAttempts.current < maxReconnectAttempts) {
-          reconnectAttempts.current++
-          console.log(`Attempting to reconnect... (${reconnectAttempts.current}/${maxReconnectAttempts})`)
+        // Attempt to reconnect if not a manual close
+        if (event.code !== 1000 && reconnectAttempts.current < maxReconnectAttempts) {
+          const delay = Math.min(1000 * Math.pow(2, reconnectAttempts.current), 30000)
           
-          setTimeout(() => {
+          console.log(`🔄 Attempting to reconnect in ${delay}ms (attempt ${reconnectAttempts.current + 1}/${maxReconnectAttempts})`)
+          
+          reconnectTimeoutRef.current = setTimeout(() => {
+            reconnectAttempts.current++
             connect()
-          }, reconnectDelay.current)
-          
-          // Exponential backoff
-          reconnectDelay.current = Math.min(reconnectDelay.current * 2, 30000)
-        } else {
-          setConnectionError('Failed to maintain WebSocket connection')
+          }, delay)
+        } else if (reconnectAttempts.current >= maxReconnectAttempts) {
+          setConnectionError('Failed to establish WebSocket connection after multiple attempts')
         }
       }
 
-      ws.current.onerror = (error) => {
-        console.error('WebSocket error:', error)
+      wsRef.current.onerror = (error) => {
+        console.error('❌ WebSocket error:', error)
         setConnectionError('WebSocket connection error')
       }
 
     } catch (error) {
-      console.error('Error creating WebSocket connection:', error)
+      console.error('Failed to create WebSocket connection:', error)
       setConnectionError('Failed to create WebSocket connection')
     }
-  }, [isAuthenticated, user?.id])
-
-  const disconnect = useCallback(() => {
-    if (ws.current) {
-      ws.current.close()
-      ws.current = null
-    }
-    setIsConnected(false)
-  }, [])
+  }, [wsUrl])
 
   const sendMessage = useCallback((message: any) => {
-    if (ws.current?.readyState === WebSocket.OPEN) {
-      ws.current.send(JSON.stringify(message))
+    if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
+      wsRef.current.send(JSON.stringify(message))
+    } else {
+      console.warn('WebSocket is not connected. Message not sent:', message)
     }
   }, [])
 
-  const handleMessage = (message: WebSocketMessage) => {
-    switch (message.type) {
-      case 'notification':
-        handleNotification(message.data as NotificationData)
-        break
-      case 'notification_read':
-        // Handle notification read confirmation
-        console.log('Notification marked as read:', message.data)
-        break
-      case 'heartbeat_ack':
-        // Handle heartbeat acknowledgment
-        break
-      case 'connection':
-        console.log('WebSocket connection established:', message.data.message)
-        break
-      default:
-        console.log('Unknown message type:', message.type)
+  const disconnect = useCallback(() => {
+    if (reconnectTimeoutRef.current) {
+      clearTimeout(reconnectTimeoutRef.current)
+      reconnectTimeoutRef.current = null
     }
-  }
-
-  const handleNotification = (notification: NotificationData) => {
-    // Show toast notification
-    const toastProps = {
-      duration: notification.priority === 'urgent' ? 10000 : 5000,
-      action: notification.action_url ? {
-        label: 'View',
-        onClick: () => {
-          // Navigate to action URL
-          if (notification.action_url) {
-            window.location.hash = notification.action_url
-          }
-          // Mark as read
-          markNotificationAsRead(notification.id)
-        }
-      } : undefined
+    
+    if (wsRef.current) {
+      wsRef.current.close(1000, 'Component unmounting')
+      wsRef.current = null
     }
-
-    switch (notification.notification_type) {
-      case 'mood_pattern':
-        toast.warning(notification.message, {
-          ...toastProps,
-          description: notification.title
-        })
-        break
-      case 'weekly_report':
-        toast.info(notification.message, {
-          ...toastProps,
-          description: notification.title
-        })
-        break
-      case 'intervention':
-        toast.error(notification.message, {
-          ...toastProps,
-          description: notification.title
-        })
-        break
-      case 'community':
-        toast.success(notification.message, {
-          ...toastProps,
-          description: notification.title
-        })
-        break
-      default:
-        toast(notification.message, {
-          ...toastProps,
-          description: notification.title
-        })
-    }
-
-    // Play notification sound for urgent notifications
-    if (notification.priority === 'urgent') {
-      playNotificationSound()
-    }
-  }
-
-  const markNotificationAsRead = (notificationId: string) => {
-    sendMessage({
-      type: 'mark_read',
-      notification_id: notificationId
-    })
-  }
-
-  const playNotificationSound = () => {
-    // Create a simple notification sound
-    try {
-      const audioContext = new (window.AudioContext || (window as any).webkitAudioContext)()
-      const oscillator = audioContext.createOscillator()
-      const gainNode = audioContext.createGain()
-      
-      oscillator.connect(gainNode)
-      gainNode.connect(audioContext.destination)
-      
-      oscillator.frequency.setValueAtTime(800, audioContext.currentTime)
-      oscillator.frequency.setValueAtTime(600, audioContext.currentTime + 0.1)
-      
-      gainNode.gain.setValueAtTime(0.3, audioContext.currentTime)
-      gainNode.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 0.3)
-      
-      oscillator.start(audioContext.currentTime)
-      oscillator.stop(audioContext.currentTime + 0.3)
-    } catch (error) {
-      console.warn('Could not play notification sound:', error)
-    }
-  }
+    
+    setIsConnected(false)
+    setConnectionError(null)
+  }, [])
 
   useEffect(() => {
-    if (isAuthenticated && user?.id) {
-      connect()
-    }
-
+    connect()
+    
     return () => {
       disconnect()
     }
-  }, [isAuthenticated, user?.id, connect, disconnect])
+  }, [connect, disconnect])
 
-  // Cleanup on unmount
+  // Handle visibility change to reconnect when tab becomes active
   useEffect(() => {
-    return () => {
-      if (ws.current) {
-        ws.current.close()
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible' && !isConnected && !connectionError) {
+        connect()
       }
     }
-  }, [])
+
+    document.addEventListener('visibilitychange', handleVisibilityChange)
+    
+    return () => {
+      document.removeEventListener('visibilitychange', handleVisibilityChange)
+    }
+  }, [isConnected, connectionError, connect])
 
   return {
     isConnected,
+    connectionError,
     sendMessage,
-    lastMessage,
-    connectionError
+    lastMessage
   }
 }

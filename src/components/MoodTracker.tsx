@@ -1,4 +1,4 @@
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -16,7 +16,7 @@ import {
   Plus,
   Check
 } from "@phosphor-icons/react"
-import { useMoods } from "@/hooks/useWellness"
+import { useMoods } from "@/hooks/useMoods"
 import { MoodEntry } from "@/types"
 import { motion } from "framer-motion"
 
@@ -25,7 +25,7 @@ interface MoodTrackerProps {
 }
 
 export function MoodTracker({ onMoodLogged }: MoodTrackerProps) {
-  const { addMood, getMoodTrend } = useMoods()
+  const { addMood, getMoodTrend, loading } = useMoods()
   const [selectedMood, setSelectedMood] = useState<MoodEntry['mood'] | null>(null)
   const [showDetails, setShowDetails] = useState(false)
   const [note, setNote] = useState("")
@@ -33,6 +33,21 @@ export function MoodTracker({ onMoodLogged }: MoodTrackerProps) {
   const [customTrigger, setCustomTrigger] = useState("")
   const [selectedTriggers, setSelectedTriggers] = useState<string[]>([])
   const [context, setContext] = useState<string[]>([])
+  const [trend, setTrend] = useState<'positive' | 'concerning' | 'stable'>('stable')
+  const [submitting, setSubmitting] = useState(false)
+  
+  // Load initial mood trend
+  useEffect(() => {
+    const loadTrend = async () => {
+      try {
+        const currentTrend = await getMoodTrend()
+        setTrend(currentTrend)
+      } catch (error) {
+        console.error('Failed to load mood trend:', error)
+      }
+    }
+    loadTrend()
+  }, [getMoodTrend])
   
   const moodOptions = [
     { value: 'excellent' as const, icon: Heart, label: 'Excellent', color: 'text-green-500', description: 'Feeling amazing!' },
@@ -70,34 +85,47 @@ export function MoodTracker({ onMoodLogged }: MoodTrackerProps) {
     return 'night'
   }
 
-  const handleSubmit = () => {
-    if (!selectedMood) return
+  const handleSubmit = async () => {
+    if (!selectedMood || submitting) return
 
-    const entry = addMood(
-      selectedMood, 
-      note || undefined, 
-      selectedTriggers.length > 0 ? selectedTriggers : undefined
-    )
+    try {
+      setSubmitting(true)
 
-    // Add additional metadata
-    const enhancedEntry = {
-      ...entry,
-      dayOfWeek: new Date().getDay(),
-      timeOfDay: getTimeOfDay(),
-      energy,
-      context: context.length > 0 ? context : undefined
+      const entry = await addMood(
+        selectedMood, 
+        note || undefined, 
+        selectedTriggers.length > 0 ? selectedTriggers : undefined
+      )
+
+      // Add additional metadata for callback
+      const enhancedEntry = {
+        ...entry,
+        dayOfWeek: new Date().getDay(),
+        timeOfDay: getTimeOfDay(),
+        energy,
+        context: context.length > 0 ? context : undefined
+      }
+
+      onMoodLogged?.(enhancedEntry)
+      
+      // Reset form
+      setSelectedMood(null)
+      setShowDetails(false)
+      setNote("")
+      setSelectedTriggers([])
+      setContext([])
+      setCustomTrigger("")
+      setEnergy('medium')
+      
+      // Update trend after successful submission
+      const newTrend = await getMoodTrend()
+      setTrend(newTrend)
+      
+    } catch (error) {
+      console.error('Failed to submit mood:', error)
+    } finally {
+      setSubmitting(false)
     }
-
-    onMoodLogged?.(enhancedEntry)
-    
-    // Reset form
-    setSelectedMood(null)
-    setShowDetails(false)
-    setNote("")
-    setSelectedTriggers([])
-    setContext([])
-    setCustomTrigger("")
-    setEnergy('medium')
   }
 
   const toggleTrigger = (trigger: string) => {
@@ -123,7 +151,6 @@ export function MoodTracker({ onMoodLogged }: MoodTrackerProps) {
     )
   }
   
-  const trend = getMoodTrend()
 
   if (showDetails && selectedMood) {
     const selectedOption = moodOptions.find(opt => opt.value === selectedMood)!
@@ -229,9 +256,13 @@ export function MoodTracker({ onMoodLogged }: MoodTrackerProps) {
 
             {/* Action Buttons */}
             <div className="flex gap-2 pt-4">
-              <Button onClick={handleSubmit} className="flex-1">
+              <Button 
+                onClick={handleSubmit} 
+                className="flex-1"
+                disabled={submitting || loading}
+              >
                 <Check size={16} className="mr-2" />
-                Log Mood
+                {submitting ? 'Logging...' : 'Log Mood'}
               </Button>
               <Button 
                 variant="outline" 
@@ -239,6 +270,7 @@ export function MoodTracker({ onMoodLogged }: MoodTrackerProps) {
                   setShowDetails(false)
                   setSelectedMood(null)
                 }}
+                disabled={submitting}
               >
                 Back
               </Button>
