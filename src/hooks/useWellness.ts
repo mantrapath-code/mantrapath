@@ -1,4 +1,6 @@
 import { useKV } from '@github/spark/hooks'
+import { analyzeSentiment, extractKeywords } from '@/utils/sentimentAnalysis'
+import { useJournal } from './useJournal'
 import { MoodEntry, JournalEntry, ChatMessage, CommunityPost, UserStats } from '@/types'
 
 export function useMoods() {
@@ -61,9 +63,6 @@ export function useMoods() {
 
   return { moods, addMood, getMoodTrend }
 }
-
-// Re-export the enhanced journal hook
-export { useJournal } from './useJournal'
 
 export function useChat() {
   const [messages, setMessages] = useKV<ChatMessage[]>('chat-messages', [])
@@ -287,23 +286,4 @@ function getTimeOfDayFromTimestamp(timestamp: number): 'morning' | 'afternoon' |
   if (hour >= 12 && hour < 17) return 'afternoon'
   if (hour >= 17 && hour < 21) return 'evening'
   return 'night'
-}
-
-function analyzeSentiment(text: string): 'positive' | 'neutral' | 'negative' {
-  const positiveWords = ['happy', 'joy', 'great', 'wonderful', 'amazing', 'good', 'better', 'grateful', 'peaceful']
-  const negativeWords = ['sad', 'angry', 'stressed', 'anxious', 'worried', 'difficult', 'hard', 'struggling', 'overwhelming']
-  
-  const words = text.toLowerCase().split(/\s+/)
-  const positiveCount = words.filter(word => positiveWords.some(pos => word.includes(pos))).length
-  const negativeCount = words.filter(word => negativeWords.some(neg => word.includes(neg))).length
-  
-  if (positiveCount > negativeCount) return 'positive'
-  if (negativeCount > positiveCount) return 'negative'
-  return 'neutral'
-}
-
-function extractKeywords(text: string): string[] {
-  const words = text.toLowerCase().split(/\s+/)
-  const keywords = ['work', 'stress', 'anxiety', 'sleep', 'exercise', 'family', 'friends', 'goals', 'gratitude', 'mindfulness']
-  return keywords.filter(keyword => words.some(word => word.includes(keyword)))
 }
