@@ -124,10 +124,22 @@ export const communityApi = {
     method: 'POST',
     body: JSON.stringify(data),
   }),
+  joinEvent: (eventId: string) => apiRequest(`/forums/events/${eventId}/join`, {
+    method: 'POST',
+  }),
+  leaveEvent: (eventId: string) => apiRequest(`/forums/events/${eventId}/leave`, {
+    method: 'DELETE',
+  }),
   getChallenges: () => apiRequest('/forums/challenges'),
   createChallenge: (data: any) => apiRequest('/forums/challenges', {
     method: 'POST',
     body: JSON.stringify(data),
+  }),
+  joinChallenge: (challengeId: string) => apiRequest(`/forums/challenges/${challengeId}/join`, {
+    method: 'POST',
+  }),
+  leaveChallenge: (challengeId: string) => apiRequest(`/forums/challenges/${challengeId}/leave`, {
+    method: 'DELETE',
   }),
   
   // Tags

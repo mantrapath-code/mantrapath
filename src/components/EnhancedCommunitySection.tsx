@@ -168,10 +168,10 @@ export function EnhancedCommunitySection() {
   const loadEvents = async () => {
     try {
       const eventsData = await communityApi.getEvents()
-      setEvents(eventsData || [])
+      setEvents(eventsData || mockEvents)
     } catch (error) {
       console.error('Failed to load events:', error)
-      // Use mock data as fallback
+      toast.error('Failed to load events')
       setEvents(mockEvents)
     }
   }
@@ -179,11 +179,97 @@ export function EnhancedCommunitySection() {
   const loadChallenges = async () => {
     try {
       const challengesData = await communityApi.getChallenges()
-      setChallenges(challengesData || [])
+      setChallenges(challengesData || mockChallenges)
     } catch (error) {
       console.error('Failed to load challenges:', error)
-      // Use mock data as fallback
+      toast.error('Failed to load challenges')
       setChallenges(mockChallenges)
+    }
+  }
+
+  const handleJoinEvent = async (eventId: string) => {
+    try {
+      await communityApi.joinEvent(eventId)
+      setEvents(current => current.map(event => 
+        event.id === eventId 
+          ? { ...event, is_participating: true, participant_count: event.participant_count + 1 }
+          : event
+      ))
+      toast.success('Successfully joined event!')
+    } catch (error) {
+      console.error('Failed to join event:', error)
+      toast.error('Failed to join event')
+    }
+  }
+
+  const handleLeaveEvent = async (eventId: string) => {
+    try {
+      await communityApi.leaveEvent(eventId)
+      setEvents(current => current.map(event => 
+        event.id === eventId 
+          ? { ...event, is_participating: false, participant_count: Math.max(0, event.participant_count - 1) }
+          : event
+      ))
+      toast.success('Left event successfully')
+    } catch (error) {
+      console.error('Failed to leave event:', error)
+      toast.error('Failed to leave event')
+    }
+  }
+
+  const handleJoinChallenge = async (challengeId: string) => {
+    try {
+      await communityApi.joinChallenge(challengeId)
+      setChallenges(current => current.map(challenge => 
+        challenge.id === challengeId 
+          ? { ...challenge, is_participating: true, participant_count: challenge.participant_count + 1 }
+          : challenge
+      ))
+      toast.success('Successfully joined challenge!')
+    } catch (error) {
+      console.error('Failed to join challenge:', error)
+      toast.error('Failed to join challenge')
+    }
+  }
+
+  const handleLeaveChallenge = async (challengeId: string) => {
+    try {
+      await communityApi.leaveChallenge(challengeId)
+      setChallenges(current => current.map(challenge => 
+        challenge.id === challengeId 
+          ? { ...challenge, is_participating: false, participant_count: Math.max(0, challenge.participant_count - 1) }
+          : challenge
+      ))
+      toast.success('Left challenge successfully')
+    } catch (error) {
+      console.error('Failed to leave challenge:', error)
+      toast.error('Failed to leave challenge')
+    }
+  }
+
+  const handleCreateEvent = async (eventData: Partial<CommunityEvent>) => {
+    try {
+      const newEvent = await communityApi.createEvent(eventData)
+      setEvents(current => [newEvent, ...current])
+      toast.success('Event created successfully!')
+      return newEvent
+    } catch (error) {
+      console.error('Failed to create event:', error)
+      toast.error('Failed to create event')
+      throw error
+    }
+  }
+
+  const handleCreateChallenge = async (challengeData: Partial<Challenge>) => {
+    try {
+      const newChallenge = await communityApi.createChallenge(challengeData)
+      setChallenges(current => [newChallenge, ...current])
+      toast.success('Challenge created successfully!')
+      return newChallenge
+    } catch (error) {
+      console.error('Failed to create challenge:', error)
+      toast.error('Failed to create challenge')
+      throw error
     }
   }
 
@@ -502,15 +588,33 @@ export function EnhancedCommunitySection() {
             <TabsContent value="events" className="space-y-4">
               <div className="flex items-center justify-between mb-6">
                 <h3 className="font-semibold text-lg">Community Events</h3>
-                <Button size="sm" className="flex items-center gap-2">
-                  <Plus size={16} />
-                  Create Event
-                </Button>
+                <Dialog>
+                  <DialogTrigger asChild>
+                    <Button size="sm" className="flex items-center gap-2">
+                      <Plus size={16} />
+                      Create Event
+                    </Button>
+                  </DialogTrigger>
+                  <DialogContent className="max-w-2xl">
+                    <DialogHeader>
+                      <DialogTitle>Create Community Event</DialogTitle>
+                      <DialogDescription>
+                        Organize a virtual or in-person wellness event for the community.
+                      </DialogDescription>
+                    </DialogHeader>
+                    <CreateEventForm onSubmit={handleCreateEvent} />
+                  </DialogContent>
+                </Dialog>
               </div>
               
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 {events.map((event) => (
-                  <EventCard key={event.id} event={event} />
+                  <EventCard 
+                    key={event.id} 
+                    event={event}
+                    onJoin={() => handleJoinEvent(event.id)}
+                    onLeave={() => handleLeaveEvent(event.id)}
+                  />
                 ))}
               </div>
             </TabsContent>
@@ -518,15 +622,33 @@ export function EnhancedCommunitySection() {
             <TabsContent value="challenges" className="space-y-4">
               <div className="flex items-center justify-between mb-6">
                 <h3 className="font-semibold text-lg">Wellness Challenges</h3>
-                <Button size="sm" className="flex items-center gap-2">
-                  <Plus size={16} />
-                  Create Challenge
-                </Button>
+                <Dialog>
+                  <DialogTrigger asChild>
+                    <Button size="sm" className="flex items-center gap-2">
+                      <Plus size={16} />
+                      Create Challenge
+                    </Button>
+                  </DialogTrigger>
+                  <DialogContent className="max-w-2xl">
+                    <DialogHeader>
+                      <DialogTitle>Create Wellness Challenge</DialogTitle>
+                      <DialogDescription>
+                        Start a new wellness challenge to motivate and engage the community.
+                      </DialogDescription>
+                    </DialogHeader>
+                    <CreateChallengeForm onSubmit={handleCreateChallenge} />
+                  </DialogContent>
+                </Dialog>
               </div>
               
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 {challenges.map((challenge) => (
-                  <ChallengeCard key={challenge.id} challenge={challenge} />
+                  <ChallengeCard 
+                    key={challenge.id} 
+                    challenge={challenge}
+                    onJoin={() => handleJoinChallenge(challenge.id)}
+                    onLeave={() => handleLeaveChallenge(challenge.id)}
+                  />
                 ))}
               </div>
             </TabsContent>
@@ -676,16 +798,57 @@ function CreateThreadForm({
   )
 }
 
-function EventCard({ event }: { event: CommunityEvent }) {
+function EventCard({ 
+  event, 
+  onJoin, 
+  onLeave 
+}: { 
+  event: CommunityEvent
+  onJoin: () => void
+  onLeave: () => void
+}) {
+  const [isLoading, setIsLoading] = useState(false)
+
+  const handleAction = async () => {
+    setIsLoading(true)
+    try {
+      if (event.is_participating) {
+        await onLeave()
+      } else {
+        await onJoin()
+      }
+    } finally {
+      setIsLoading(false)
+    }
+  }
+
+  const formatDateTime = (dateString: string) => {
+    const date = new Date(dateString)
+    return {
+      date: date.toLocaleDateString(),
+      time: date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+    }
+  }
+
+  const { date, time } = formatDateTime(event.start_time)
+  const isUpcoming = new Date(event.start_time) > new Date()
+
   return (
     <Card className="hover:shadow-md transition-shadow">
       <CardContent className="p-4">
         <div className="space-y-3">
           <div className="flex items-center justify-between">
             <h4 className="font-medium">{event.title}</h4>
-            <Badge variant={event.is_virtual ? "secondary" : "default"}>
-              {event.is_virtual ? "Virtual" : "In-Person"}
-            </Badge>
+            <div className="flex items-center gap-2">
+              <Badge variant={event.is_virtual ? "secondary" : "default"}>
+                {event.is_virtual ? "Virtual" : "In-Person"}
+              </Badge>
+              {!isUpcoming && (
+                <Badge variant="outline" className="text-xs">
+                  Past Event
+                </Badge>
+              )}
+            </div>
           </div>
           
           <p className="text-sm text-muted-foreground">{event.description}</p>
@@ -693,20 +856,30 @@ function EventCard({ event }: { event: CommunityEvent }) {
           <div className="flex items-center gap-4 text-sm text-muted-foreground">
             <span className="flex items-center gap-1">
               <Calendar size={14} />
-              {new Date(event.start_time).toLocaleDateString()}
+              {date} at {time}
             </span>
             <span className="flex items-center gap-1">
               <Users size={14} />
               {event.participant_count} participants
             </span>
           </div>
+
+          {event.location && !event.is_virtual && (
+            <div className="text-sm text-muted-foreground">
+              📍 {event.location}
+            </div>
+          )}
           
           <Button 
             size="sm" 
             variant={event.is_participating ? "outline" : "default"}
             className="w-full"
+            onClick={handleAction}
+            disabled={isLoading || !isUpcoming}
           >
-            {event.is_participating ? "Leave Event" : "Join Event"}
+            {isLoading ? 'Loading...' : (
+              event.is_participating ? "Leave Event" : "Join Event"
+            )}
           </Button>
         </div>
       </CardContent>
@@ -714,16 +887,59 @@ function EventCard({ event }: { event: CommunityEvent }) {
   )
 }
 
-function ChallengeCard({ challenge }: { challenge: Challenge }) {
+function ChallengeCard({ 
+  challenge, 
+  onJoin, 
+  onLeave 
+}: { 
+  challenge: Challenge
+  onJoin: () => void
+  onLeave: () => void
+}) {
+  const [isLoading, setIsLoading] = useState(false)
+
+  const handleAction = async () => {
+    setIsLoading(true)
+    try {
+      if (challenge.is_participating) {
+        await onLeave()
+      } else {
+        await onJoin()
+      }
+    } finally {
+      setIsLoading(false)
+    }
+  }
+
+  const isActive = new Date(challenge.end_date) > new Date()
+  const daysRemaining = Math.ceil((new Date(challenge.end_date).getTime() - new Date().getTime()) / (1000 * 60 * 60 * 24))
+
+  const getCategoryColor = (category: string) => {
+    switch (category.toLowerCase()) {
+      case 'mindfulness': return 'bg-purple-100 text-purple-800 dark:bg-purple-900 dark:text-purple-200'
+      case 'fitness': return 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200'
+      case 'nutrition': return 'bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200'
+      case 'sleep': return 'bg-indigo-100 text-indigo-800 dark:bg-indigo-900 dark:text-indigo-200'
+      default: return 'bg-orange-100 text-orange-800 dark:bg-orange-900 dark:text-orange-200'
+    }
+  }
+
   return (
     <Card className="hover:shadow-md transition-shadow">
       <CardContent className="p-4">
         <div className="space-y-3">
           <div className="flex items-center justify-between">
             <h4 className="font-medium">{challenge.title}</h4>
-            <Badge className="bg-orange-100 text-orange-800">
-              {challenge.duration_days} days
-            </Badge>
+            <div className="flex items-center gap-2">
+              <Badge className={getCategoryColor(challenge.category)}>
+                {challenge.category}
+              </Badge>
+              {!isActive && (
+                <Badge variant="outline" className="text-xs">
+                  Ended
+                </Badge>
+              )}
+            </div>
           </div>
           
           <p className="text-sm text-muted-foreground">{challenge.description}</p>
@@ -733,15 +949,26 @@ function ChallengeCard({ challenge }: { challenge: Challenge }) {
               <Trophy size={14} />
               {challenge.participant_count} participants
             </span>
-            <span>{challenge.category}</span>
+            <span className="flex items-center gap-1">
+              <Calendar size={14} />
+              {isActive ? `${daysRemaining} days left` : 'Challenge ended'}
+            </span>
+          </div>
+
+          <div className="text-xs text-muted-foreground">
+            Duration: {challenge.duration_days} days
           </div>
           
           <Button 
             size="sm" 
             variant={challenge.is_participating ? "outline" : "default"}
             className="w-full"
+            onClick={handleAction}
+            disabled={isLoading || !isActive}
           >
-            {challenge.is_participating ? "Leave Challenge" : "Join Challenge"}
+            {isLoading ? 'Loading...' : (
+              challenge.is_participating ? "Leave Challenge" : "Join Challenge"
+            )}
           </Button>
         </div>
       </CardContent>
@@ -865,6 +1092,287 @@ function MyActivitySection({
   )
 }
 
+function CreateEventForm({ 
+  onSubmit 
+}: { 
+  onSubmit: (data: any) => Promise<any>
+}) {
+  const [title, setTitle] = useState("")
+  const [description, setDescription] = useState("")
+  const [startDate, setStartDate] = useState("")
+  const [startTime, setStartTime] = useState("")
+  const [endDate, setEndDate] = useState("")
+  const [endTime, setEndTime] = useState("")
+  const [location, setLocation] = useState("")
+  const [isVirtual, setIsVirtual] = useState(true)
+  const [isLoading, setIsLoading] = useState(false)
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!title.trim() || !description.trim() || !startDate || !startTime) {
+      toast.error('Please fill in all required fields')
+      return
+    }
+
+    const startDateTime = new Date(`${startDate}T${startTime}`).toISOString()
+    const endDateTime = endDate && endTime 
+      ? new Date(`${endDate}T${endTime}`).toISOString()
+      : new Date(new Date(`${startDate}T${startTime}`).getTime() + 2 * 60 * 60 * 1000).toISOString() // Default 2 hours
+
+    setIsLoading(true)
+    try {
+      await onSubmit({
+        title: title.trim(),
+        description: description.trim(),
+        start_time: startDateTime,
+        end_time: endDateTime,
+        location: isVirtual ? null : location.trim(),
+        is_virtual: isVirtual
+      })
+      
+      // Reset form
+      setTitle("")
+      setDescription("")
+      setStartDate("")
+      setStartTime("")
+      setEndDate("")
+      setEndTime("")
+      setLocation("")
+      setIsVirtual(true)
+    } catch (error) {
+      // Error is handled in the parent component
+    } finally {
+      setIsLoading(false)
+    }
+  }
+
+  return (
+    <form onSubmit={handleSubmit} className="space-y-4">
+      <div>
+        <label className="text-sm font-medium">Event Title *</label>
+        <Input
+          value={title}
+          onChange={(e) => setTitle(e.target.value)}
+          placeholder="e.g., Weekly Meditation Circle"
+          required
+        />
+      </div>
+      
+      <div>
+        <label className="text-sm font-medium">Description *</label>
+        <Textarea
+          value={description}
+          onChange={(e) => setDescription(e.target.value)}
+          placeholder="Describe what the event is about..."
+          rows={3}
+          required
+        />
+      </div>
+
+      <div className="grid grid-cols-2 gap-4">
+        <div>
+          <label className="text-sm font-medium">Start Date *</label>
+          <Input
+            type="date"
+            value={startDate}
+            onChange={(e) => setStartDate(e.target.value)}
+            min={new Date().toISOString().split('T')[0]}
+            required
+          />
+        </div>
+        <div>
+          <label className="text-sm font-medium">Start Time *</label>
+          <Input
+            type="time"
+            value={startTime}
+            onChange={(e) => setStartTime(e.target.value)}
+            required
+          />
+        </div>
+      </div>
+
+      <div className="grid grid-cols-2 gap-4">
+        <div>
+          <label className="text-sm font-medium">End Date (optional)</label>
+          <Input
+            type="date"
+            value={endDate}
+            onChange={(e) => setEndDate(e.target.value)}
+            min={startDate || new Date().toISOString().split('T')[0]}
+          />
+        </div>
+        <div>
+          <label className="text-sm font-medium">End Time (optional)</label>
+          <Input
+            type="time"
+            value={endTime}
+            onChange={(e) => setEndTime(e.target.value)}
+          />
+        </div>
+      </div>
+
+      <div className="space-y-3">
+        <div className="flex items-center space-x-2">
+          <input
+            type="checkbox"
+            id="isVirtual"
+            checked={isVirtual}
+            onChange={(e) => setIsVirtual(e.target.checked)}
+            className="rounded"
+          />
+          <label htmlFor="isVirtual" className="text-sm font-medium">
+            Virtual Event
+          </label>
+        </div>
+
+        {!isVirtual && (
+          <div>
+            <label className="text-sm font-medium">Location</label>
+            <Input
+              value={location}
+              onChange={(e) => setLocation(e.target.value)}
+              placeholder="Enter event location"
+            />
+          </div>
+        )}
+      </div>
+      
+      <div className="flex justify-end gap-2 pt-4">
+        <Button type="button" variant="outline" disabled={isLoading}>
+          Cancel
+        </Button>
+        <Button type="submit" disabled={isLoading}>
+          {isLoading ? 'Creating...' : 'Create Event'}
+        </Button>
+      </div>
+    </form>
+  )
+}
+
+function CreateChallengeForm({ 
+  onSubmit 
+}: { 
+  onSubmit: (data: any) => Promise<any>
+}) {
+  const [title, setTitle] = useState("")
+  const [description, setDescription] = useState("")
+  const [category, setCategory] = useState("")
+  const [durationDays, setDurationDays] = useState(7)
+  const [isLoading, setIsLoading] = useState(false)
+
+  const categories = [
+    'mindfulness',
+    'fitness', 
+    'nutrition',
+    'sleep',
+    'mental-health',
+    'social',
+    'habits'
+  ]
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!title.trim() || !description.trim() || !category) {
+      toast.error('Please fill in all required fields')
+      return
+    }
+
+    const startDate = new Date().toISOString()
+    const endDate = new Date(Date.now() + durationDays * 24 * 60 * 60 * 1000).toISOString()
+
+    setIsLoading(true)
+    try {
+      await onSubmit({
+        title: title.trim(),
+        description: description.trim(),
+        category,
+        duration_days: durationDays,
+        start_date: startDate,
+        end_date: endDate
+      })
+      
+      // Reset form
+      setTitle("")
+      setDescription("")
+      setCategory("")
+      setDurationDays(7)
+    } catch (error) {
+      // Error is handled in the parent component
+    } finally {
+      setIsLoading(false)
+    }
+  }
+
+  return (
+    <form onSubmit={handleSubmit} className="space-y-4">
+      <div>
+        <label className="text-sm font-medium">Challenge Title *</label>
+        <Input
+          value={title}
+          onChange={(e) => setTitle(e.target.value)}
+          placeholder="e.g., 7-Day Gratitude Challenge"
+          required
+        />
+      </div>
+      
+      <div>
+        <label className="text-sm font-medium">Description *</label>
+        <Textarea
+          value={description}
+          onChange={(e) => setDescription(e.target.value)}
+          placeholder="Describe the challenge goals and activities..."
+          rows={4}
+          required
+        />
+      </div>
+
+      <div>
+        <label className="text-sm font-medium">Category *</label>
+        <Select value={category} onValueChange={setCategory} required>
+          <SelectTrigger>
+            <SelectValue placeholder="Select a category" />
+          </SelectTrigger>
+          <SelectContent>
+            {categories.map((cat) => (
+              <SelectItem key={cat} value={cat}>
+                {cat.charAt(0).toUpperCase() + cat.slice(1).replace('-', ' ')}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      </div>
+
+      <div>
+        <label className="text-sm font-medium">Duration (days) *</label>
+        <Select 
+          value={durationDays.toString()} 
+          onValueChange={(value) => setDurationDays(parseInt(value))}
+        >
+          <SelectTrigger>
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="3">3 days</SelectItem>
+            <SelectItem value="7">7 days</SelectItem>
+            <SelectItem value="14">14 days</SelectItem>
+            <SelectItem value="21">21 days</SelectItem>
+            <SelectItem value="30">30 days</SelectItem>
+          </SelectContent>
+        </Select>
+      </div>
+      
+      <div className="flex justify-end gap-2 pt-4">
+        <Button type="button" variant="outline" disabled={isLoading}>
+          Cancel
+        </Button>
+        <Button type="submit" disabled={isLoading}>
+          {isLoading ? 'Creating...' : 'Create Challenge'}
+        </Button>
+      </div>
+    </form>
+  )
+}
+
 // Mock data for fallback
 const mockForums: Forum[] = [
   {
@@ -930,11 +1438,32 @@ const mockEvents: CommunityEvent[] = [
   {
     id: '1',
     title: 'Virtual Meditation Circle',
-    description: 'Join us for a 30-minute guided meditation session',
+    description: 'Join us for a 30-minute guided meditation session focused on mindfulness and stress relief',
     start_time: new Date(Date.now() + 86400000).toISOString(),
     end_time: new Date(Date.now() + 88200000).toISOString(),
     is_virtual: true,
     participant_count: 23,
+    is_participating: false
+  },
+  {
+    id: '2',
+    title: 'Anxiety Support Group Meeting',
+    description: 'A safe space to share experiences and coping strategies for anxiety management',
+    start_time: new Date(Date.now() + 172800000).toISOString(),
+    end_time: new Date(Date.now() + 176400000).toISOString(),
+    location: 'Community Center Room A',
+    is_virtual: false,
+    participant_count: 12,
+    is_participating: true
+  },
+  {
+    id: '3',
+    title: 'Mental Health First Aid Workshop',
+    description: 'Learn how to provide initial support to someone experiencing mental health challenges',
+    start_time: new Date(Date.now() + 432000000).toISOString(),
+    end_time: new Date(Date.now() + 439200000).toISOString(),
+    is_virtual: true,
+    participant_count: 45,
     is_participating: false
   }
 ]
@@ -943,12 +1472,45 @@ const mockChallenges: Challenge[] = [
   {
     id: '1',
     title: '7-Day Gratitude Challenge',
-    description: 'Practice gratitude daily for a week and share your experience',
+    description: 'Practice daily gratitude by writing down three things you\'re grateful for each day',
     duration_days: 7,
     participant_count: 156,
     is_participating: false,
     start_date: new Date().toISOString(),
     end_date: new Date(Date.now() + 604800000).toISOString(),
     category: 'mindfulness'
+  },
+  {
+    id: '2',
+    title: '21-Day Meditation Journey',
+    description: 'Build a consistent meditation practice with guided sessions and community support',
+    duration_days: 21,
+    participant_count: 89,
+    is_participating: true,
+    start_date: new Date(Date.now() - 432000000).toISOString(),
+    end_date: new Date(Date.now() + 1382400000).toISOString(),
+    category: 'mindfulness'
+  },
+  {
+    id: '3',
+    title: 'Sleep Hygiene Bootcamp',
+    description: 'Improve your sleep quality with evidence-based techniques and tracking',
+    duration_days: 14,
+    participant_count: 67,
+    is_participating: false,
+    start_date: new Date(Date.now() + 86400000).toISOString(),
+    end_date: new Date(Date.now() + 1296000000).toISOString(),
+    category: 'sleep'
+  },
+  {
+    id: '4',
+    title: 'Daily Movement Challenge',
+    description: 'Commit to 30 minutes of physical activity each day, any type of movement counts!',
+    duration_days: 30,
+    participant_count: 234,
+    is_participating: false,
+    start_date: new Date().toISOString(),
+    end_date: new Date(Date.now() + 2592000000).toISOString(),
+    category: 'fitness'
   }
 ]
