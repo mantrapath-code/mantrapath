@@ -1,3 +1,7 @@
+// Re-export all types from the types/index.ts for consistency
+export * from './types/index'
+
+// Legacy exports for backward compatibility
 export interface MoodEntry {
   id: string
   mood: 'excellent' | 'good' | 'neutral' | 'low' | 'very-low'

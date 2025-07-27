@@ -356,3 +356,6 @@ class ApiService {
 
 export const apiService = new ApiService()
 export default apiService
+
+// Re-export community API from lib/api.ts for backward compatibility
+export { communityApi, authApi, profileApi, moodApi, chatbotApi, contentApi, notificationApi, healthCheck } from '@/lib/api'
