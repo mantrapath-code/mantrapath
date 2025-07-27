@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { useMoods } from './useWellness'
+import { useMoods } from './useMoods'
 import { useUserStats } from './useWellness'
 
 export interface MoodTheme {

@@ -16,7 +16,7 @@ import {
   Plus,
   Check
 } from "@phosphor-icons/react"
-import { useMoods } from "@/hooks/useWellness"
+import { useWellness } from "@/hooks/useWellness"
 import { MoodEntry } from "@/types"
 import { motion } from "framer-motion"
 
@@ -25,7 +25,7 @@ interface MoodTrackerProps {
 }
 
 export function MoodTracker({ onMoodLogged }: MoodTrackerProps) {
-  const { addMood, getMoodTrend, loading } = useMoods()
+  const { moodEntries, analytics, loading, actions } = useWellness()
   const [selectedMood, setSelectedMood] = useState<MoodEntry['mood'] | null>(null)
   const [showDetails, setShowDetails] = useState(false)
   const [note, setNote] = useState("")
@@ -33,21 +33,8 @@ export function MoodTracker({ onMoodLogged }: MoodTrackerProps) {
   const [customTrigger, setCustomTrigger] = useState("")
   const [selectedTriggers, setSelectedTriggers] = useState<string[]>([])
   const [context, setContext] = useState<string[]>([])
-  const [trend, setTrend] = useState<'positive' | 'concerning' | 'stable'>('stable')
   const [submitting, setSubmitting] = useState(false)
   
-  // Load initial mood trend
-  useEffect(() => {
-    const loadTrend = async () => {
-      try {
-        const currentTrend = await getMoodTrend()
-        setTrend(currentTrend)
-      } catch (error) {
-        console.error('Failed to load mood trend:', error)
-      }
-    }
-    loadTrend()
-  }, [getMoodTrend])
   
   const moodOptions = [
     { value: 'excellent' as const, icon: Heart, label: 'Excellent', color: 'text-green-500', description: 'Feeling amazing!' },
@@ -91,15 +78,40 @@ export function MoodTracker({ onMoodLogged }: MoodTrackerProps) {
     try {
       setSubmitting(true)
 
-      const entry = await addMood(
-        selectedMood, 
-        note || undefined, 
-        selectedTriggers.length > 0 ? selectedTriggers : undefined
-      )
+      // Convert mood value to number for backend
+      const moodToNumber = (mood: MoodEntry['mood']): number => {
+        const moodMap = {
+          'very-low': 1,
+          'low': 3,
+          'neutral': 5,
+          'good': 7,
+          'excellent': 10
+        }
+        return moodMap[mood] || 5
+      }
+
+      // Convert energy to number  
+      const energyToNumber = (energy: 'high' | 'medium' | 'low'): number => {
+        const energyMap = { 'low': 1, 'medium': 5, 'high': 10 }
+        return energyMap[energy] || 5
+      }
+
+      const entry = await actions.addMoodEntry({
+        mood: moodToNumber(selectedMood),
+        energy: energyToNumber(energy),
+        note: note || undefined, 
+        tags: selectedTriggers.length > 0 ? selectedTriggers : undefined
+      })
 
       // Add additional metadata for callback
-      const enhancedEntry = {
-        ...entry,
+      const enhancedEntry: MoodEntry = {
+        id: entry.id,
+        mood: selectedMood,
+        mood_level: moodToNumber(selectedMood),
+        timestamp: Date.now(),
+        note: note || undefined,
+        triggers: selectedTriggers.length > 0 ? selectedTriggers : undefined,
+        created_at: entry.timestamp,
         dayOfWeek: new Date().getDay(),
         timeOfDay: getTimeOfDay(),
         energy,
@@ -116,10 +128,6 @@ export function MoodTracker({ onMoodLogged }: MoodTrackerProps) {
       setContext([])
       setCustomTrigger("")
       setEnergy('medium')
-      
-      // Update trend after successful submission
-      const newTrend = await getMoodTrend()
-      setTrend(newTrend)
       
     } catch (error) {
       console.error('Failed to submit mood:', error)
@@ -312,7 +320,7 @@ export function MoodTracker({ onMoodLogged }: MoodTrackerProps) {
           })}
         </div>
         
-        {trend === 'concerning' && (
+        {analytics?.moodTrend === 'declining' && (
           <motion.div
             initial={{ opacity: 0, y: 10 }}
             animate={{ opacity: 1, y: 0 }}
@@ -323,7 +331,7 @@ export function MoodTracker({ onMoodLogged }: MoodTrackerProps) {
           </motion.div>
         )}
         
-        {trend === 'positive' && (
+        {analytics?.moodTrend === 'improving' && (
           <motion.div
             initial={{ opacity: 0, y: 10 }}
             animate={{ opacity: 1, y: 0 }}

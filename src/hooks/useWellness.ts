@@ -234,8 +234,8 @@ export function useWellness() {
   }
 }
 
-// Export legacy hook names for backward compatibility
-export const useMoods = () => {
+// Export legacy hook names for backward compatibility  
+export const useMoodData = () => {
   const wellness = useWellness()
   return {
     moods: wellness.moodEntries,

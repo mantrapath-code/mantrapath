@@ -19,7 +19,7 @@ import {
   BarChart3
 } from '@phosphor-icons/react'
 import { motion } from 'framer-motion'
-import { useMoods } from '@/hooks/useWellness'
+import { useMoods } from '@/hooks/useMoods'
 import { useJournal } from '@/hooks/useJournal'
 import { MoodPattern, PersonalizedInsight, WeeklyAnalysis, RecommendationCard } from '@/types'
 import { DemoDataSeeder } from './DemoDataSeeder'

@@ -30,7 +30,7 @@ import {
 import { motion, AnimatePresence } from 'framer-motion'
 import { apiService } from '@/services/api'
 import { toast } from 'sonner'
-import { useMoods } from '@/hooks/useWellness'
+import { useMoods } from '@/hooks/useMoods'
 import { useMoodAnalytics } from '@/hooks/useWellness'
 
 interface WeeklyMoodData {

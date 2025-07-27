@@ -5,7 +5,7 @@ import { Button } from '@/components/ui/button'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Progress } from '@/components/ui/progress'
 import { BarChart3, TrendUp, TrendDown, Activity, Clock, Calendar, Lightbulb, Target } from '@phosphor-icons/react'
-import { useMoods } from '@/hooks/useWellness'
+import { useMoods } from '@/hooks/useMoods'
 import { useJournal } from '@/hooks/useJournal'
 import { motion, AnimatePresence } from 'framer-motion'
 

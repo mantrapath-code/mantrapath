@@ -31,9 +31,9 @@ import {
   AlertTriangle
 } from '@phosphor-icons/react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { analyticsApi, moodApi } from '@/services/api'
+import { moodApi } from '@/services/api'
 import { toast } from 'sonner'
-import { useMoods } from '@/hooks/useWellness'
+import { useMoods } from '@/hooks/useMoods'
 import { useKV } from '@github/spark/hooks'
 
 interface NotificationSchedule {
@@ -103,9 +103,9 @@ export function SmartNotificationScheduler() {
 
       // Get analytics for personalization
       const [trends, patterns, healthScore] = await Promise.all([
-        analyticsApi.getTrends(),
-        analyticsApi.getWeeklyPatterns(),
-        analyticsApi.getHealthScore()
+        moodApi.getTrends(),
+        moodApi.getWeeklyPatterns(),
+        moodApi.getHealthScore()
       ])
       
       setAnalytics({ trends, patterns, healthScore })
