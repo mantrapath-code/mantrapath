@@ -4,10 +4,10 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Badge } from "@/components/ui/badge"
 import { ChatCircle, Robot, User, Expand, Minimize, Wind } from "@phosphor-icons/react"
-import { useChat, useMoods } from "../hooks/useWellness"
+import { useChat, useMoods } from "@/hooks/useWellness"
 import { BreathingExercise } from "./BreathingExercise"
 import { motion, AnimatePresence } from "framer-motion"
-import { cn } from "../lib/utils"
+import { cn } from "@/lib/utils"
 
 interface ChatBotProps {
   className?: string

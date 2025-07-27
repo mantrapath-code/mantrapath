@@ -13,8 +13,8 @@ import {
   ArrowUp,
   ArrowDown
 } from "@phosphor-icons/react"
-import { useMoods } from "../hooks/useWellness"
-import { MoodEntry } from "../types"
+import { useMoods } from "@/hooks/useWellness"
+import { MoodEntry } from "@/types"
 import { motion, AnimatePresence } from "framer-motion"
 
 interface TooltipData {

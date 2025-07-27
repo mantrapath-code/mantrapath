@@ -17,7 +17,7 @@ import {
   Wifi,
   WifiOff
 } from "@phosphor-icons/react"
-import { useJournal } from "../hooks/useJournal"
+import { useJournal } from "@/hooks/useJournal"
 import { motion, AnimatePresence } from "framer-motion"
 import { toast } from "sonner"
 

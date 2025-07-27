@@ -26,7 +26,7 @@ import {
 } from "@phosphor-icons/react"
 import { motion, AnimatePresence } from "framer-motion"
 import { toast } from "sonner"
-import { communityApi } from "../services/api"
+import { communityApi } from "@/services/api"
 import { useKV } from '@github/spark/hooks'
 
 // Types for community data structures

@@ -19,8 +19,8 @@ import {
   BarChart3
 } from '@phosphor-icons/react'
 import { motion } from 'framer-motion'
-import { useMoods, useJournal } from '../hooks/useWellness'
-import { MoodPattern, PersonalizedInsight, WeeklyAnalysis, RecommendationCard } from '../types'
+import { useMoods, useJournal } from '@/hooks/useWellness'
+import { MoodPattern, PersonalizedInsight, WeeklyAnalysis, RecommendationCard } from '@/types'
 import { DemoDataSeeder } from './DemoDataSeeder'
 import { MoodCorrelations } from './MoodCorrelations'
 import { MoodComparisonView } from './MoodComparisonView'

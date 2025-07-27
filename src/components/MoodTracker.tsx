@@ -16,8 +16,8 @@ import {
   Plus,
   Check
 } from "@phosphor-icons/react"
-import { useMoods } from "../hooks/useWellness"
-import { MoodEntry } from "../types"
+import { useMoods } from "@/hooks/useWellness"
+import { MoodEntry } from "@/types"
 import { motion } from "framer-motion"
 
 interface MoodTrackerProps {

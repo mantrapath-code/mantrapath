@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from 'react'
 import { useKV } from '@github/spark/hooks'
 import { toast } from 'sonner'
-import { journalApi, moodApi, insightsApi } from '../services/api'
+import { journalApi, moodApi, insightsApi } from '@/services/api'
 import type { 
   JournalEntry, 
   MoodEntry, 
@@ -9,7 +9,7 @@ import type {
   PaginatedResponse,
   JournalAnalytics,
   BackendInsight
-} from '../types'
+} from '@/types'
 
 // Enhanced journal hook with backend integration
 export function useJournal() {
