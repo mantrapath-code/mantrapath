@@ -67,7 +67,7 @@ interface CommunityReply {
   timestamp: number
   hearts: number
   isFromModerator?: boolean
-  isLiked?: boolean
+  likedBy: string[] // Array of user IDs who have liked this reply
 }
 
 interface UserCommunityStats {
@@ -88,8 +88,15 @@ export function MoodPatternSharing() {
     helpfulReplies: 0
   })
   
-  // Current user ID for tracking interactions
-  const CURRENT_USER_ID = 'current_user_anon'
+  // Current user ID for tracking interactions - create unique ID per session for testing
+  const [currentUserId] = useState(() => {
+    const stored = localStorage.getItem('mood_sharing_user_id')
+    if (stored) return stored
+    
+    const newId = `user_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`
+    localStorage.setItem('mood_sharing_user_id', newId)
+    return newId
+  })
   
   // Get shared community data from main forums
   const { 
@@ -138,10 +145,10 @@ export function MoodPatternSharing() {
 
   // Separate useEffect for migration to ensure it runs whenever sharedPatterns changes
   useEffect(() => {
-    // Migrate existing patterns to include encouragedBy field and isLiked for replies
+    // Migrate existing patterns to include encouragedBy field and likedBy for replies
     const migratedPatterns = sharedPatterns.map(pattern => {
       const needsEncourageMigration = !pattern.encouragedBy
-      const needsReplyMigration = pattern.replies.some(reply => reply.isLiked === undefined)
+      const needsReplyMigration = pattern.replies.some(reply => !reply.likedBy)
       
       if (needsEncourageMigration || needsReplyMigration) {
         return { 
@@ -149,7 +156,7 @@ export function MoodPatternSharing() {
           encouragedBy: pattern.encouragedBy || [],
           replies: pattern.replies.map(reply => ({
             ...reply,
-            isLiked: reply.isLiked || false
+            likedBy: reply.likedBy || []
           }))
         }
       }
@@ -159,7 +166,7 @@ export function MoodPatternSharing() {
     // Update patterns if migration was needed
     if (migratedPatterns.some((pattern, index) => 
       !sharedPatterns[index]?.encouragedBy || 
-      sharedPatterns[index]?.replies.some(reply => reply.isLiked === undefined)
+      sharedPatterns[index]?.replies.some(reply => !reply.likedBy)
     )) {
       setSharedPatterns(migratedPatterns)
     }
@@ -253,8 +260,8 @@ export function MoodPatternSharing() {
     const pattern = sharedPatterns.find(p => p.id === patternId)
     if (!pattern) return
     
-    const hasEncouraged = pattern.encouragedBy?.includes(CURRENT_USER_ID) || false
-    const isOwnPattern = pattern.userId === CURRENT_USER_ID
+    const hasEncouraged = pattern.encouragedBy?.includes(currentUserId) || false
+    const isOwnPattern = pattern.userId === currentUserId
     
     const updatedPatterns = sharedPatterns.map(pattern => {
       if (pattern.id === patternId) {
@@ -266,14 +273,14 @@ export function MoodPatternSharing() {
           return {
             ...pattern,
             encouragements: Math.max(0, pattern.encouragements - 1),
-            encouragedBy: encouragedBy.filter(userId => userId !== CURRENT_USER_ID)
+            encouragedBy: encouragedBy.filter(userId => userId !== currentUserId)
           }
         } else {
           // Add encouragement (toggle on)
           return {
             ...pattern,
             encouragements: pattern.encouragements + 1,
-            encouragedBy: [...encouragedBy, CURRENT_USER_ID]
+            encouragedBy: [...encouragedBy, currentUserId]
           }
         }
       }
@@ -312,7 +319,17 @@ export function MoodPatternSharing() {
 
   const hasUserEncouraged = (patternId: string) => {
     const pattern = sharedPatterns.find(p => p.id === patternId)
-    return pattern?.encouragedBy?.includes(CURRENT_USER_ID) || false
+    return pattern?.encouragedBy?.includes(currentUserId) || false
+  }
+
+  const hasUserLikedReply = (reply: CommunityReply) => {
+    return reply.likedBy?.includes(currentUserId) || false
+  }
+
+  const switchUser = () => {
+    const newId = `user_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`
+    localStorage.setItem('mood_sharing_user_id', newId)
+    window.location.reload() // Simple way to refresh with new user ID
   }
 
   const addReply = (patternId: string, content: string) => {
@@ -324,7 +341,7 @@ export function MoodPatternSharing() {
       content,
       timestamp: Date.now(),
       hearts: 0,
-      isLiked: false
+      likedBy: []
     }
 
     const updatedPatterns = sharedPatterns.map(pattern => 
@@ -347,11 +364,15 @@ export function MoodPatternSharing() {
       if (pattern.id === patternId) {
         const updatedReplies = pattern.replies.map(reply => {
           if (reply.id === replyId) {
-            const isCurrentlyLiked = reply.isLiked || false
+            const currentUserHasLiked = reply.likedBy.includes(currentUserId)
+            const newLikedBy = currentUserHasLiked
+              ? reply.likedBy.filter(userId => userId !== currentUserId)
+              : [...reply.likedBy, currentUserId]
+            
             return {
               ...reply,
-              isLiked: !isCurrentlyLiked,
-              hearts: isCurrentlyLiked ? reply.hearts - 1 : reply.hearts + 1
+              likedBy: newLikedBy,
+              hearts: newLikedBy.length
             }
           }
           return reply
@@ -403,10 +424,20 @@ export function MoodPatternSharing() {
                 Share your journey and support others in their wellness path
               </CardDescription>
             </div>
-            <Button onClick={() => setShowShareDialog(true)}>
-              <Share className="w-4 h-4 mr-2" />
-              Share Progress
-            </Button>
+            <div className="flex gap-2">
+              <Button 
+                variant="outline" 
+                size="sm"
+                onClick={switchUser}
+                title="Switch to a different user for testing multi-user functionality"
+              >
+                Switch User
+              </Button>
+              <Button onClick={() => setShowShareDialog(true)}>
+                <Share className="w-4 h-4 mr-2" />
+                Share Progress
+              </Button>
+            </div>
           </div>
         </CardHeader>
         <CardContent>
@@ -658,7 +689,7 @@ export function MoodPatternSharing() {
                                     >
                                       <Heart 
                                         className={`w-3 h-3 ${
-                                          reply.isLiked ? 'fill-red-500 text-red-500' : ''
+                                          hasUserLikedReply(reply) ? 'fill-red-500 text-red-500' : ''
                                         }`} 
                                       />
                                       {reply.hearts}
@@ -957,7 +988,7 @@ export function MoodPatternSharing() {
                         >
                           <Heart 
                             className={`w-3 h-3 ${
-                              reply.isLiked ? 'fill-red-500 text-red-500' : ''
+                              hasUserLikedReply(reply) ? 'fill-red-500 text-red-500' : ''
                             }`} 
                           />
                           {reply.hearts}
