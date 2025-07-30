@@ -188,7 +188,7 @@ export function useMoodBasedTheme() {
     const recommendedTheme = getRecommendedTheme(currentMood)
     
     // Only apply if the theme actually changes
-    if (recommendedTheme !== stats.currentTheme) {
+    if (recommendedTheme !== localTheme) {
       applyTheme(recommendedTheme)
       return true // Theme was changed
     }

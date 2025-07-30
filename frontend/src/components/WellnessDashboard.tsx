@@ -20,7 +20,7 @@ import { toast } from "sonner"
 export function WellnessDashboard() {
   const { moods, getMoodTrend } = useMoods()
   const { entries } = useJournal()
-  const { stats } = useUserStats()
+  const { stats, loading: statsLoading, error: statsError } = useUserStats()
   const { currentTheme, availableThemes, applyTheme, autoApplyMoodTheme, getCurrentMood, isThemeChanging } = useMoodBasedTheme()
   
   const [moodTrend, setMoodTrend] = useState<'positive' | 'concerning' | 'stable'>('stable')
@@ -46,7 +46,7 @@ export function WellnessDashboard() {
     const wasChanged = autoApplyMoodTheme()
     
     if (wasChanged) {
-      const newThemeName = availableThemes[stats.currentTheme || 'default']?.name || 'Default'
+      const newThemeName = availableThemes[stats?.currentTheme || 'default']?.name || 'Default'
       toast.success(`Theme auto-applied based on your mood`, {
         description: `Switched to ${newThemeName} theme`,
         duration: 3000,
@@ -196,7 +196,7 @@ export function WellnessDashboard() {
               <Card className="text-center">
                 <CardContent className="p-4">
                   <Heart className="mx-auto text-red-500 mb-2" size={24} />
-                  <div className="text-2xl font-bold">{stats.moodStreak}</div>
+                  <div className="text-2xl font-bold">{stats?.moodStreak || 0}</div>
                   <div className="text-xs text-muted-foreground">Day Mood Streak</div>
                 </CardContent>
               </Card>
@@ -224,7 +224,7 @@ export function WellnessDashboard() {
               <Card className="text-center">
                 <CardContent className="p-4">
                   <Users className="mx-auto text-green-500 mb-2" size={24} />
-                  <div className="text-2xl font-bold">{stats.communityContributions}</div>
+                  <div className="text-2xl font-bold">{stats?.communityContributions || 0}</div>
                   <div className="text-xs text-muted-foreground">Community Posts</div>
                 </CardContent>
               </Card>
@@ -238,7 +238,7 @@ export function WellnessDashboard() {
               <Card className="text-center">
                 <CardContent className="p-4">
                   <Trophy className="mx-auto text-yellow-500 mb-2" size={24} />
-                  <div className="text-2xl font-bold">{stats.badges.length}</div>
+                  <div className="text-2xl font-bold">{stats?.badges?.length || 0}</div>
                   <div className="text-xs text-muted-foreground">Badges Earned</div>
                 </CardContent>
               </Card>
@@ -270,7 +270,7 @@ export function WellnessDashboard() {
             </CardContent>
           </Card>
           
-          {stats.badges.length > 0 && (
+          {stats?.badges && stats.badges.length > 0 && (
             <Card>
               <CardHeader>
                 <CardTitle>Your Achievements</CardTitle>
