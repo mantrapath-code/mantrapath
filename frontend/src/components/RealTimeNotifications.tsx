@@ -1,7 +1,8 @@
 import { useState, useEffect } from 'react'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
-import { Card, CardContent } from '@/components/ui/card'
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { 
   Bell, 
   BellRinging, 
@@ -10,11 +11,15 @@ import {
   Brain, 
   Users, 
   Trophy,
-  Clock
+  Clock,
+  Gear
 } from '@phosphor-icons/react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useWebSocket } from '@/hooks/useWebSocket'
-import { apiService } from '@/services/api'
+import { notificationApi } from '@/services/api'
+import { SmartNotificationScheduler } from './SmartNotificationScheduler'
+import { formatRelativeTimeDescriptive } from '@/utils/timeFormat'
+import { useAuth } from '@/hooks/useAuth'
 
 interface Notification {
   id: string
@@ -32,32 +37,73 @@ export function RealTimeNotifications() {
   const [unreadCount, setUnreadCount] = useState(0)
   
   const { isConnected, lastMessage } = useWebSocket()
+  const { isAuthenticated } = useAuth()
 
   // Load initial notifications
   useEffect(() => {
     const loadNotifications = async () => {
+      // Only load notifications if user is authenticated
+      if (!isAuthenticated) {
+        console.log('🔐 User not authenticated - skipping notifications load')
+        setNotifications([])
+        setUnreadCount(0)
+        return
+      }
+
       try {
-        // This would be connected to the notification service
-        // For now, using mock data but ready for backend
-        const mockNotifications: Notification[] = [
-          {
-            id: '1',
-            title: 'Weekly Report Ready',
-            message: 'Your weekly wellness report is now available',
-            type: 'info',
-            timestamp: new Date().toISOString(),
-            read: false
-          }
-        ]
-        setNotifications(mockNotifications)
-        setUnreadCount(mockNotifications.filter(n => !n.read).length)
-      } catch (error) {
-        console.error('Failed to load notifications:', error)
+        // Try to load real notifications from backend
+        const backendNotifications = await notificationApi.getNotifications(20)
+        
+        if (backendNotifications && backendNotifications.length > 0) {
+          console.log('✅ Loaded notifications from backend:', backendNotifications.length)
+          
+          const formattedNotifications: Notification[] = backendNotifications.map((n: any) => ({
+            id: n.id,
+            title: n.title,
+            message: n.message,
+            type: mapBackendTypeToFrontend(n.notification_type),
+            timestamp: n.created_at,
+            read: n.is_read
+          }))
+          
+          setNotifications(formattedNotifications)
+          setUnreadCount(formattedNotifications.filter(n => !n.read).length)
+        } else {
+          // No notifications from backend
+          console.log('📭 No notifications found from backend')
+          setNotifications([])
+          setUnreadCount(0)
+        }
+      } catch (error: any) {
+        console.warn('⚠️ Failed to load notifications from backend:', error)
+        
+        // Handle authentication errors specifically
+        if (error.status === 401 || error.status === 403) {
+          console.log('🔐 Authentication required for notifications')
+        } else {
+          console.error('❌ Notification service error:', error)
+        }
+        
+        // Don't use mock data - keep notifications empty
+        setNotifications([])
+        setUnreadCount(0)
       }
     }
 
     loadNotifications()
-  }, [])
+  }, [isAuthenticated])
+
+  const mapBackendTypeToFrontend = (backendType: string): Notification['type'] => {
+    const typeMap = {
+      'mood_reminder': 'mood_alert',
+      'insight': 'info',
+      'community': 'achievement',
+      'system': 'info',
+      'crisis': 'mood_alert',
+      'mood_pattern': 'mood_alert'
+    }
+    return typeMap[backendType] || 'info'
+  }
 
   // Handle new WebSocket messages
   useEffect(() => {
@@ -132,19 +178,8 @@ export function RealTimeNotifications() {
     }
   }
 
-  const formatTime = (timestamp: string) => {
-    const date = new Date(timestamp)
-    const now = new Date()
-    const diffMs = now.getTime() - date.getTime()
-    const diffMins = Math.floor(diffMs / (1000 * 60))
-    const diffHours = Math.floor(diffMins / 60)
-    const diffDays = Math.floor(diffHours / 24)
-
-    if (diffMins < 1) return 'Just now'
-    if (diffMins < 60) return `${diffMins}m ago`
-    if (diffHours < 24) return `${diffHours}h ago`
-    if (diffDays < 7) return `${diffDays}d ago`
-    return date.toLocaleDateString()
+  const formatTimeAgo = (timestamp: string) => {
+    return formatRelativeTimeDescriptive(timestamp)
   }
 
   return (
@@ -190,28 +225,17 @@ export function RealTimeNotifications() {
               initial={{ opacity: 0, y: -10 }}
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, y: -10 }}
-              className="absolute top-full right-0 z-50 w-80 mt-2"
+              className="absolute top-full right-0 z-50 w-96 mt-2"
             >
               <Card className="shadow-lg border">
-                <CardContent className="p-0">
-                  {/* Header */}
-                  <div className="flex items-center justify-between p-4 border-b">
-                    <h3 className="font-semibold text-foreground">Notifications</h3>
+                <CardHeader className="p-4 border-b">
+                  <div className="flex items-center justify-between">
+                    <CardTitle className="text-base">Notifications</CardTitle>
                     <div className="flex items-center gap-2">
                       {!isConnected && (
                         <Badge variant="secondary" className="text-xs">
                           Offline
                         </Badge>
-                      )}
-                      {unreadCount > 0 && (
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={markAllAsRead}
-                          className="text-xs"
-                        >
-                          Mark all read
-                        </Button>
                       )}
                       <Button
                         variant="ghost"
@@ -222,73 +246,98 @@ export function RealTimeNotifications() {
                       </Button>
                     </div>
                   </div>
-
-                  {/* Notifications List */}
-                  <div className="max-h-80 overflow-y-auto">
-                    {notifications.length === 0 ? (
-                      <div className="p-8 text-center text-muted-foreground">
-                        <Bell size={32} className="mx-auto mb-2" />
-                        <p>No notifications yet</p>
-                        <p className="text-xs mt-1">We'll notify you about important updates</p>
-                      </div>
-                    ) : (
-                      notifications.map((notification) => (
-                        <motion.div
-                          key={notification.id}
-                          initial={{ opacity: 0, x: -20 }}
-                          animate={{ opacity: 1, x: 0 }}
-                          className={`p-4 border-b last:border-b-0 cursor-pointer hover:bg-muted/50 transition-colors ${
-                            !notification.read ? 'bg-primary/5' : ''
-                          }`}
-                          onClick={() => markAsRead(notification.id)}
-                        >
-                          <div className="flex items-start gap-3">
-                            <div className="flex-shrink-0 mt-0.5">
-                              {getNotificationIcon(notification.type)}
-                            </div>
-                            
-                            <div className="flex-1 min-w-0">
-                              <div className="flex items-center justify-between">
-                                <h4 className={`text-sm font-medium truncate ${
-                                  !notification.read ? 'text-foreground' : 'text-muted-foreground'
-                                }`}>
-                                  {notification.title}
-                                </h4>
-                                {!notification.read && (
-                                  <div className="w-2 h-2 bg-primary rounded-full flex-shrink-0 ml-2" />
-                                )}
-                              </div>
-                              
-                              <p className="text-xs text-muted-foreground mt-1 line-clamp-2">
-                                {notification.message}
-                              </p>
-                              
-                              <span className="text-xs text-muted-foreground mt-1 block">
-                                {formatTime(notification.timestamp)}
-                              </span>
-                            </div>
+                </CardHeader>
+                
+                <CardContent className="p-0">
+                  <Tabs defaultValue="notifications" className="w-full">
+                    <TabsList className="grid w-full grid-cols-2">
+                      <TabsTrigger value="notifications" className="flex items-center gap-2">
+                        <Bell size={14} />
+                        All Notifications
+                      </TabsTrigger>
+                      <TabsTrigger value="scheduler" className="flex items-center gap-2">
+                        <Gear size={14} />
+                        Scheduler
+                      </TabsTrigger>
+                    </TabsList>
+                    
+                    <TabsContent value="notifications" className="m-0">
+                      {/* Header for notifications tab */}
+                      <div className="flex items-center justify-between p-4 border-b">
+                        {unreadCount > 0 && (
+                          <div className="flex items-center gap-2">
+                            <Badge variant="secondary" className="text-xs">
+                              {unreadCount} unread
+                            </Badge>
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={markAllAsRead}
+                              className="text-xs"
+                            >
+                              Mark all read
+                            </Button>
                           </div>
-                        </motion.div>
-                      ))
-                    )}
-                  </div>
+                        )}
+                      </div>
 
-                  {/* Footer */}
-                  {notifications.length > 0 && (
-                    <div className="p-3 border-t bg-muted/20">
-                      <Button 
-                        variant="ghost" 
-                        size="sm" 
-                        className="w-full text-xs"
-                        onClick={() => {
-                          setShowDropdown(false)
-                          // Navigate to notifications page
-                        }}
-                      >
-                        View all notifications
-                      </Button>
-                    </div>
-                  )}
+                      {/* Notifications List */}
+                      <div className="max-h-80 overflow-y-auto">
+                        {notifications.length === 0 ? (
+                          <div className="p-8 text-center text-muted-foreground">
+                            <Bell size={32} className="mx-auto mb-2" />
+                            <p>No notifications yet</p>
+                            <p className="text-xs mt-1">We'll notify you about important updates</p>
+                          </div>
+                        ) : (
+                          notifications.map((notification) => (
+                            <motion.div
+                              key={notification.id}
+                              initial={{ opacity: 0, x: -20 }}
+                              animate={{ opacity: 1, x: 0 }}
+                              className={`p-4 border-b last:border-b-0 cursor-pointer hover:bg-muted/50 transition-colors ${
+                                !notification.read ? 'bg-primary/5' : ''
+                              }`}
+                              onClick={() => markAsRead(notification.id)}
+                            >
+                              <div className="flex items-start gap-3">
+                                <div className="flex-shrink-0 mt-0.5">
+                                  {getNotificationIcon(notification.type)}
+                                </div>
+                                
+                                <div className="flex-1 min-w-0">
+                                  <div className="flex items-center justify-between">
+                                    <h4 className={`text-sm font-medium truncate ${
+                                      !notification.read ? 'text-foreground' : 'text-muted-foreground'
+                                    }`}>
+                                      {notification.title}
+                                    </h4>
+                                    {!notification.read && (
+                                      <div className="w-2 h-2 bg-primary rounded-full flex-shrink-0 ml-2" />
+                                    )}
+                                  </div>
+                                  
+                                  <p className="text-xs text-muted-foreground mt-1 line-clamp-2">
+                                    {notification.message}
+                                  </p>
+                                  
+                                  <span className="text-xs text-muted-foreground mt-1 block">
+                                    {formatTimeAgo(notification.timestamp)}
+                                  </span>
+                                </div>
+                              </div>
+                            </motion.div>
+                          ))
+                        )}
+                      </div>
+                    </TabsContent>
+                    
+                    <TabsContent value="scheduler" className="m-0">
+                      <div className="max-h-96 overflow-y-auto">
+                        <SmartNotificationScheduler />
+                      </div>
+                    </TabsContent>
+                  </Tabs>
                 </CardContent>
               </Card>
             </motion.div>

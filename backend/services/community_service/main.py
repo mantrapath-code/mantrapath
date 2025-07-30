@@ -684,12 +684,12 @@ async def get_user_stats(
     
     # Count threads created by user
     threads_created = db.query(ForumThread).filter(
-        ForumThread.user_id == user_id
+        ForumThread.author_id == user_id
     ).count()
     
     # Count replies posted by user
     replies_posted = db.query(ThreadReply).filter(
-        ThreadReply.user_id == user_id
+        ThreadReply.author_id == user_id
     ).count()
     
     # Count likes received on user's content
@@ -697,14 +697,14 @@ async def get_user_stats(
         ForumThread, Like.content_id == ForumThread.id
     ).filter(
         Like.content_type == "thread",
-        ForumThread.user_id == user_id
+        ForumThread.author_id == user_id
     ).scalar() or 0
     
     likes_on_replies = db.query(func.count(Like.id)).join(
         ThreadReply, Like.content_id == ThreadReply.id
     ).filter(
         Like.content_type == "reply",
-        ThreadReply.user_id == user_id  
+        ThreadReply.author_id == user_id  
     ).scalar() or 0
     
     likes_received = likes_on_threads + likes_on_replies

@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from 'react'
 import { toast } from 'sonner'
 import { apiService } from '@/services/api'
+import { useAuth } from '@/hooks/useAuth'
 
 export interface MoodEntry {
   id: string
@@ -260,17 +261,39 @@ export const useMoods = () => {
 }
 
 export const useUserStats = () => {
-  // Mock user stats for now - this should connect to backend later
+  const { isAuthenticated } = useAuth()
+  const [stats, setStats] = useState<any>(null)
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+
+  const fetchStats = useCallback(async () => {
+    if (!isAuthenticated) return
+
+    setLoading(true)
+    setError(null)
+    try {
+      const data = await apiService.getUserStats()
+      setStats(data)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to fetch user stats')
+    } finally {
+      setLoading(false)
+    }
+  }, [isAuthenticated])
+
+  useEffect(() => {
+    fetchStats()
+  }, [fetchStats])
+
+  const updateStats = useCallback(() => {
+    fetchStats()
+  }, [fetchStats])
+
   return {
-    stats: {
-      moodStreak: 5,
-      journalStreak: 3,
-      communityContributions: 12,
-      unlockedThemes: ['default', 'calm'],
-      badges: ['early-bird', 'consistent-tracker'],
-      currentTheme: 'default'
-    },
-    updateStats: () => {}
+    stats,
+    updateStats,
+    loading,
+    error
   }
 }
 

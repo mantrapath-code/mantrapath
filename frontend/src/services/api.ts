@@ -121,9 +121,19 @@ class ApiService {
       const response = await fetch(url, config)
       return this.handleResponse<T>(response)
     } catch (error) {
-      console.error('API request failed, falling back to mock data:', error)
-      this.isBackendAvailable = false
-      return this.handleMockRequest<T>(endpoint, options)
+      // Only fall back to mock data for network/connection errors
+      // Don't use mock data for authentication or other API errors
+      console.error('API request failed:', error)
+      
+      if (error instanceof TypeError && error.message.includes('Failed to fetch')) {
+        // Network error - backend might be down
+        console.warn('Network error detected, backend may be unavailable')
+        this.isBackendAvailable = false
+        return this.handleMockRequest<T>(endpoint, options)
+      }
+      
+      // For other errors (auth, validation, etc.), throw the error
+      throw error
     }
   }
 
@@ -505,6 +515,14 @@ class ApiService {
     localStorage.setItem('mantrapath_token', response.access_token)
     localStorage.setItem('mantrapath_refresh_token', response.refresh_token)
     
+    // Also get and store user data for WebSocket and other services
+    try {
+      const userData = await this.getCurrentUser()
+      localStorage.setItem('user_data', JSON.stringify(userData))
+    } catch (error) {
+      console.warn('Failed to get user data after login:', error)
+    }
+    
     return response
   }
 
@@ -524,6 +542,14 @@ class ApiService {
     localStorage.setItem('mantrapath_token', response.access_token)
     localStorage.setItem('mantrapath_refresh_token', response.refresh_token)
     
+    // Also get and store user data for WebSocket and other services
+    try {
+      const currentUser = await this.getCurrentUser()
+      localStorage.setItem('user_data', JSON.stringify(currentUser))
+    } catch (error) {
+      console.warn('Failed to get user data after registration:', error)
+    }
+    
     return response
   }
 
@@ -541,6 +567,7 @@ class ApiService {
     this.token = null
     localStorage.removeItem('mantrapath_token')
     localStorage.removeItem('mantrapath_refresh_token')
+    localStorage.removeItem('user_data') // Also clear user data
   }
 
   // Mood tracking
@@ -808,6 +835,67 @@ class ApiService {
   async healthCheck() {
     return this.request('/health')
   }
+
+  // Notification Service methods
+  async getNotifications(limit: number = 20) {
+    return this.request(`/notify/recent?limit=${limit}`)
+  }
+
+  async getNotificationPreferences() {
+    return this.request('/notify/preferences')
+  }
+
+  async updateNotificationPreferences(preferences: any) {
+    return this.request('/notify/preferences', {
+      method: 'PUT',
+      body: JSON.stringify(preferences)
+    })
+  }
+
+  async scheduleNotification(userId: string, notificationData: any, sendAt: string) {
+    return this.request('/notify/schedule', {
+      method: 'POST',
+      body: JSON.stringify({
+        user_id: userId,
+        ...notificationData,
+        send_at: sendAt
+      })
+    })
+  }
+
+  async sendNotification(userId: string, notificationData: any) {
+    return this.request(`/notify/send/${userId}`, {
+      method: 'POST',
+      body: JSON.stringify(notificationData)
+    })
+  }
+
+  async markNotificationRead(notificationId: string) {
+    return this.request(`/notify/${notificationId}/read`, {
+      method: 'POST'
+    })
+  }
+
+  async markAllNotificationsRead() {
+    return this.request('/notify/mark-all-read', {
+      method: 'POST'
+    })
+  }
+
+  async getNotificationAnalytics(days: number = 30) {
+    return this.request(`/notify/analytics?days=${days}`)
+  }
+
+  async triggerMoodPatternNotification(userId: string, patternType: string, patternData: any) {
+    return this.request('/notify/mood-pattern', {
+      method: 'POST',
+      body: JSON.stringify({
+        user_id: userId,
+        pattern_type: patternType,
+        pattern_data: patternData
+      })
+    })
+  }
 }
 
 export const apiService = new ApiService()
@@ -841,6 +929,18 @@ export const communityApi = {
   joinChallenge: (challengeId: string) => Promise.resolve({ message: 'Joined challenge' }),
   leaveChallenge: (challengeId: string) => Promise.resolve({ message: 'Left challenge' }),
   createChallenge: (challengeData: any) => Promise.resolve({ id: Date.now().toString(), ...challengeData }),
+}
+
+export const notificationApi = {
+  getNotifications: apiService.getNotifications.bind(apiService),
+  getPreferences: apiService.getNotificationPreferences.bind(apiService),
+  updatePreferences: apiService.updateNotificationPreferences.bind(apiService),
+  scheduleNotification: apiService.scheduleNotification.bind(apiService),
+  sendNotification: apiService.sendNotification.bind(apiService),
+  markAsRead: apiService.markNotificationRead.bind(apiService),
+  markAllAsRead: apiService.markAllNotificationsRead.bind(apiService),
+  getAnalytics: apiService.getNotificationAnalytics.bind(apiService),
+  triggerMoodPattern: apiService.triggerMoodPatternNotification.bind(apiService),
 }
 
 export default apiService

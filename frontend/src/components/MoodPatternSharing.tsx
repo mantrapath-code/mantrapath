@@ -38,6 +38,7 @@ import { useMoods } from "@/hooks/useMoods"
 import { useMoodAnalytics } from "@/hooks/useWellness"
 import { useKV } from '@/hooks/useKV'
 import { useCommunityData } from '@/hooks/useCommunityData'
+import { formatRelativeTime } from '@/utils/timeFormat'
 
 interface SharedMoodPattern {
   id: string
@@ -66,6 +67,7 @@ interface CommunityReply {
   timestamp: number
   hearts: number
   isFromModerator?: boolean
+  likedBy: string[] // Array of user IDs who have liked this reply
 }
 
 interface UserCommunityStats {
@@ -86,8 +88,15 @@ export function MoodPatternSharing() {
     helpfulReplies: 0
   })
   
-  // Current user ID for tracking interactions
-  const CURRENT_USER_ID = 'current_user_anon'
+  // Current user ID for tracking interactions - create unique ID per session for testing
+  const [currentUserId] = useState(() => {
+    const stored = localStorage.getItem('mood_sharing_user_id')
+    if (stored) return stored
+    
+    const newId = `user_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`
+    localStorage.setItem('mood_sharing_user_id', newId)
+    return newId
+  })
   
   // Get shared community data from main forums
   const { 
@@ -115,7 +124,7 @@ export function MoodPatternSharing() {
     threads_created: 0,
     likes_received: 0
   }
-  const [activeTab, setActiveTab] = useState('community')
+  const [activeTab, setActiveTab] = useState('sharing')
   const [showShareDialog, setShowShareDialog] = useState(false)
   const [selectedPattern, setSelectedPattern] = useState<SharedMoodPattern | null>(null)
   const [newShare, setNewShare] = useState({
@@ -136,16 +145,29 @@ export function MoodPatternSharing() {
 
   // Separate useEffect for migration to ensure it runs whenever sharedPatterns changes
   useEffect(() => {
-    // Migrate existing patterns to include encouragedBy field
+    // Migrate existing patterns to include encouragedBy field and likedBy for replies
     const migratedPatterns = sharedPatterns.map(pattern => {
-      if (!pattern.encouragedBy) {
-        return { ...pattern, encouragedBy: [] }
+      const needsEncourageMigration = !pattern.encouragedBy
+      const needsReplyMigration = pattern.replies.some(reply => !reply.likedBy)
+      
+      if (needsEncourageMigration || needsReplyMigration) {
+        return { 
+          ...pattern, 
+          encouragedBy: pattern.encouragedBy || [],
+          replies: pattern.replies.map(reply => ({
+            ...reply,
+            likedBy: reply.likedBy || []
+          }))
+        }
       }
       return pattern
     })
     
     // Update patterns if migration was needed
-    if (migratedPatterns.some((pattern, index) => !sharedPatterns[index]?.encouragedBy)) {
+    if (migratedPatterns.some((pattern, index) => 
+      !sharedPatterns[index]?.encouragedBy || 
+      sharedPatterns[index]?.replies.some(reply => !reply.likedBy)
+    )) {
       setSharedPatterns(migratedPatterns)
     }
   }, [sharedPatterns.length]) // Run when patterns array changes size
@@ -238,8 +260,8 @@ export function MoodPatternSharing() {
     const pattern = sharedPatterns.find(p => p.id === patternId)
     if (!pattern) return
     
-    const hasEncouraged = pattern.encouragedBy?.includes(CURRENT_USER_ID) || false
-    const isOwnPattern = pattern.userId === CURRENT_USER_ID
+    const hasEncouraged = pattern.encouragedBy?.includes(currentUserId) || false
+    const isOwnPattern = pattern.userId === currentUserId
     
     const updatedPatterns = sharedPatterns.map(pattern => {
       if (pattern.id === patternId) {
@@ -251,14 +273,14 @@ export function MoodPatternSharing() {
           return {
             ...pattern,
             encouragements: Math.max(0, pattern.encouragements - 1),
-            encouragedBy: encouragedBy.filter(userId => userId !== CURRENT_USER_ID)
+            encouragedBy: encouragedBy.filter(userId => userId !== currentUserId)
           }
         } else {
           // Add encouragement (toggle on)
           return {
             ...pattern,
             encouragements: pattern.encouragements + 1,
-            encouragedBy: [...encouragedBy, CURRENT_USER_ID]
+            encouragedBy: [...encouragedBy, currentUserId]
           }
         }
       }
@@ -297,7 +319,17 @@ export function MoodPatternSharing() {
 
   const hasUserEncouraged = (patternId: string) => {
     const pattern = sharedPatterns.find(p => p.id === patternId)
-    return pattern?.encouragedBy?.includes(CURRENT_USER_ID) || false
+    return pattern?.encouragedBy?.includes(currentUserId) || false
+  }
+
+  const hasUserLikedReply = (reply: CommunityReply) => {
+    return reply.likedBy?.includes(currentUserId) || false
+  }
+
+  const switchUser = () => {
+    const newId = `user_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`
+    localStorage.setItem('mood_sharing_user_id', newId)
+    window.location.reload() // Simple way to refresh with new user ID
   }
 
   const addReply = (patternId: string, content: string) => {
@@ -308,7 +340,8 @@ export function MoodPatternSharing() {
       userId: 'current_user_anon',
       content,
       timestamp: Date.now(),
-      hearts: 0
+      hearts: 0,
+      likedBy: []
     }
 
     const updatedPatterns = sharedPatterns.map(pattern => 
@@ -324,6 +357,40 @@ export function MoodPatternSharing() {
     })
 
     toast.success('Reply added!')
+  }
+
+  const toggleReplyLike = (patternId: string, replyId: string) => {
+    const updatedPatterns = sharedPatterns.map(pattern => {
+      if (pattern.id === patternId) {
+        const updatedReplies = pattern.replies.map(reply => {
+          if (reply.id === replyId) {
+            const currentUserHasLiked = reply.likedBy.includes(currentUserId)
+            const newLikedBy = currentUserHasLiked
+              ? reply.likedBy.filter(userId => userId !== currentUserId)
+              : [...reply.likedBy, currentUserId]
+            
+            return {
+              ...reply,
+              likedBy: newLikedBy,
+              hearts: newLikedBy.length
+            }
+          }
+          return reply
+        })
+        return { ...pattern, replies: updatedReplies }
+      }
+      return pattern
+    })
+    
+    setSharedPatterns(updatedPatterns)
+    
+    // Also update selectedPattern if it's the one being modified
+    if (selectedPattern && selectedPattern.id === patternId) {
+      const updatedSelectedPattern = updatedPatterns.find(p => p.id === patternId)
+      if (updatedSelectedPattern) {
+        setSelectedPattern(updatedSelectedPattern)
+      }
+    }
   }
 
   const getPatternIcon = (type: SharedMoodPattern['type']) => {
@@ -357,17 +424,27 @@ export function MoodPatternSharing() {
                 Share your journey and support others in their wellness path
               </CardDescription>
             </div>
-            <Button onClick={() => setShowShareDialog(true)}>
-              <Share className="w-4 h-4 mr-2" />
-              Share Progress
-            </Button>
+            <div className="flex gap-2">
+              <Button 
+                variant="outline" 
+                size="sm"
+                onClick={switchUser}
+                title="Switch to a different user for testing multi-user functionality"
+              >
+                Switch User
+              </Button>
+              <Button onClick={() => setShowShareDialog(true)}>
+                <Share className="w-4 h-4 mr-2" />
+                Share Progress
+              </Button>
+            </div>
           </div>
         </CardHeader>
         <CardContent>
           <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
             <TabsList className="grid w-full grid-cols-4">
-              <TabsTrigger value="community">Community Feed</TabsTrigger>
-              <TabsTrigger value="forums">Forums</TabsTrigger>
+              <TabsTrigger value="sharing">Pattern Sharing</TabsTrigger>
+              <TabsTrigger value="community">Community Activity</TabsTrigger>
               <TabsTrigger value="my-patterns">My Shares</TabsTrigger>
               <TabsTrigger value="stats">My Impact</TabsTrigger>
             </TabsList>
@@ -423,7 +500,7 @@ export function MoodPatternSharing() {
                                     {thread.like_count}
                                   </span>
                                   <span className="text-xs text-muted-foreground">
-                                    {new Date(thread.created_at).toLocaleDateString()}
+                                    {formatRelativeTime(thread.created_at)}
                                   </span>
                                 </div>
                               </div>
@@ -433,10 +510,10 @@ export function MoodPatternSharing() {
                             <Button
                               variant="outline"
                               size="sm"
-                              onClick={() => setActiveTab('forums')}
+                              onClick={() => setActiveTab('community')}
                               className="w-full mt-2"
                             >
-                              View All Community Forums
+                              View All Community Activity
                             </Button>
                           )}
                         </div>
@@ -448,10 +525,10 @@ export function MoodPatternSharing() {
                           {(forums || []).length > 0 ? (
                             <Button
                               variant="outline"
-                              onClick={() => setActiveTab('forums')}
+                              onClick={() => setActiveTab('community')}
                               className="mx-auto"
                             >
-                              Browse Forums
+                              Browse Community
                             </Button>
                           ) : (
                             <Button
@@ -468,7 +545,9 @@ export function MoodPatternSharing() {
                   )}
                 </CardContent>
               </Card>
-              
+            </TabsContent>
+
+            <TabsContent value="sharing" className="space-y-4">
               {/* Mood Pattern Sharing */}
               <Card>
                 <CardHeader>
@@ -514,7 +593,7 @@ export function MoodPatternSharing() {
                               ) : (
                                 <Eye className="w-4 h-4" />
                               )}
-                              <span>{new Date(pattern.timestamp).toLocaleDateString()}</span>
+                              <span>{formatRelativeTime(pattern.timestamp)}</span>
                             </div>
                           </div>
 
@@ -604,10 +683,17 @@ export function MoodPatternSharing() {
                                 <div key={reply.id} className="p-3 rounded bg-muted/30">
                                   <div className="flex items-start justify-between">
                                     <p className="text-sm">{reply.content}</p>
-                                    <div className="flex items-center gap-1 text-xs text-muted-foreground">
-                                      <Heart className="w-3 h-3" />
+                                    <button
+                                      onClick={() => toggleReplyLike(pattern.id, reply.id)}
+                                      className="flex items-center gap-1 text-xs text-muted-foreground hover:text-red-500 transition-colors"
+                                    >
+                                      <Heart 
+                                        className={`w-3 h-3 ${
+                                          hasUserLikedReply(reply) ? 'fill-red-500 text-red-500' : ''
+                                        }`} 
+                                      />
                                       {reply.hearts}
-                                    </div>
+                                    </button>
                                   </div>
                                   {reply.isFromModerator && (
                                     <Badge variant="outline" className="text-xs mt-2">
@@ -745,69 +831,6 @@ export function MoodPatternSharing() {
                   </div>
                 </Card>
               </div>
-            </TabsContent>
-
-            <TabsContent value="forums" className="space-y-4">
-              <Card>
-                <CardHeader>
-                  <CardTitle className="flex items-center gap-2">
-                    <Users className="text-primary" size={20} />
-                    Community Forums
-                  </CardTitle>
-                  <CardDescription>
-                    Join discussions and connect with the community
-                  </CardDescription>
-                </CardHeader>
-                <CardContent>
-                  {communityLoading ? (
-                    <div className="text-center py-8 text-muted-foreground">
-                      <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary mx-auto mb-4"></div>
-                      Loading forums...
-                    </div>
-                  ) : (forums || []).length > 0 ? (
-                    <div className="space-y-4">
-                      {(forums || []).map((forum) => (
-                        <div key={forum.id} className="border rounded-lg p-4">
-                          <div className="flex items-start justify-between mb-2">
-                            <div>
-                              <h4 className="font-medium">{forum.name}</h4>
-                              <p className="text-sm text-muted-foreground line-clamp-2">{forum.description}</p>
-                            </div>
-                            <Badge variant={forum.is_member ? "default" : "outline"} className="text-xs">
-                              {forum.is_member ? "Joined" : "Join"}
-                            </Badge>
-                          </div>
-                          <div className="flex items-center gap-4 text-xs text-muted-foreground">
-                            <span>{forum.member_count} members</span>
-                            <span>{forum.thread_count} discussions</span>
-                            <Badge variant="secondary" className="text-xs">{forum.category}</Badge>
-                          </div>
-                          {forum.tags && forum.tags.length > 0 && (
-                            <div className="flex flex-wrap gap-1 mt-2">
-                              {forum.tags.slice(0, 3).map(tag => (
-                                <Badge key={tag} variant="outline" className="text-xs">{tag}</Badge>
-                              ))}
-                            </div>
-                          )}
-                        </div>
-                      ))}
-                    </div>
-                  ) : (
-                    <div className="text-center py-8 text-muted-foreground">
-                      <Users size={48} className="mx-auto mb-4 opacity-50" />
-                      <h4 className="font-medium mb-2">No Forums Available</h4>
-                      <p className="text-sm mb-4">Community forums are not available right now.</p>
-                      <Button
-                        variant="outline"
-                        onClick={loadCommunityActivity}
-                        disabled={communityLoading}
-                      >
-                        {communityLoading ? 'Loading...' : 'Refresh'}
-                      </Button>
-                    </div>
-                  )}
-                </CardContent>
-              </Card>
             </TabsContent>
           </Tabs>
         </CardContent>
@@ -957,12 +980,19 @@ export function MoodPatternSharing() {
                       <p className="text-sm">{reply.content}</p>
                       <div className="flex items-center justify-between mt-2">
                         <span className="text-xs text-muted-foreground">
-                          {new Date(reply.timestamp).toLocaleString()}
+                          {formatRelativeTime(reply.timestamp)}
                         </span>
-                        <div className="flex items-center gap-1 text-xs">
-                          <Heart className="w-3 h-3" />
+                        <button
+                          onClick={() => toggleReplyLike(selectedPattern.id, reply.id)}
+                          className="flex items-center gap-1 text-xs text-muted-foreground hover:text-red-500 transition-colors"
+                        >
+                          <Heart 
+                            className={`w-3 h-3 ${
+                              hasUserLikedReply(reply) ? 'fill-red-500 text-red-500' : ''
+                            }`} 
+                          />
                           {reply.hearts}
-                        </div>
+                        </button>
                       </div>
                     </div>
                   ))}

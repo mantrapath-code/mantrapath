@@ -7,7 +7,7 @@ from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
 import os
 
-DATABASE_URL = os.getenv("DATABASE_URL", "postgresql://mantrapath:mantrapath123@localhost:5432/mantrapath")
+DATABASE_URL = os.getenv("DATABASE_URL", "sqlite:///./mantrapath.db")
 
 # Create engine
 if DATABASE_URL.startswith("sqlite"):

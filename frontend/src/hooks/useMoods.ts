@@ -160,10 +160,14 @@ export function useMoods() {
 
   // Load moods on mount with error handling
   useEffect(() => {
-    getRecentMoods().catch(err => {
-      // Silently handle the error - the hook will work with empty state
-      console.log('Backend not available, using local state only')
-    })
+    // Only try to load moods if there's a token (user is authenticated)
+    const token = localStorage.getItem('mantrapath_token')
+    if (token) {
+      getRecentMoods().catch(err => {
+        // Silently handle the error - the hook will work with empty state
+        console.log('Backend not available or unauthorized, using local state only')
+      })
+    }
   }, [getRecentMoods])
 
   return {

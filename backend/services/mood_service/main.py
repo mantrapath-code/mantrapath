@@ -18,8 +18,9 @@ except ImportError:
     TEXTBLOB_AVAILABLE = False
 
 # Add parent directories to path
-sys.path.append('/app')
-sys.path.append('/app/shared')
+import os
+sys.path.append(os.path.join(os.path.dirname(__file__), '../../'))
+sys.path.append(os.path.join(os.path.dirname(__file__), '../../shared'))
 
 from shared.database import get_db, engine
 from shared.models import MoodEntry, JournalEntry, User, Base

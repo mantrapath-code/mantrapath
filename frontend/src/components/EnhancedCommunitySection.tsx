@@ -28,6 +28,7 @@ import { motion, AnimatePresence } from "framer-motion"
 import { toast } from "sonner"
 import { communityApi } from "@/services/api"
 import { useCommunityData } from "@/hooks/useCommunityData"
+import { formatRelativeTime as formatTime } from "@/utils/timeFormat"
 import { useAuth } from "@/hooks/useAuth"
 import { MoodPatternSharing } from "./MoodPatternSharing"
 import type { CommunityStats } from "@/hooks/useCommunityData"
@@ -123,57 +124,7 @@ export function EnhancedCommunitySection() {
   const [showThreadDialog, setShowThreadDialog] = useState(false)
   
   // Utility function to format relative time
-  const formatRelativeTime = (dateString: string): string => {
-    // Debug: log the original date string to see format
-    console.log('Original date string:', dateString)
-    
-    const now = new Date()
-    
-    // Handle different date string formats and ensure proper UTC parsing
-    let date: Date
-    if (dateString.includes('T') && !dateString.includes('Z') && !dateString.includes('+')) {
-      // If it's an ISO string without timezone info, assume it's UTC
-      date = new Date(dateString + 'Z')
-      console.log('Parsed as UTC:', date.toISOString())
-    } else {
-      // Otherwise parse normally
-      date = new Date(dateString)
-      console.log('Parsed normally:', date.toISOString())
-    }
-    
-    // If date parsing failed, return original string
-    if (isNaN(date.getTime())) {
-      console.log('Date parsing failed for:', dateString)
-      return dateString
-    }
-    
-    const diffInMs = now.getTime() - date.getTime()
-    const diffInSeconds = Math.floor(diffInMs / 1000)
-    const diffInMinutes = Math.floor(diffInSeconds / 60)
-    const diffInHours = Math.floor(diffInMinutes / 60)
-    const diffInDays = Math.floor(diffInHours / 24)
-    const diffInWeeks = Math.floor(diffInDays / 7)
-    const diffInMonths = Math.floor(diffInDays / 30)
-    const diffInYears = Math.floor(diffInDays / 365)
-
-    console.log(`Time diff - Now: ${now.toISOString()}, Date: ${date.toISOString()}, Diff: ${diffInSeconds}s`)
-
-    if (diffInSeconds < 60) {
-      return diffInSeconds <= 1 ? 'now' : `${diffInSeconds}s`
-    } else if (diffInMinutes < 60) {
-      return `${diffInMinutes}m`
-    } else if (diffInHours < 24) {
-      return `${diffInHours}h`
-    } else if (diffInDays < 7) {
-      return `${diffInDays}d`
-    } else if (diffInWeeks < 4) {
-      return `${diffInWeeks}w`
-    } else if (diffInMonths < 12) {
-      return `${diffInMonths}mo`
-    } else {
-      return `${diffInYears}y`
-    }
-  }
+  const formatRelativeTime = formatTime
   
   // Use shared community data
   const {
@@ -200,10 +151,12 @@ export function EnhancedCommunitySection() {
   // Load initial data
   useEffect(() => {
     loadForums()
-    loadUserStats() // Load enhanced reputation data
+    if (isAuthenticated) {
+      loadUserStats() // Only load stats if user is authenticated
+    }
     loadEvents()
     loadChallenges()
-  }, [loadForums, loadUserStats])
+  }, [isAuthenticated]) // Only depend on authentication status
 
   // Load threads when forum is selected
   useEffect(() => {
@@ -844,6 +797,7 @@ export function EnhancedCommunitySection() {
             <ThreadDetailView 
               thread={selectedThread} 
               onReply={(content, parentId) => handleReplyToThread(selectedThread.id, content, parentId)}
+              isAuthenticated={isAuthenticated}
             />
           )}
         </DialogContent>
@@ -1151,10 +1105,12 @@ function ChallengeCard({
 
 function ThreadDetailView({ 
   thread, 
-  onReply 
+  onReply,
+  isAuthenticated
 }: { 
   thread: Thread
   onReply: (content: string, parentId?: string) => void 
+  isAuthenticated: boolean
 }) {
   const [replyContent, setReplyContent] = useState("")
   const [replies, setReplies] = useState<Reply[]>([])
@@ -1163,13 +1119,24 @@ function ThreadDetailView({
 
   // Load replies when component mounts or thread changes
   useEffect(() => {
+    if (!isAuthenticated) {
+      return // Don't load replies if not authenticated
+    }
+    
     const loadReplies = async () => {
       try {
         setLoadingReplies(true)
         const repliesData = await communityApi.getThreadReplies(thread.id)
         setReplies(repliesData || [])
-      } catch (error) {
+      } catch (error: any) {
         console.error('Failed to load replies:', error)
+        
+        // Handle authentication errors gracefully
+        if (error.status === 401 || error.status === 403) {
+          console.log('Not authenticated for replies - skipping')
+          return
+        }
+        
         toast.error('Failed to load replies')
       } finally {
         setLoadingReplies(false)
@@ -1177,7 +1144,7 @@ function ThreadDetailView({
     }
 
     loadReplies()
-  }, [thread.id])
+  }, [thread.id, isAuthenticated])
 
   // Handle liking a reply
   const handleLikeReply = async (replyId: string) => {

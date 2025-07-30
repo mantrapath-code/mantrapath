@@ -271,8 +271,14 @@ export function useCommunityData() {
       })
     } catch (err: any) {
       console.error('Failed to load user stats:', err)
-      // Don't show toast error for stats - it's not critical
-      // Use fallback calculation if backend fails
+      
+      // Handle authentication errors gracefully
+      if (err.status === 401 || err.status === 403) {
+        console.log('User not authenticated for stats - using fallback')
+        return // Don't set fallback stats if not authenticated
+      }
+      
+      // For other errors, use fallback calculation if backend fails
       if (enhancedStats === null) {
         setEnhancedStats({
           reputation: userReputation,
@@ -285,7 +291,7 @@ export function useCommunityData() {
         })
       }
     }
-  }, [setUserReputation, setCommunityStats, userReputation, joinedForums.length, communityStats, enhancedStats])
+  }, [setUserReputation, setCommunityStats])
 
   return {
     // Data

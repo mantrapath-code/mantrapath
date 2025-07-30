@@ -64,7 +64,7 @@ def get_service_url(path: str) -> tuple[str, str]:
         return SERVICES["content"], path
     
     # Community service routes
-    if path.startswith("/forums"):
+    if any(path.startswith(prefix) for prefix in ["/forums", "/user/stats", "/user/activity"]):
         return SERVICES["community"], path
     
     # Notification service routes
