@@ -67,6 +67,7 @@ interface CommunityReply {
   timestamp: number
   hearts: number
   isFromModerator?: boolean
+  isLiked?: boolean
 }
 
 interface UserCommunityStats {
@@ -137,16 +138,29 @@ export function MoodPatternSharing() {
 
   // Separate useEffect for migration to ensure it runs whenever sharedPatterns changes
   useEffect(() => {
-    // Migrate existing patterns to include encouragedBy field
+    // Migrate existing patterns to include encouragedBy field and isLiked for replies
     const migratedPatterns = sharedPatterns.map(pattern => {
-      if (!pattern.encouragedBy) {
-        return { ...pattern, encouragedBy: [] }
+      const needsEncourageMigration = !pattern.encouragedBy
+      const needsReplyMigration = pattern.replies.some(reply => reply.isLiked === undefined)
+      
+      if (needsEncourageMigration || needsReplyMigration) {
+        return { 
+          ...pattern, 
+          encouragedBy: pattern.encouragedBy || [],
+          replies: pattern.replies.map(reply => ({
+            ...reply,
+            isLiked: reply.isLiked || false
+          }))
+        }
       }
       return pattern
     })
     
     // Update patterns if migration was needed
-    if (migratedPatterns.some((pattern, index) => !sharedPatterns[index]?.encouragedBy)) {
+    if (migratedPatterns.some((pattern, index) => 
+      !sharedPatterns[index]?.encouragedBy || 
+      sharedPatterns[index]?.replies.some(reply => reply.isLiked === undefined)
+    )) {
       setSharedPatterns(migratedPatterns)
     }
   }, [sharedPatterns.length]) // Run when patterns array changes size
@@ -309,7 +323,8 @@ export function MoodPatternSharing() {
       userId: 'current_user_anon',
       content,
       timestamp: Date.now(),
-      hearts: 0
+      hearts: 0,
+      isLiked: false
     }
 
     const updatedPatterns = sharedPatterns.map(pattern => 
@@ -325,6 +340,36 @@ export function MoodPatternSharing() {
     })
 
     toast.success('Reply added!')
+  }
+
+  const toggleReplyLike = (patternId: string, replyId: string) => {
+    const updatedPatterns = sharedPatterns.map(pattern => {
+      if (pattern.id === patternId) {
+        const updatedReplies = pattern.replies.map(reply => {
+          if (reply.id === replyId) {
+            const isCurrentlyLiked = reply.isLiked || false
+            return {
+              ...reply,
+              isLiked: !isCurrentlyLiked,
+              hearts: isCurrentlyLiked ? reply.hearts - 1 : reply.hearts + 1
+            }
+          }
+          return reply
+        })
+        return { ...pattern, replies: updatedReplies }
+      }
+      return pattern
+    })
+    
+    setSharedPatterns(updatedPatterns)
+    
+    // Also update selectedPattern if it's the one being modified
+    if (selectedPattern && selectedPattern.id === patternId) {
+      const updatedSelectedPattern = updatedPatterns.find(p => p.id === patternId)
+      if (updatedSelectedPattern) {
+        setSelectedPattern(updatedSelectedPattern)
+      }
+    }
   }
 
   const getPatternIcon = (type: SharedMoodPattern['type']) => {
@@ -607,10 +652,17 @@ export function MoodPatternSharing() {
                                 <div key={reply.id} className="p-3 rounded bg-muted/30">
                                   <div className="flex items-start justify-between">
                                     <p className="text-sm">{reply.content}</p>
-                                    <div className="flex items-center gap-1 text-xs text-muted-foreground">
-                                      <Heart className="w-3 h-3" />
+                                    <button
+                                      onClick={() => toggleReplyLike(pattern.id, reply.id)}
+                                      className="flex items-center gap-1 text-xs text-muted-foreground hover:text-red-500 transition-colors"
+                                    >
+                                      <Heart 
+                                        className={`w-3 h-3 ${
+                                          reply.isLiked ? 'fill-red-500 text-red-500' : ''
+                                        }`} 
+                                      />
                                       {reply.hearts}
-                                    </div>
+                                    </button>
                                   </div>
                                   {reply.isFromModerator && (
                                     <Badge variant="outline" className="text-xs mt-2">
@@ -899,10 +951,17 @@ export function MoodPatternSharing() {
                         <span className="text-xs text-muted-foreground">
                           {formatRelativeTime(reply.timestamp)}
                         </span>
-                        <div className="flex items-center gap-1 text-xs">
-                          <Heart className="w-3 h-3" />
+                        <button
+                          onClick={() => toggleReplyLike(selectedPattern.id, reply.id)}
+                          className="flex items-center gap-1 text-xs text-muted-foreground hover:text-red-500 transition-colors"
+                        >
+                          <Heart 
+                            className={`w-3 h-3 ${
+                              reply.isLiked ? 'fill-red-500 text-red-500' : ''
+                            }`} 
+                          />
                           {reply.hearts}
-                        </div>
+                        </button>
                       </div>
                     </div>
                   ))}
