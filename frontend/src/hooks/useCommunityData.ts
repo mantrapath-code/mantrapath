@@ -285,7 +285,7 @@ export function useCommunityData() {
         })
       }
     }
-  }, [setUserReputation, setCommunityStats, userReputation, joinedForums.length, communityStats, enhancedStats])
+  }, [setUserReputation, setCommunityStats])
 
   return {
     // Data

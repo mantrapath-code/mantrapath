@@ -28,6 +28,7 @@ import { motion, AnimatePresence } from "framer-motion"
 import { toast } from "sonner"
 import { communityApi } from "@/services/api"
 import { useCommunityData } from "@/hooks/useCommunityData"
+import { formatRelativeTime as formatTime } from "@/utils/timeFormat"
 import { useAuth } from "@/hooks/useAuth"
 import { MoodPatternSharing } from "./MoodPatternSharing"
 import type { CommunityStats } from "@/hooks/useCommunityData"
@@ -123,57 +124,7 @@ export function EnhancedCommunitySection() {
   const [showThreadDialog, setShowThreadDialog] = useState(false)
   
   // Utility function to format relative time
-  const formatRelativeTime = (dateString: string): string => {
-    // Debug: log the original date string to see format
-    console.log('Original date string:', dateString)
-    
-    const now = new Date()
-    
-    // Handle different date string formats and ensure proper UTC parsing
-    let date: Date
-    if (dateString.includes('T') && !dateString.includes('Z') && !dateString.includes('+')) {
-      // If it's an ISO string without timezone info, assume it's UTC
-      date = new Date(dateString + 'Z')
-      console.log('Parsed as UTC:', date.toISOString())
-    } else {
-      // Otherwise parse normally
-      date = new Date(dateString)
-      console.log('Parsed normally:', date.toISOString())
-    }
-    
-    // If date parsing failed, return original string
-    if (isNaN(date.getTime())) {
-      console.log('Date parsing failed for:', dateString)
-      return dateString
-    }
-    
-    const diffInMs = now.getTime() - date.getTime()
-    const diffInSeconds = Math.floor(diffInMs / 1000)
-    const diffInMinutes = Math.floor(diffInSeconds / 60)
-    const diffInHours = Math.floor(diffInMinutes / 60)
-    const diffInDays = Math.floor(diffInHours / 24)
-    const diffInWeeks = Math.floor(diffInDays / 7)
-    const diffInMonths = Math.floor(diffInDays / 30)
-    const diffInYears = Math.floor(diffInDays / 365)
-
-    console.log(`Time diff - Now: ${now.toISOString()}, Date: ${date.toISOString()}, Diff: ${diffInSeconds}s`)
-
-    if (diffInSeconds < 60) {
-      return diffInSeconds <= 1 ? 'now' : `${diffInSeconds}s`
-    } else if (diffInMinutes < 60) {
-      return `${diffInMinutes}m`
-    } else if (diffInHours < 24) {
-      return `${diffInHours}h`
-    } else if (diffInDays < 7) {
-      return `${diffInDays}d`
-    } else if (diffInWeeks < 4) {
-      return `${diffInWeeks}w`
-    } else if (diffInMonths < 12) {
-      return `${diffInMonths}mo`
-    } else {
-      return `${diffInYears}y`
-    }
-  }
+  const formatRelativeTime = formatTime
   
   // Use shared community data
   const {
@@ -203,7 +154,7 @@ export function EnhancedCommunitySection() {
     loadUserStats() // Load enhanced reputation data
     loadEvents()
     loadChallenges()
-  }, [loadForums, loadUserStats])
+  }, []) // Remove loadForums and loadUserStats from dependencies to prevent infinite loop
 
   // Load threads when forum is selected
   useEffect(() => {

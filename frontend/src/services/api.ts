@@ -808,6 +808,67 @@ class ApiService {
   async healthCheck() {
     return this.request('/health')
   }
+
+  // Notification Service methods
+  async getNotifications(limit: number = 20) {
+    return this.request(`/notify/recent?limit=${limit}`)
+  }
+
+  async getNotificationPreferences() {
+    return this.request('/notify/preferences')
+  }
+
+  async updateNotificationPreferences(preferences: any) {
+    return this.request('/notify/preferences', {
+      method: 'PUT',
+      body: JSON.stringify(preferences)
+    })
+  }
+
+  async scheduleNotification(userId: string, notificationData: any, sendAt: string) {
+    return this.request('/notify/schedule', {
+      method: 'POST',
+      body: JSON.stringify({
+        user_id: userId,
+        ...notificationData,
+        send_at: sendAt
+      })
+    })
+  }
+
+  async sendNotification(userId: string, notificationData: any) {
+    return this.request(`/notify/send/${userId}`, {
+      method: 'POST',
+      body: JSON.stringify(notificationData)
+    })
+  }
+
+  async markNotificationRead(notificationId: string) {
+    return this.request(`/notify/${notificationId}/read`, {
+      method: 'POST'
+    })
+  }
+
+  async markAllNotificationsRead() {
+    return this.request('/notify/mark-all-read', {
+      method: 'POST'
+    })
+  }
+
+  async getNotificationAnalytics(days: number = 30) {
+    return this.request(`/notify/analytics?days=${days}`)
+  }
+
+  async triggerMoodPatternNotification(userId: string, patternType: string, patternData: any) {
+    return this.request('/notify/mood-pattern', {
+      method: 'POST',
+      body: JSON.stringify({
+        user_id: userId,
+        pattern_type: patternType,
+        pattern_data: patternData
+      })
+    })
+  }
 }
 
 export const apiService = new ApiService()
@@ -841,6 +902,18 @@ export const communityApi = {
   joinChallenge: (challengeId: string) => Promise.resolve({ message: 'Joined challenge' }),
   leaveChallenge: (challengeId: string) => Promise.resolve({ message: 'Left challenge' }),
   createChallenge: (challengeData: any) => Promise.resolve({ id: Date.now().toString(), ...challengeData }),
+}
+
+export const notificationApi = {
+  getNotifications: apiService.getNotifications.bind(apiService),
+  getPreferences: apiService.getNotificationPreferences.bind(apiService),
+  updatePreferences: apiService.updateNotificationPreferences.bind(apiService),
+  scheduleNotification: apiService.scheduleNotification.bind(apiService),
+  sendNotification: apiService.sendNotification.bind(apiService),
+  markAsRead: apiService.markNotificationRead.bind(apiService),
+  markAllAsRead: apiService.markAllNotificationsRead.bind(apiService),
+  getAnalytics: apiService.getNotificationAnalytics.bind(apiService),
+  triggerMoodPattern: apiService.triggerMoodPatternNotification.bind(apiService),
 }
 
 export default apiService

@@ -4,7 +4,7 @@ import { Progress } from "@/components/ui/progress"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { Trophy, Heart, BookOpen, Users, Target, Brain, Palette, ChartLine, Bell, Share } from "@phosphor-icons/react"
+import { Trophy, Heart, BookOpen, Users, Target, Brain, Palette, ChartLine, Share } from "@phosphor-icons/react"
 import { useMoods } from "@/hooks/useMoods"
 import { useUserStats } from "@/hooks/useWellness"
 import { useJournal } from "@/hooks/useJournal"
@@ -13,7 +13,6 @@ import { MoodInsights } from "./MoodInsights"
 import { MoodPatternNotifications } from "./MoodPatternNotifications"
 import { EnhancedMoodChart } from "./EnhancedMoodChart"
 import { WeeklyMoodReport } from "./WeeklyMoodReport"
-import { SmartNotificationScheduler } from "./SmartNotificationScheduler"
 import { MoodPatternSharing } from "./MoodPatternSharing"
 import { motion, AnimatePresence } from "framer-motion"
 import { toast } from "sonner"
@@ -167,7 +166,7 @@ export function WellnessDashboard() {
       <MoodPatternNotifications />
 
       <Tabs defaultValue="overview" className="w-full">
-        <TabsList className="grid w-full grid-cols-6">
+        <TabsList className="grid w-full grid-cols-5">
           <TabsTrigger value="overview">Overview</TabsTrigger>
           <TabsTrigger value="insights" className="flex items-center gap-2">
             <Brain size={16} />
@@ -176,10 +175,6 @@ export function WellnessDashboard() {
           <TabsTrigger value="reports" className="flex items-center gap-2">
             <ChartLine size={16} />
             Reports
-          </TabsTrigger>
-          <TabsTrigger value="notifications" className="flex items-center gap-2">
-            <Bell size={16} />
-            Notifications
           </TabsTrigger>
           <TabsTrigger value="community" className="flex items-center gap-2">
             <Share size={16} />
@@ -299,10 +294,6 @@ export function WellnessDashboard() {
 
         <TabsContent value="reports" className="space-y-6">
           <WeeklyMoodReport />
-        </TabsContent>
-
-        <TabsContent value="notifications" className="space-y-6">
-          <SmartNotificationScheduler />
         </TabsContent>
 
         <TabsContent value="community" className="space-y-6">

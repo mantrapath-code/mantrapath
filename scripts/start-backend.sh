@@ -1,73 +1,97 @@
 #!/bin/bash
 
-echo "🚀 Starting MantraPath Backend Services..."
-echo "==========================================="
+# MantraPath Backend Services Only
+echo "🔧 Starting MantraPath Backend Services..."
 
-# Check if uvicorn is available
-if ! command -v uvicorn &> /dev/null; then
-    echo "❌ uvicorn not found. Installing..."
-    pip install uvicorn fastapi sqlalchemy pydantic python-jose passlib bcrypt httpx
+# Kill any existing backend processes
+echo "🧹 Cleaning up existing backend processes..."
+lsof -ti:8000,8002,8003 | xargs kill -9 2>/dev/null || true
+
+# Set working directory
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
+cd "$PROJECT_ROOT/backend"
+
+# Check Python
+if ! command -v python3 &> /dev/null; then
+    echo "❌ Error: Python 3 is required"
+    exit 1
 fi
 
-# Set environment variables
-export DATABASE_URL="sqlite:///./mantrapath.db"
-export JWT_SECRET_KEY="dev-secret-key-change-in-production"
-export AUTH_SERVICE_URL="http://localhost:8001"
-export MOOD_SERVICE_URL="http://localhost:8003"
+# Setup virtual environment
+if [ ! -f ".venv/bin/activate" ]; then
+    echo "📦 Creating Python virtual environment..."
+    python3 -m venv .venv
+fi
 
-# Create logs directory
-mkdir -p backend/logs
+source .venv/bin/activate
+pip install -r requirements.txt
 
-# Function to start a service
-start_service() {
-    local name=$1
-    local port=$2
-    local path=$3
-    
-    echo "🔄 Starting $name on port $port..."
-    
-    cd "backend/$path"
-    
-    # Set Python path to include shared directory
-    export PYTHONPATH="../shared:$PYTHONPATH"
-    
-    # Start service in background
-    uvicorn main:app --host 0.0.0.0 --port $port --reload > "../logs/${name,,}.log" 2>&1 &
-    local pid=$!
-    
-    # Save PID for later cleanup
-    echo $pid > "../logs/${name,,}.pid"
-    
-    cd - > /dev/null
-    
-    # Wait for service to start
-    sleep 3
-    
-    # Check if service is running
-    if curl -s "http://localhost:$port/health" > /dev/null 2>&1; then
-        echo "✅ $name started successfully"
+# Initialize database
+echo "🗄️ Initializing database..."
+python3 -c "
+import sys
+sys.path.append('.')
+from shared.database import create_tables
+create_tables()
+print('✅ Database initialized')
+"
+
+# Start services
+echo "🔄 Starting backend services..."
+
+# Start Notification Service
+cd services/notification_service
+python3 -m uvicorn main:app --host 0.0.0.0 --port 8002 --reload &
+NOTIFICATION_PID=$!
+cd ../..
+
+# Start Mood Service
+cd services/mood_service  
+python3 -m uvicorn main:app --host 0.0.0.0 --port 8003 --reload &
+MOOD_PID=$!
+cd ../..
+
+# Start API Gateway
+cd services/api_gateway
+python3 -m uvicorn main:app --host 0.0.0.0 --port 8000 --reload &
+GATEWAY_PID=$!
+cd ../..
+
+# Health checks
+echo "🏥 Performing health checks..."
+sleep 5
+
+check_service() {
+    local url=$1
+    local name=$2
+    if curl -s "$url" > /dev/null; then
+        echo "✅ $name is healthy"
+        return 0
     else
-        echo "⚠️  $name may be starting (check logs if issues persist)"
+        echo "❌ $name failed to start"
+        return 1
     fi
 }
 
-# Start services in order
-start_service "Auth-Service" 8001 "services/auth"
-start_service "Mood-Service" 8003 "services/mood"  
-start_service "API-Gateway" 8000 "services/gateway"
+check_service "http://localhost:8002/health" "Notification Service"
+check_service "http://localhost:8003/health" "Mood Service"
+check_service "http://localhost:8000/health" "API Gateway"
 
 echo ""
-echo "🌟 Backend Services Status:"
-echo "🔐 Auth Service: http://localhost:8001"
-echo "😊 Mood Service: http://localhost:8003"
-echo "🌐 API Gateway: http://localhost:8000"
+echo "🎉 Backend services are running!"
+echo "📍 API Gateway: http://localhost:8000"
+echo "📍 Notification Service: http://localhost:8002" 
+echo "📍 Mood Service: http://localhost:8003"
 echo ""
-echo "📚 API Documentation:"
-echo "   Auth: http://localhost:8001/docs"
-echo "   Mood: http://localhost:8003/docs"
-echo "   Gateway: http://localhost:8000/docs"
+echo "📋 Available endpoints:"
+echo "   • Mood tracking: http://localhost:8003/api/v1/mood/"
+echo "   • Notifications: http://localhost:8002/notify/"
+echo "   • Health checks: http://localhost:8000/health"
 echo ""
-echo "📋 Service logs are in backend/logs/"
-echo "🛑 To stop services, run: ./stop-backend.sh"
-echo ""
-echo "✨ Your frontend should now connect to the real backend!"
+echo "💡 Services have auto-reload enabled"
+echo "🛑 Press Ctrl+C to stop all services"
+
+# Wait for interrupt
+trap 'echo "🛑 Stopping services..."; kill $NOTIFICATION_PID $MOOD_PID $GATEWAY_PID; deactivate; exit' INT
+wait

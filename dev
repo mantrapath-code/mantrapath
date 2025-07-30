@@ -1,0 +1,46 @@
+#!/bin/bash
+
+# MantraPath Quick Launcher
+# Usage: ./dev [option]
+# 
+# This script provides quick access to development scripts from project root
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
+case "${1:-menu}" in
+    "dev" | "full")
+        echo "🚀 Starting full development environment..."
+        $SCRIPT_DIR/scripts/start-dev.sh
+        ;;
+    "backend" | "api")
+        echo "🔧 Starting backend services only..."
+        $SCRIPT_DIR/scripts/start-backend.sh
+        ;;
+    "demo" | "quick")
+        echo "⚡ Starting quick demo..."
+        $SCRIPT_DIR/scripts/start-demo.sh
+        ;;
+    "legacy")
+        echo "🔄 Starting legacy backend services..."
+        $SCRIPT_DIR/scripts/start-backend-services.sh
+        ;;
+    "menu" | "help" | "")
+        echo "🔧 MantraPath Quick Launcher"
+        echo "Usage: ./dev [option]"
+        echo ""
+        echo "Options:"
+        echo "  dev, full    - Full development environment"
+        echo "  backend, api - Backend services only"  
+        echo "  demo, quick  - Quick demo setup"
+        echo "  legacy       - Legacy backend services"
+        echo "  menu, help   - Show this menu"
+        echo ""
+        echo "Or run the interactive manager:"
+        echo "  ./scripts/manage.sh"
+        ;;
+    *)
+        echo "❌ Unknown option: $1"
+        echo "Run './dev help' for available options"
+        exit 1
+        ;;
+esac
