@@ -37,6 +37,7 @@ SERVICES = {
     "content": os.getenv("CONTENT_SERVICE_URL", "http://localhost:8005"),
     "community": os.getenv("COMMUNITY_SERVICE_URL", "http://localhost:8006"),
     "notification": os.getenv("NOTIFICATION_SERVICE_URL", "http://localhost:8007"),
+    "ml": os.getenv("ML_SERVICE_URL", "http://localhost:8008"),
     "media": os.getenv("MEDIA_SERVICE_URL", "http://localhost:8009"),
 }
 
@@ -70,6 +71,10 @@ def get_service_url(path: str) -> tuple[str, str]:
     # Notification service routes
     if path.startswith("/notify/"):
         return SERVICES["notification"], path
+    
+    # ML service routes
+    if path.startswith("/api/ml/"):
+        return SERVICES["ml"], path
     
     # Media service routes
     if path.startswith("/api/v1/media/"):

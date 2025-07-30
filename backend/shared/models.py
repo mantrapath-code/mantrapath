@@ -200,6 +200,24 @@ class Notification(Base):
     read_at = Column(DateTime)
     sent_at = Column(DateTime)
 
+class ScheduledNotification(Base):
+    """Scheduled notifications for optimal timing"""
+    __tablename__ = "scheduled_notifications"
+    
+    id = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
+    user_id = Column(String, ForeignKey("users.id"), nullable=False)
+    notification_type = Column(String, nullable=False)  # mood_reminder, weekly_insight, etc.
+    title = Column(String, nullable=False)
+    message = Column(Text, nullable=False)
+    scheduled_time = Column(DateTime, nullable=False)
+    timezone = Column(String, default="UTC")
+    is_sent = Column(Boolean, default=False)
+    is_cancelled = Column(Boolean, default=False)
+    
+    created_at = Column(DateTime, default=datetime.utcnow)
+    sent_at = Column(DateTime)
+    cancelled_at = Column(DateTime)
+
 # Create aliases for backward compatibility
 Forum = CommunityForum
 ForumReply = ThreadReply
@@ -259,6 +277,63 @@ class Affirmation(Base):
     popularity_score = Column(Float, default=0.0)
     
     created_at = Column(DateTime, default=datetime.utcnow)
+
+class CommunityEvent(Base):
+    """Community events"""
+    __tablename__ = "community_events"
+    
+    id = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
+    title = Column(String, nullable=False)
+    description = Column(Text, nullable=False)
+    start_time = Column(DateTime, nullable=False)
+    end_time = Column(DateTime, nullable=False)
+    location = Column(String)  # Physical location or meeting link
+    is_virtual = Column(Boolean, default=True)
+    created_by = Column(String, ForeignKey("users.id"), nullable=False)
+    max_participants = Column(Integer)
+    
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+class Challenge(Base):
+    """Wellness challenges"""
+    __tablename__ = "challenges"
+    
+    id = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
+    title = Column(String, nullable=False)
+    description = Column(Text, nullable=False)
+    category = Column(String, nullable=False)  # mindfulness, fitness, nutrition, etc.
+    duration_days = Column(Integer, nullable=False)
+    start_date = Column(DateTime, nullable=False)
+    end_date = Column(DateTime, nullable=False)
+    created_by = Column(String, ForeignKey("users.id"), nullable=False)
+    
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+class EventParticipant(Base):
+    """Event participation tracking"""
+    __tablename__ = "event_participants"
+    
+    id = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
+    user_id = Column(String, ForeignKey("users.id"), nullable=False)
+    event_id = Column(String, ForeignKey("community_events.id"), nullable=False)
+    joined_at = Column(DateTime, default=datetime.utcnow)
+    attended = Column(Boolean, default=False)
+    feedback = Column(Text)
+    rating = Column(Integer)  # 1-5 scale
+
+class ChallengeParticipant(Base):
+    """Challenge participation tracking"""
+    __tablename__ = "challenge_participants"
+    
+    id = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
+    user_id = Column(String, ForeignKey("users.id"), nullable=False)
+    challenge_id = Column(String, ForeignKey("challenges.id"), nullable=False)
+    joined_at = Column(DateTime, default=datetime.utcnow)
+    completed = Column(Boolean, default=False)
+    completion_date = Column(DateTime)
+    progress_data = Column(JSON)  # Track daily progress
 
 class MediaFile(Base):
     """Uploaded media files"""

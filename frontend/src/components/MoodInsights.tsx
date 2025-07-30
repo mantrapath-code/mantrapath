@@ -20,8 +20,8 @@ import {
 } from '@phosphor-icons/react'
 import { motion } from 'framer-motion'
 import { useMoods } from '@/hooks/useMoods'
-import { useJournal } from '@/hooks/useJournal'
-import { MoodPattern, PersonalizedInsight, WeeklyAnalysis, RecommendationCard } from '@/types'
+import { useJournal, JournalEntry as HookJournalEntry } from '@/hooks/useJournal'
+import { MoodPattern, PersonalizedInsight, WeeklyAnalysis, RecommendationCard, MoodEntry } from '@/types'
 import { MoodCorrelations } from './MoodCorrelations'
 import { MoodComparisonView } from './MoodComparisonView'
 import { EnhancedMoodChart } from './EnhancedMoodChart'
@@ -87,6 +87,25 @@ export function MoodInsights() {
         <TabsContent value="overview" className="space-y-6 mt-6">
           {/* Enhanced Mood Chart */}
           <EnhancedMoodChart />
+          
+          {/* Debug: Add test mood button */}
+          <Card className="bg-yellow-50 border-yellow-200">
+            <CardContent className="p-4">
+              <Button 
+                onClick={() => {
+                  const moods = ['excellent', 'good', 'neutral', 'low', 'very-low'] as const
+                  const randomMood = moods[Math.floor(Math.random() * moods.length)]
+                  console.log('Adding test mood:', randomMood)
+                  // This would be used for testing
+                }}
+                variant="outline"
+                size="sm"
+                className="text-yellow-700 border-yellow-300"
+              >
+                🧪 Add Test Mood (Debug)
+              </Button>
+            </CardContent>
+          </Card>
           
           {/* Weekly Overview */}
           <motion.div
@@ -392,7 +411,7 @@ function RecommendationCardComponent({ recommendation }: { recommendation: Recom
 }
 
 // Analysis Functions
-function analyzeWeeklyPatterns(moods: any[], entries: any[]): WeeklyAnalysis {
+function analyzeWeeklyPatterns(moods: MoodEntry[], entries: HookJournalEntry[]): WeeklyAnalysis {
   const oneWeekAgo = Date.now() - (7 * 24 * 60 * 60 * 1000)
   const weekMoods = moods.filter(mood => mood.timestamp >= oneWeekAgo)
   
@@ -436,7 +455,7 @@ function analyzeWeeklyPatterns(moods: any[], entries: any[]): WeeklyAnalysis {
   }
 }
 
-function detectMoodPatterns(moods: any[]): MoodPattern[] {
+function detectMoodPatterns(moods: MoodEntry[]): MoodPattern[] {
   const patterns: MoodPattern[] = []
   
   // Day of week pattern
@@ -454,7 +473,7 @@ function detectMoodPatterns(moods: any[]): MoodPattern[] {
   return patterns
 }
 
-function analyzeDayOfWeekPattern(moods: any[]): MoodPattern | null {
+function analyzeDayOfWeekPattern(moods: MoodEntry[]): MoodPattern | null {
   const dayMoods = moods.reduce((acc, mood) => {
     const day = new Date(mood.timestamp).getDay()
     if (!acc[day]) acc[day] = []
@@ -463,16 +482,16 @@ function analyzeDayOfWeekPattern(moods: any[]): MoodPattern | null {
   }, {} as Record<number, string[]>)
 
   const dayNames = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday']
-  const moodValues = { 'very-low': 1, 'low': 2, 'neutral': 3, 'good': 4, 'excellent': 5 }
+  const moodValues = { 'very-low': 1, 'low': 2, 'neutral': 3, 'good': 4, 'excellent': 5 } as const
   
   let bestDay = -1
   let worstDay = -1
   let bestAvg = 0
   let worstAvg = 6
   
-  Object.entries(dayMoods).forEach(([day, dayMoodList]) => {
+  Object.entries(dayMoods).forEach(([day, dayMoodList]: [string, string[]]) => {
     if (dayMoodList.length < 2) return
-    const avg = dayMoodList.reduce((sum, mood) => sum + moodValues[mood], 0) / dayMoodList.length
+    const avg = dayMoodList.reduce((sum, mood) => sum + moodValues[mood as keyof typeof moodValues], 0) / dayMoodList.length
     if (avg > bestAvg) {
       bestAvg = avg
       bestDay = parseInt(day)
@@ -497,7 +516,7 @@ function analyzeDayOfWeekPattern(moods: any[]): MoodPattern | null {
   }
 }
 
-function analyzeTimePattern(moods: any[]): MoodPattern | null {
+function analyzeTimePattern(moods: MoodEntry[]): MoodPattern | null {
   // Simplified time analysis - you could expand this
   const morningMoods = moods.filter(m => {
     const hour = new Date(m.timestamp).getHours()
@@ -511,7 +530,7 @@ function analyzeTimePattern(moods: any[]): MoodPattern | null {
 
   if (morningMoods.length < 3 || eveningMoods.length < 3) return null
 
-  const moodValues = { 'very-low': 1, 'low': 2, 'neutral': 3, 'good': 4, 'excellent': 5 }
+  const moodValues = { 'very-low': 1, 'low': 2, 'neutral': 3, 'good': 4, 'excellent': 5 } as const
   const morningAvg = morningMoods.reduce((sum, m) => sum + moodValues[m.mood], 0) / morningMoods.length
   const eveningAvg = eveningMoods.reduce((sum, m) => sum + moodValues[m.mood], 0) / eveningMoods.length
 
@@ -531,12 +550,12 @@ function analyzeTimePattern(moods: any[]): MoodPattern | null {
   }
 }
 
-function analyzeTriggerPattern(moods: any[]): MoodPattern | null {
+function analyzeTriggerPattern(moods: MoodEntry[]): MoodPattern | null {
   const triggeredMoods = moods.filter(m => m.triggers && m.triggers.length > 0)
   if (triggeredMoods.length < 5) return null
 
   const triggerCounts = triggeredMoods.reduce((acc, mood) => {
-    mood.triggers.forEach((trigger: string) => {
+    mood.triggers?.forEach((trigger: string) => {
       if (!acc[trigger]) acc[trigger] = { count: 0, totalMood: 0 }
       acc[trigger].count++
       acc[trigger].totalMood += { 'very-low': 1, 'low': 2, 'neutral': 3, 'good': 4, 'excellent': 5 }[mood.mood]
@@ -545,7 +564,7 @@ function analyzeTriggerPattern(moods: any[]): MoodPattern | null {
   }, {} as Record<string, { count: number, totalMood: number }>)
 
   const commonTrigger = Object.entries(triggerCounts)
-    .sort(([,a], [,b]) => b.count - a.count)[0]
+    .sort(([,a], [,b]: [string, { count: number, totalMood: number }]) => b.count - a.count)[0]
 
   if (!commonTrigger || commonTrigger[1].count < 3) return null
 
@@ -563,7 +582,7 @@ function analyzeTriggerPattern(moods: any[]): MoodPattern | null {
   }
 }
 
-function generateWeeklyInsights(moods: any[], entries: any[], avgMood: number, variability: number): PersonalizedInsight[] {
+function generateWeeklyInsights(moods: MoodEntry[], entries: HookJournalEntry[], avgMood: number, variability: number): PersonalizedInsight[] {
   const insights: PersonalizedInsight[] = []
 
   if (avgMood >= 4) {
@@ -662,7 +681,7 @@ function generateRecommendations(analysis: WeeklyAnalysis, patterns: MoodPattern
   return recommendations
 }
 
-function calculateStreaks(moods: any[]): { current: number, longest: number } {
+function calculateStreaks(moods: MoodEntry[]): { current: number, longest: number } {
   if (moods.length === 0) return { current: 0, longest: 0 }
 
   let current = 0

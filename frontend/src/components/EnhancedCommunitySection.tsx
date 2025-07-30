@@ -181,8 +181,8 @@ export function EnhancedCommunitySection() {
 
   const loadEvents = async () => {
     try {
-      // Events API not yet implemented, use empty array
-      setEvents([])
+      const eventsData = await communityApi.getEvents()
+      setEvents(eventsData)
     } catch (error) {
       console.error('Failed to load events:', error)
       toast.error('Failed to load events')
@@ -192,8 +192,8 @@ export function EnhancedCommunitySection() {
 
   const loadChallenges = async () => {
     try {
-      // Challenges API not yet implemented, use empty array
-      setChallenges([])
+      const challengesData = await communityApi.getChallenges()
+      setChallenges(challengesData)
     } catch (error) {
       console.error('Failed to load challenges:', error)
       toast.error('Failed to load challenges')
@@ -203,8 +203,9 @@ export function EnhancedCommunitySection() {
 
   const handleJoinEvent = async (eventId: string) => {
     try {
-      // Events API not yet implemented
-      toast.info('Events feature coming soon!')
+      await communityApi.joinEvent(eventId)
+      toast.success('Successfully joined event!')
+      await loadEvents() // Refresh events list
     } catch (error) {
       console.error('Failed to join event:', error)
       toast.error('Failed to join event')
@@ -213,8 +214,9 @@ export function EnhancedCommunitySection() {
 
   const handleLeaveEvent = async (eventId: string) => {
     try {
-      // Events API not yet implemented
-      toast.info('Events feature coming soon!')
+      await communityApi.leaveEvent(eventId)
+      toast.success('Successfully left event')
+      await loadEvents() // Refresh events list
     } catch (error) {
       console.error('Failed to leave event:', error)
       toast.error('Failed to leave event')
@@ -223,8 +225,9 @@ export function EnhancedCommunitySection() {
 
   const handleJoinChallenge = async (challengeId: string) => {
     try {
-      // Challenges API not yet implemented
-      toast.info('Challenges feature coming soon!')
+      await communityApi.joinChallenge(challengeId)
+      toast.success('Successfully joined challenge!')
+      await loadChallenges() // Refresh challenges list
     } catch (error) {
       console.error('Failed to join challenge:', error)
       toast.error('Failed to join challenge')
@@ -233,8 +236,9 @@ export function EnhancedCommunitySection() {
 
   const handleLeaveChallenge = async (challengeId: string) => {
     try {
-      // Challenges API not yet implemented
-      toast.info('Challenges feature coming soon!')
+      await communityApi.leaveChallenge(challengeId)
+      toast.success('Successfully left challenge')
+      await loadChallenges() // Refresh challenges list
     } catch (error) {
       console.error('Failed to leave challenge:', error)
       toast.error('Failed to leave challenge')
@@ -243,8 +247,16 @@ export function EnhancedCommunitySection() {
 
   const handleCreateEvent = async (eventData: Partial<CommunityEvent>) => {
     try {
-      // Events API not yet implemented
-      toast.info('Events feature coming soon!')
+      await communityApi.createEvent({
+        title: eventData.title!,
+        description: eventData.description!,
+        start_time: eventData.start_time!,
+        end_time: eventData.end_time!,
+        location: eventData.location,
+        is_virtual: eventData.is_virtual!
+      })
+      toast.success('Event created successfully!')
+      await loadEvents() // Refresh events list
       return null
     } catch (error) {
       console.error('Failed to create event:', error)
@@ -255,8 +267,16 @@ export function EnhancedCommunitySection() {
 
   const handleCreateChallenge = async (challengeData: Partial<Challenge>) => {
     try {
-      // Challenges API not yet implemented
-      toast.info('Challenges feature coming soon!')
+      await communityApi.createChallenge({
+        title: challengeData.title!,
+        description: challengeData.description!,
+        category: challengeData.category!,
+        duration_days: challengeData.duration_days!,
+        start_date: challengeData.start_date!,
+        end_date: challengeData.end_date!
+      })
+      toast.success('Challenge created successfully!')
+      await loadChallenges() // Refresh challenges list
       return null
     } catch (error) {
       console.error('Failed to create challenge:', error)

@@ -14,7 +14,7 @@ import {
   ArrowDown
 } from "@phosphor-icons/react"
 import { useMoods } from "@/hooks/useMoods"
-import { MoodEntry } from "@/types"
+import { MoodEntry } from "@/types/index"
 import { motion, AnimatePresence } from "framer-motion"
 
 interface TooltipData {
@@ -29,7 +29,7 @@ interface ChartProps {
 }
 
 export function EnhancedMoodChart({ className }: ChartProps) {
-  const { moods } = useMoods()
+  const { moods, getRecentMoods, loading } = useMoods()
   const [timeRange, setTimeRange] = useState<'week' | 'month' | 'quarter'>('week')
   const [tooltip, setTooltip] = useState<TooltipData>({ 
     mood: {} as MoodEntry, 
@@ -39,6 +39,24 @@ export function EnhancedMoodChart({ className }: ChartProps) {
   })
   const [hoveredIndex, setHoveredIndex] = useState<number | null>(null)
   const svgRef = useRef<SVGSVGElement>(null)
+
+  // Load mood data on mount
+  useEffect(() => {
+    getRecentMoods(50).catch(err => {
+      console.log('Could not load mood data, using test data:', err)
+    })
+  }, [getRecentMoods])
+
+  // Create test data if no moods are available
+  const testMoods: MoodEntry[] = moods.length === 0 ? [
+    { id: '1', mood: 'excellent', mood_level: 5, timestamp: Date.now() - 6 * 24 * 60 * 60 * 1000 },
+    { id: '2', mood: 'good', mood_level: 4, timestamp: Date.now() - 5 * 24 * 60 * 60 * 1000 },
+    { id: '3', mood: 'neutral', mood_level: 3, timestamp: Date.now() - 4 * 24 * 60 * 60 * 1000 },
+    { id: '4', mood: 'low', mood_level: 2, timestamp: Date.now() - 3 * 24 * 60 * 60 * 1000 },
+    { id: '5', mood: 'good', mood_level: 4, timestamp: Date.now() - 2 * 24 * 60 * 60 * 1000 },
+    { id: '6', mood: 'excellent', mood_level: 5, timestamp: Date.now() - 1 * 24 * 60 * 60 * 1000 },
+    { id: '7', mood: 'good', mood_level: 4, timestamp: Date.now() }
+  ] : moods
 
   // Get data based on time range
   const getFilteredMoods = () => {
@@ -57,7 +75,7 @@ export function EnhancedMoodChart({ className }: ChartProps) {
         break
     }
     
-    return moods
+    return testMoods
       .filter(mood => new Date(mood.timestamp) >= cutoffDate)
       .sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime())
   }
@@ -105,7 +123,7 @@ export function EnhancedMoodChart({ className }: ChartProps) {
 
   const trend = calculateTrend()
 
-  const handleMouseMove = (event: React.MouseEvent<SVGSVGElement>, mood: MoodEntry, index: number) => {
+  const handleMouseMove = (event: React.MouseEvent, mood: MoodEntry, index: number) => {
     if (!svgRef.current) return
     
     const rect = svgRef.current.getBoundingClientRect()
@@ -126,7 +144,7 @@ export function EnhancedMoodChart({ className }: ChartProps) {
     setHoveredIndex(null)
   }
 
-  const formatTimestamp = (timestamp: string) => {
+  const formatTimestamp = (timestamp: number | string) => {
     const date = new Date(timestamp)
     const timeOptions: Intl.DateTimeFormatOptions = { 
       hour: '2-digit', 
@@ -146,6 +164,25 @@ export function EnhancedMoodChart({ className }: ChartProps) {
   const chartWidth = 400
   const chartHeight = 200
   const padding = 40
+
+  if (loading) {
+    return (
+      <Card className={className}>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <Calendar className="text-primary" size={20} />
+            Mood Timeline
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="text-center text-muted-foreground py-8">
+            <div className="animate-spin w-8 h-8 border-2 border-primary border-t-transparent rounded-full mx-auto mb-2"></div>
+            <p>Loading mood data...</p>
+          </div>
+        </CardContent>
+      </Card>
+    )
+  }
 
   if (filteredMoods.length === 0) {
     return (
@@ -188,6 +225,10 @@ export function EnhancedMoodChart({ className }: ChartProps) {
                 ({(trend.change * 20).toFixed(0)}%)
               </Badge>
             )}
+            {/* Debug info */}
+            <Badge variant="outline" className="ml-2 text-xs">
+              {moods.length === 0 ? 'Test Data' : 'Live Data'} ({filteredMoods.length} entries)
+            </Badge>
           </CardTitle>
           
           <div className="flex items-center gap-2">

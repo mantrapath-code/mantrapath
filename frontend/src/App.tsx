@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Button } from "@/components/ui/button"
-import { ChatCircle, X, SignOut } from "@phosphor-icons/react"
+import { ChatCircle, X } from "@phosphor-icons/react"
 import { MoodTracker } from "@/components/MoodTracker"
 import { JournalSection } from "@/components/JournalSection"
 import { ChatBot } from "@/components/ChatBot"
@@ -11,6 +11,7 @@ import { MoodPatternNotifications } from "@/components/MoodPatternNotifications"
 import { RealTimeNotifications } from "@/components/RealTimeNotifications"
 import { AuthScreen } from "@/components/AuthScreen"
 import { DevelopmentBanner } from "@/components/DevelopmentBanner"
+import { ProfileDropdown, ProfileDashboard } from "@/components/profile"
 import { AuthProvider, useAuth } from "@/hooks/useAuth"
 import { useMoodBasedTheme } from "@/hooks/useMoodTheme"
 import { useWebSocket } from "@/hooks/useWebSocket"
@@ -26,6 +27,7 @@ function AppContent() {
   const [activeTab, setActiveTab] = useState("dashboard")
   const [showChat, setShowChat] = useState(false)
   const [isMobile, setIsMobile] = useState(false)
+  const [showProfile, setShowProfile] = useState(false)
   
   // Initialize mood-based theme system
   const { currentTheme } = useMoodBasedTheme()
@@ -81,7 +83,7 @@ function AppContent() {
               </div>
             </motion.div>
             
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-3">
               <RealTimeNotifications />
               
               <Button
@@ -93,15 +95,19 @@ function AppContent() {
                 <ChatCircle size={16} />
               </Button>
               
-              <Button
-                onClick={logout}
-                variant="ghost"
-                size="sm"
-                className="text-muted-foreground hover:text-foreground"
-              >
-                <SignOut size={16} />
-                <span className="hidden sm:inline ml-2">Logout</span>
-              </Button>
+              <ProfileDropdown
+                user={user!}
+                onProfileView={() => setShowProfile(true)}
+                onProfileEdit={() => {
+                  setShowProfile(true)
+                  // Could set a specific tab here for editing
+                }}
+                onSettings={() => {
+                  setShowProfile(true)
+                  // Could set a specific tab here for settings
+                }}
+                onLogout={logout}
+              />
             </div>
           </div>
         </div>
@@ -174,6 +180,31 @@ function AppContent() {
         </div>
       </div>
       
+      {/* Profile Dashboard Modal */}
+      <AnimatePresence>
+        {showProfile && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4"
+            onClick={() => setShowProfile(false)}
+          >
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95, y: 20 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.95, y: 20 }}
+              className="bg-background rounded-lg max-w-4xl w-full max-h-[90vh] overflow-y-auto"
+              onClick={(e) => e.stopPropagation()}
+            >
+                          <div className="p-6">
+              <ProfileDashboard onClose={() => setShowProfile(false)} />
+            </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
       {/* Mobile chatbot overlay */}
       <AnimatePresence>
         {isMobile && showChat && (

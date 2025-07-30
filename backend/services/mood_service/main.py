@@ -376,6 +376,330 @@ async def get_weekly_patterns(
         "total_weeks": len(weekly_averages)
     }
 
+@app.get("/api/v1/analytics/personalized-insights")
+async def get_personalized_insights(
+    current_user: dict = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """Generate personalized weekly mood insights with actionable recommendations"""
+    
+    user_id = current_user["user_id"]
+    
+    # Get mood data for the past 4 weeks for comprehensive analysis
+    four_weeks_ago = datetime.utcnow() - timedelta(weeks=4)
+    mood_entries = db.query(MoodEntry).filter(
+        and_(
+            MoodEntry.user_id == user_id,
+            MoodEntry.created_at >= four_weeks_ago
+        )
+    ).order_by(desc(MoodEntry.created_at)).all()
+    
+    # Get journal entries for context
+    journal_entries = db.query(JournalEntry).filter(
+        and_(
+            JournalEntry.user_id == user_id,
+            JournalEntry.created_at >= four_weeks_ago
+        )
+    ).order_by(desc(JournalEntry.created_at)).all()
+    
+    insights = []
+    
+    if not mood_entries:
+        return {
+            "insights": [],
+            "recommendations": [],
+            "optimal_times": [],
+            "weekly_summary": {
+                "current_week_score": 0,
+                "trend": "stable",
+                "improvement_areas": []
+            }
+        }
+    
+    # Analyze current week vs previous weeks
+    now = datetime.utcnow()
+    current_week_start = now - timedelta(days=now.weekday())
+    
+    current_week_moods = [m for m in mood_entries if m.created_at >= current_week_start]
+    previous_weeks_moods = [m for m in mood_entries if m.created_at < current_week_start]
+    
+    current_week_avg = sum(m.mood_score for m in current_week_moods) / len(current_week_moods) if current_week_moods else 0
+    previous_avg = sum(m.mood_score for m in previous_weeks_moods) / len(previous_weeks_moods) if previous_weeks_moods else 0
+    
+    # Generate trend insights
+    trend = "stable"
+    if current_week_avg > previous_avg + 0.5:
+        trend = "improving"
+        insights.append({
+            "id": "trend_positive",
+            "type": "achievement",
+            "title": "Positive Progress! 🌟",
+            "description": f"Your mood has improved by {((current_week_avg - previous_avg) * 10):.0f}% this week",
+            "actionable": "Keep doing what's working! Consider documenting your successful strategies.",
+            "priority": "medium",
+            "category": "mood"
+        })
+    elif current_week_avg < previous_avg - 0.5:
+        trend = "declining"
+        insights.append({
+            "id": "trend_concern",
+            "type": "support",
+            "title": "Gentle Check-in 💙",
+            "description": "Your mood has dipped slightly this week. This is completely normal.",
+            "actionable": "Consider reaching out to a friend, practicing self-care, or reviewing recent stressors.",
+            "priority": "high",
+            "category": "wellness"
+        })
+    
+    # Analyze time-of-day patterns for optimal intervention timing
+    time_patterns = {}
+    for mood in mood_entries:
+        hour = mood.created_at.hour
+        time_slot = "morning" if 6 <= hour < 12 else "afternoon" if 12 <= hour < 18 else "evening" if 18 <= hour < 22 else "night"
+        
+        if time_slot not in time_patterns:
+            time_patterns[time_slot] = []
+        time_patterns[time_slot].append(mood.mood_score)
+    
+    # Find optimal intervention times (when mood typically dips)
+    optimal_times = []
+    for time_slot, scores in time_patterns.items():
+        if len(scores) >= 3:
+            avg_score = sum(scores) / len(scores)
+            if avg_score < 6:  # Below neutral mood
+                optimal_times.append({
+                    "time_of_day": time_slot,
+                    "average_mood": avg_score,
+                    "recommendation": f"Consider scheduling wellness activities during {time_slot} when your mood typically dips",
+                    "effectiveness_score": 8.5 - avg_score  # Higher score for lower mood times
+                })
+    
+    # Analyze day-of-week patterns
+    day_patterns = {}
+    for mood in mood_entries:
+        day_name = mood.created_at.strftime("%A")
+        if day_name not in day_patterns:
+            day_patterns[day_name] = []
+        day_patterns[day_name].append(mood.mood_score)
+    
+    # Identify challenging days
+    challenging_days = []
+    for day, scores in day_patterns.items():
+        if len(scores) >= 2:
+            avg_score = sum(scores) / len(scores)
+            if avg_score < 6:
+                challenging_days.append(day)
+                insights.append({
+                    "id": f"day_pattern_{day.lower()}",
+                    "type": "pattern",
+                    "title": f"{day} Pattern Noticed",
+                    "description": f"Your mood tends to be lower on {day}s (avg: {avg_score:.1f}/10)",
+                    "actionable": f"Plan lighter activities and extra self-care on {day}s",
+                    "priority": "medium",
+                    "category": "pattern"
+                })
+    
+    # Generate personalized recommendations based on patterns
+    recommendations = []
+    
+    if current_week_avg < 6:
+        recommendations.append({
+            "id": "mood_boost",
+            "title": "Mood Enhancement Activities",
+            "description": "Activities proven to boost mood based on your patterns",
+            "actions": [
+                "Take a 10-minute walk in nature",
+                "Practice 5 minutes of deep breathing",
+                "Connect with a supportive friend",
+                "Listen to uplifting music"
+            ],
+            "estimated_time": "10-20 minutes",
+            "expected_benefit": "Immediate mood lift, sustained energy"
+        })
+    
+    if len(challenging_days) > 0:
+        recommendations.append({
+            "id": "challenging_day_prep",
+            "title": f"Prepare for {challenging_days[0]}s",
+            "description": "Proactive strategies for your typically challenging days",
+            "actions": [
+                f"Schedule something enjoyable for {challenging_days[0]} evening",
+                "Prepare comfort items the night before",
+                "Set a gentle morning routine",
+                "Plan check-ins with supportive people"
+            ],
+            "estimated_time": "5-15 minutes of preparation",
+            "expected_benefit": "Smoother difficult days, reduced stress"
+        })
+    
+    if len(optimal_times) > 0:
+        best_intervention_time = min(optimal_times, key=lambda x: x["average_mood"])
+        recommendations.append({
+            "id": "optimal_timing",
+            "title": f"Strategic {best_intervention_time['time_of_day'].title()} Support",
+            "description": f"Your mood typically dips during {best_intervention_time['time_of_day']} - perfect for proactive care",
+            "actions": [
+                f"Set a gentle reminder for {best_intervention_time['time_of_day']} wellness check-ins",
+                "Practice mindfulness during this time",
+                "Use this time for gentle movement or stretching",
+                "Connect with community support"
+            ],
+            "estimated_time": "5-10 minutes",
+            "expected_benefit": "Prevents mood dips, builds resilience"
+        })
+    
+    return {
+        "insights": insights,
+        "recommendations": recommendations,
+        "optimal_times": sorted(optimal_times, key=lambda x: x["effectiveness_score"], reverse=True),
+        "weekly_summary": {
+            "current_week_score": round(current_week_avg, 1),
+            "previous_weeks_score": round(previous_avg, 1),
+            "trend": trend,
+            "improvement_areas": challenging_days,
+            "total_entries": len(mood_entries),
+            "days_tracked_this_week": len(current_week_moods)
+        }
+    }
+
+@app.get("/api/v1/analytics/optimal-notification-times")
+async def get_optimal_notification_times(
+    current_user: dict = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """Calculate optimal times for notifications based on user's mood patterns"""
+    
+    user_id = current_user["user_id"]
+    
+    # Get mood data for the past 6 weeks for pattern analysis
+    six_weeks_ago = datetime.utcnow() - timedelta(weeks=6)
+    mood_entries = db.query(MoodEntry).filter(
+        and_(
+            MoodEntry.user_id == user_id,
+            MoodEntry.created_at >= six_weeks_ago
+        )
+    ).order_by(desc(MoodEntry.created_at)).all()
+    
+    if len(mood_entries) < 10:
+        # Default notification schedule for new users
+        return {
+            "optimal_times": [
+                {
+                    "hour": 9,
+                    "day_of_week": None,  # Any day
+                    "effectiveness_score": 7.5,
+                    "notification_type": "check_in",
+                    "reason": "Morning check-ins help set a positive tone for the day"
+                },
+                {
+                    "hour": 15,
+                    "day_of_week": None,
+                    "effectiveness_score": 8.0,
+                    "notification_type": "mood_boost",
+                    "reason": "Afternoon energy dips are common - perfect for gentle reminders"
+                },
+                {
+                    "hour": 20,
+                    "day_of_week": None,
+                    "effectiveness_score": 7.0,
+                    "notification_type": "reflection",
+                    "reason": "Evening reflection helps process the day and prepare for rest"
+                }
+            ],
+            "user_preferences": {
+                "quiet_hours": {"start": 22, "end": 7},
+                "frequency": "moderate",
+                "types": ["check_in", "mood_boost", "reflection"]
+            }
+        }
+    
+    # Analyze hourly patterns to find low mood periods (intervention opportunities)
+    hourly_patterns = {}
+    daily_patterns = {}
+    
+    for mood in mood_entries:
+        hour = mood.created_at.hour
+        day_of_week = mood.created_at.weekday()  # 0 = Monday
+        
+        if hour not in hourly_patterns:
+            hourly_patterns[hour] = []
+        hourly_patterns[hour].append(mood.mood_score)
+        
+        if day_of_week not in daily_patterns:
+            daily_patterns[day_of_week] = []
+        daily_patterns[day_of_week].append(mood.mood_score)
+    
+    # Find optimal intervention hours (lower mood = higher intervention value)
+    optimal_times = []
+    
+    for hour, scores in hourly_patterns.items():
+        if len(scores) >= 3:  # Need enough data points
+            avg_score = sum(scores) / len(scores)
+            if 7 <= hour <= 21:  # Only suggest during waking hours
+                effectiveness = 10 - avg_score  # Lower mood = higher effectiveness
+                
+                # Determine notification type based on time of day
+                if 6 <= hour <= 10:
+                    notification_type = "morning_boost"
+                    reason = f"Morning support when your energy is typically {avg_score:.1f}/10"
+                elif 11 <= hour <= 14:
+                    notification_type = "midday_check"
+                    reason = f"Midday wellness check when mood averages {avg_score:.1f}/10"
+                elif 15 <= hour <= 18:
+                    notification_type = "afternoon_support"
+                    reason = f"Afternoon boost when you typically experience {avg_score:.1f}/10 mood"
+                else:
+                    notification_type = "evening_reflection"
+                    reason = f"Evening mindfulness when mood is typically {avg_score:.1f}/10"
+                
+                optimal_times.append({
+                    "hour": hour,
+                    "day_of_week": None,
+                    "effectiveness_score": round(effectiveness, 1),
+                    "notification_type": notification_type,
+                    "reason": reason,
+                    "average_mood_at_time": round(avg_score, 1),
+                    "sample_size": len(scores)
+                })
+    
+    # Find challenging days for day-specific notifications
+    challenging_days = []
+    for day, scores in daily_patterns.items():
+        if len(scores) >= 3:
+            avg_score = sum(scores) / len(scores)
+            if avg_score < 6:  # Below neutral
+                day_names = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"]
+                challenging_days.append({
+                    "day_of_week": day,
+                    "day_name": day_names[day],
+                    "average_mood": round(avg_score, 1),
+                    "recommended_hour": 8,  # Morning preparation
+                    "notification_type": "day_preparation",
+                    "reason": f"Prepare for {day_names[day]}s when your mood typically dips to {avg_score:.1f}/10"
+                })
+    
+    # Sort by effectiveness and select top 3-4 times
+    optimal_times.sort(key=lambda x: x["effectiveness_score"], reverse=True)
+    selected_times = optimal_times[:3]
+    
+    # Add challenging day notifications
+    selected_times.extend(challenging_days)
+    
+    return {
+        "optimal_times": selected_times,
+        "user_preferences": {
+            "quiet_hours": {"start": 22, "end": 7},
+            "frequency": "adaptive",  # Based on mood patterns
+            "types": ["check_in", "mood_boost", "reflection", "preventive"]
+        },
+        "analysis_summary": {
+            "data_points": len(mood_entries),
+            "analysis_period_weeks": 6,
+            "pattern_confidence": min(100, (len(mood_entries) / 42) * 100),  # 42 = ideal 1 entry per day for 6 weeks
+            "next_update": (datetime.utcnow() + timedelta(weeks=1)).isoformat()
+        }
+    }
+
 @app.get("/health")
 async def health_check():
     """Health check endpoint"""

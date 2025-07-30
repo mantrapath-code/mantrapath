@@ -51,7 +51,8 @@ services:
       - CONTENT_SERVICE_URL=http://content-service:8005
       - COMMUNITY_SERVICE_URL=http://community-service:8006
       - NOTIFICATION_SERVICE_URL=http://notification-service:8007
-      - MEDIA_SERVICE_URL=http://media-service:8008
+      - ML_SERVICE_URL=http://ml-service:8008
+      - MEDIA_SERVICE_URL=http://media-service:8009
     depends_on:
       postgres:
         condition: service_healthy
@@ -70,6 +71,8 @@ services:
       community-service:
         condition: service_started
       notification-service:
+        condition: service_started
+      ml-service:
         condition: service_started
       media-service:
         condition: service_started
@@ -194,6 +197,7 @@ services:
     restart: unless-stopped
 
   # Notification Service
+  # Notification Service
   notification-service:
     build:
       context: .
@@ -212,13 +216,36 @@ services:
       - mantrapath-network
     restart: unless-stopped
 
+  # ML Service
+  ml-service:
+    build:
+      context: .
+      dockerfile: services/ml_service/Dockerfile
+    ports:
+      - "8008:8008"
+    environment:
+      - DATABASE_URL=postgresql://mantrapath:mantrapath123@postgres:5432/mantrapath
+      - REDIS_URL=redis://redis:6379
+      - MOOD_SERVICE_URL=http://mood-service:8003
+      - NOTIFICATION_SERVICE_URL=http://notification-service:8007
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      mood-service:
+        condition: service_started
+    networks:
+      - mantrapath-network
+    restart: unless-stopped
+
   # Media Service
   media-service:
     build:
       context: .
       dockerfile: services/media_service/Dockerfile
     ports:
-      - "8008:8008"
+      - "8009:8009"
     environment:
       - DATABASE_URL=postgresql://mantrapath:mantrapath123@postgres:5432/mantrapath
       - REDIS_URL=redis://redis:6379

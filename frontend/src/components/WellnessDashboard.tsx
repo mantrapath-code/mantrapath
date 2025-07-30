@@ -249,27 +249,6 @@ export function WellnessDashboard() {
             <EnhancedMoodChart />
           )}
           
-          {/* Theme Debug Info - Remove in production */}
-          <Card className="border-orange-200 bg-orange-50/50">
-            <CardHeader>
-              <CardTitle className="text-sm text-orange-700">Theme Debug Info</CardTitle>
-            </CardHeader>
-            <CardContent className="text-xs space-y-2">
-              <div className="grid grid-cols-2 gap-2">
-                <div>Current Theme: <span className="font-mono">{currentTheme}</span></div>
-                <div>Current Mood: <span className="font-mono">{userCurrentMood}</span></div>
-                <div>Recommended Theme: <span className="font-mono">
-                  {Object.entries(availableThemes).find(([key, theme]) => 
-                    theme.moodRange.includes(userCurrentMood as any))?.[0] || 'default'}
-                </span></div>
-                <div>Is Changing: <span className="font-mono">{isThemeChanging ? 'Yes' : 'No'}</span></div>
-              </div>
-              <div className="text-orange-600">
-                Try logging a different mood in the Mood tab to see the theme change automatically!
-              </div>
-            </CardContent>
-          </Card>
-          
           {stats?.badges && stats.badges.length > 0 && (
             <Card>
               <CardHeader>

@@ -167,18 +167,34 @@ class ApiService {
       } as T)
     }
 
-    // Mock mood data
+    // Mock mood data with realistic patterns
     if (endpoint.startsWith('/api/v1/mood/') && options.method !== 'POST') {
-      const mockMoods = Array.from({ length: 30 }, (_, i) => ({
-        id: `mood_${i}`,
-        mood_score: Math.floor(Math.random() * 10) + 1,
-        energy_level: Math.floor(Math.random() * 10) + 1,
-        stress_level: Math.floor(Math.random() * 10) + 1,
-        sleep_quality: Math.floor(Math.random() * 10) + 1,
-        notes: `Mock mood entry ${i}`,
-        context_tags: ['work', 'exercise', 'sleep'][Math.floor(Math.random() * 3)] ? ['work'] : [],
-        created_at: new Date(Date.now() - i * 24 * 60 * 60 * 1000).toISOString()
-      }))
+      const moods = ['very-low', 'low', 'neutral', 'good', 'excellent']
+      const mockMoods = Array.from({ length: 30 }, (_, i) => {
+        // Create realistic mood patterns
+        const dayOffset = i * 24 * 60 * 60 * 1000
+        const baseScore = 5 + Math.sin(i * 0.3) * 2 + Math.random() * 2 // Creates wave pattern with randomness
+        const moodScore = Math.max(1, Math.min(10, Math.floor(baseScore)))
+        
+        return {
+          id: `mood_${i}`,
+          mood_score: moodScore,
+          energy_level: Math.floor(Math.random() * 5) + 3, // 3-7 range
+          stress_level: Math.floor(Math.random() * 5) + 3,
+          sleep_quality: Math.floor(Math.random() * 5) + 3,
+          notes: `Mood entry from ${Math.floor(i/7)} weeks ago`,
+          context_tags: [
+            ['work', 'stress'], 
+            ['exercise', 'health'], 
+            ['social', 'friends'], 
+            ['relaxation'], 
+            ['creative']
+          ][Math.floor(Math.random() * 5)],
+          created_at: new Date(Date.now() - dayOffset).toISOString()
+        }
+      }).reverse() // Show newest first
+      
+      console.log('🔧 Generated mock mood data:', mockMoods.length, 'entries')
       return Promise.resolve(mockMoods as T)
     }
 
@@ -652,6 +668,67 @@ class ApiService {
     }>('/api/v1/analytics/patterns/weekly')
   }
 
+  async getPersonalizedInsights() {
+    return this.request<{
+      insights: Array<{
+        id: string
+        type: string
+        title: string
+        description: string
+        actionable: string
+        priority: string
+        category: string
+      }>
+      recommendations: Array<{
+        id: string
+        title: string
+        description: string
+        actions: string[]
+        estimated_time: string
+        expected_benefit: string
+      }>
+      optimal_times: Array<{
+        time_of_day: string
+        average_mood: number
+        recommendation: string
+        effectiveness_score: number
+      }>
+      weekly_summary: {
+        current_week_score: number
+        previous_weeks_score: number
+        trend: string
+        improvement_areas: string[]
+        total_entries: number
+        days_tracked_this_week: number
+      }
+    }>('/api/v1/analytics/personalized-insights')
+  }
+
+  async getOptimalNotificationTimes() {
+    return this.request<{
+      optimal_times: Array<{
+        hour: number
+        day_of_week: number | null
+        effectiveness_score: number
+        notification_type: string
+        reason: string
+        average_mood_at_time?: number
+        sample_size?: number
+      }>
+      user_preferences: {
+        quiet_hours: { start: number; end: number }
+        frequency: string
+        types: string[]
+      }
+      analysis_summary: {
+        data_points: number
+        analysis_period_weeks: number
+        pattern_confidence: number
+        next_update: string
+      }
+    }>('/api/v1/analytics/optimal-notification-times')
+  }
+
   // Community
   async getForums() {
     return this.request<Array<{
@@ -763,6 +840,165 @@ class ApiService {
         like_count: number
       }>
     }>(`/user/activity?limit=${limit}`)
+  }
+
+  // Events & Challenges
+  async getEvents() {
+    return this.request<Array<{
+      id: string
+      title: string
+      description: string
+      start_time: string
+      end_time: string
+      location?: string
+      is_virtual: boolean
+      participant_count: number
+      is_participating: boolean
+      created_at: string
+    }>>('/forums/events')
+  }
+
+  async createEvent(eventData: {
+    title: string
+    description: string
+    start_time: string
+    end_time: string
+    location?: string
+    is_virtual: boolean
+  }) {
+    return this.request('/forums/events', {
+      method: 'POST',
+      body: JSON.stringify(eventData),
+    })
+  }
+
+  async joinEvent(eventId: string) {
+    return this.request(`/forums/events/${eventId}/join`, {
+      method: 'POST',
+    })
+  }
+
+  async leaveEvent(eventId: string) {
+    return this.request(`/forums/events/${eventId}/leave`, {
+      method: 'DELETE',
+    })
+  }
+
+  async getChallenges() {
+    return this.request<Array<{
+      id: string
+      title: string
+      description: string
+      category: string
+      duration_days: number
+      start_date: string
+      end_date: string
+      participant_count: number
+      is_participating: boolean
+      created_at: string
+    }>>('/forums/challenges')
+  }
+
+  async createChallenge(challengeData: {
+    title: string
+    description: string
+    category: string
+    duration_days: number
+    start_date: string
+    end_date: string
+  }) {
+    return this.request('/forums/challenges', {
+      method: 'POST',
+      body: JSON.stringify(challengeData),
+    })
+  }
+
+  async joinChallenge(challengeId: string) {
+    return this.request(`/forums/challenges/${challengeId}/join`, {
+      method: 'POST',
+    })
+  }
+
+  async leaveChallenge(challengeId: string) {
+    return this.request(`/forums/challenges/${challengeId}/leave`, {
+      method: 'DELETE',
+    })
+  }
+
+  // Profile Service - uses different port
+  private async profileRequest<T>(
+    endpoint: string,
+    options: RequestInit = {}
+  ): Promise<T> {
+    const profileServiceUrl = 'http://localhost:8002'
+    const url = `${profileServiceUrl}${endpoint}`
+    
+    const config: RequestInit = {
+      ...options,
+      headers: {
+        ...this.getHeaders(),
+        ...options.headers,
+      },
+    }
+
+    try {
+      const response = await fetch(url, config)
+      return this.handleResponse<T>(response)
+    } catch (error) {
+      console.error('Profile service request failed:', error)
+      throw error
+    }
+  }
+
+  async getMyProfile() {
+    return this.profileRequest<{
+      id: string
+      user_id: string
+      bio?: string
+      avatar_url?: string
+      timezone: string
+      date_of_birth?: string
+      location?: string
+      theme: string
+      privacy_level: string
+      created_at: string
+      updated_at: string
+    }>('/api/profiles/me')
+  }
+
+  async updateProfile(profileData: {
+    bio?: string
+    avatar_url?: string
+    timezone?: string
+    date_of_birth?: string
+    location?: string
+  }) {
+    return this.profileRequest('/api/profiles/me', {
+      method: 'PUT',
+      body: JSON.stringify(profileData)
+    })
+  }
+
+  async getProfileById(profileId: string) {
+    return this.profileRequest(`/api/profiles/${profileId}`)
+  }
+
+  async getMyProfileStats() {
+    // Get mood entries count and average
+    const moodEntries = await this.getMoodEntries(1000) // Get more entries for accurate stats
+    const daysActive = new Set(moodEntries.map((entry: any) => 
+      new Date(entry.created_at).toDateString()
+    )).size
+    
+    const avgMoodScore = moodEntries.length > 0 
+      ? moodEntries.reduce((sum: number, entry: any) => sum + entry.mood_score, 0) / moodEntries.length
+      : 0
+
+    return {
+      daysActive,
+      moodEntries: moodEntries.length,
+      avgMoodScore: Number(avgMoodScore.toFixed(1))
+    }
   }
 
   // Chatbot
@@ -906,6 +1142,8 @@ export const moodApi = {
   createEntry: apiService.createMoodEntry.bind(apiService),
   getAnalytics: apiService.getAnalyticsOverview.bind(apiService),
   getWeeklyPatterns: apiService.getWeeklyPatterns.bind(apiService),
+  getPersonalizedInsights: apiService.getPersonalizedInsights.bind(apiService),
+  getOptimalNotificationTimes: apiService.getOptimalNotificationTimes.bind(apiService),
 }
 
 export const communityApi = {
@@ -920,15 +1158,15 @@ export const communityApi = {
   removeLike: apiService.unlikeContent.bind(apiService),
   getUserStats: apiService.getUserStats.bind(apiService),
   getUserActivity: apiService.getUserActivity.bind(apiService),
-  // Add missing functions for events and challenges
-  getEvents: () => Promise.resolve([]),
-  getChallenges: () => Promise.resolve([]),
-  joinEvent: (eventId: string) => Promise.resolve({ message: 'Joined event' }),
-  leaveEvent: (eventId: string) => Promise.resolve({ message: 'Left event' }),
-  createEvent: (eventData: any) => Promise.resolve({ id: Date.now().toString(), ...eventData }),
-  joinChallenge: (challengeId: string) => Promise.resolve({ message: 'Joined challenge' }),
-  leaveChallenge: (challengeId: string) => Promise.resolve({ message: 'Left challenge' }),
-  createChallenge: (challengeData: any) => Promise.resolve({ id: Date.now().toString(), ...challengeData }),
+  // Events & Challenges - now using real API methods
+  getEvents: apiService.getEvents.bind(apiService),
+  getChallenges: apiService.getChallenges.bind(apiService),
+  joinEvent: apiService.joinEvent.bind(apiService),
+  leaveEvent: apiService.leaveEvent.bind(apiService),
+  createEvent: apiService.createEvent.bind(apiService),
+  joinChallenge: apiService.joinChallenge.bind(apiService),
+  leaveChallenge: apiService.leaveChallenge.bind(apiService),
+  createChallenge: apiService.createChallenge.bind(apiService),
 }
 
 export const notificationApi = {

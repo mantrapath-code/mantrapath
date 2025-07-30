@@ -39,6 +39,7 @@ import { useMoodAnalytics } from "@/hooks/useWellness"
 import { useKV } from '@/hooks/useKV'
 import { useCommunityData } from '@/hooks/useCommunityData'
 import { formatRelativeTime } from '@/utils/timeFormat'
+import { PersonalizedInsights } from './PersonalizedInsights'
 
 interface SharedMoodPattern {
   id: string
@@ -124,7 +125,7 @@ export function MoodPatternSharing() {
     threads_created: 0,
     likes_received: 0
   }
-  const [activeTab, setActiveTab] = useState('sharing')
+  const [activeTab, setActiveTab] = useState('insights')
   const [showShareDialog, setShowShareDialog] = useState(false)
   const [selectedPattern, setSelectedPattern] = useState<SharedMoodPattern | null>(null)
   const [newShare, setNewShare] = useState({
@@ -442,12 +443,18 @@ export function MoodPatternSharing() {
         </CardHeader>
         <CardContent>
           <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-            <TabsList className="grid w-full grid-cols-4">
+            <TabsList className="grid w-full grid-cols-5">
+              <TabsTrigger value="insights">Personalized Insights</TabsTrigger>
               <TabsTrigger value="sharing">Pattern Sharing</TabsTrigger>
               <TabsTrigger value="community">Community Activity</TabsTrigger>
               <TabsTrigger value="my-patterns">My Shares</TabsTrigger>
               <TabsTrigger value="stats">My Impact</TabsTrigger>
             </TabsList>
+
+            <TabsContent value="insights" className="space-y-4">
+              {/* Enhanced Personalized Insights with Smart Notifications */}
+              <PersonalizedInsights />
+            </TabsContent>
 
             <TabsContent value="community" className="space-y-4">
               {/* Main Community Activity Section */}

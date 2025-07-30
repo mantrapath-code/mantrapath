@@ -420,10 +420,10 @@ async def get_notification_preferences(
         return NotificationPreferences()
     
     return NotificationPreferences(
-        email_notifications=profile.email_notifications,
-        push_notifications=profile.push_notifications,
-        mood_reminders=profile.mood_reminders,
-        weekly_reports=profile.weekly_reports,
+        email_notifications=profile.notifications_enabled,
+        push_notifications=profile.notifications_enabled,
+        mood_reminders=profile.daily_reminder_enabled,
+        weekly_reports=profile.weekly_report_enabled,
         # Default values for missing fields
         community_updates=True,
         crisis_alerts=True
@@ -444,16 +444,15 @@ async def update_notification_preferences(
     if not profile:
         # Create profile if it doesn't exist
         profile = UserProfile(
-            id=uuid.uuid4(),
+            id=str(uuid.uuid4()),
             user_id=current_user["user_id"]
         )
         db.add(profile)
     
-    # Update preferences
-    profile.email_notifications = preferences.email_notifications
-    profile.push_notifications = preferences.push_notifications
-    profile.mood_reminders = preferences.mood_reminders
-    profile.weekly_reports = preferences.weekly_reports
+    # Update preferences (map to actual UserProfile fields)
+    profile.notifications_enabled = preferences.email_notifications or preferences.push_notifications
+    profile.daily_reminder_enabled = preferences.mood_reminders
+    profile.weekly_report_enabled = preferences.weekly_reports
     
     db.commit()
     
@@ -506,10 +505,10 @@ def should_send_notification(notification_type: str, profile: UserProfile) -> bo
     """Check if notification should be sent based on user preferences"""
     
     type_preference_map = {
-        "mood_reminder": profile.mood_reminders,
-        "insight": profile.push_notifications,
+        "mood_reminder": profile.daily_reminder_enabled,
+        "insight": profile.notifications_enabled,
         "community": True,  # Always allow community notifications
-        "system": profile.push_notifications,
+        "system": profile.notifications_enabled,
         "crisis": True  # Always allow crisis notifications
     }
     
@@ -743,6 +742,239 @@ async def trigger_mood_pattern_notification(
 
 @app.post("/notify/weekly-report")
 async def send_weekly_report(
+    user_id: str,
+    report_data: Dict[str, Any],
+    background_tasks: BackgroundTasks,
+    db: Session = Depends(get_db),
+    current_user: Dict[str, Any] = Depends(get_current_user)
+):
+    """Send weekly mood report notification"""
+    
+    title = "Your Weekly Mood Report is Ready! 📊"
+    message = f"This week's insights: {report_data.get('summary', 'Your personalized mood analysis is available.')}"
+    
+    notification_data = NotificationCreate(
+        title=title,
+        message=message,
+        notification_type="weekly_report",
+        action_url="/reports/weekly",
+        priority="normal",
+        send_immediately=True
+    )
+    
+    notification = Notification(
+        id=uuid.uuid4(),
+        user_id=user_id,
+        title=notification_data.title,
+        message=notification_data.message,
+        notification_type=notification_data.notification_type,
+        action_url=notification_data.action_url,
+        priority=notification_data.priority,
+        is_sent=False
+    )
+    
+    db.add(notification)
+    db.commit()
+    
+    background_tasks.add_task(
+        process_notification_immediately,
+        str(notification.id),
+        db,
+        user_id
+    )
+    
+    return {"message": "Weekly report notification sent", "notification_id": str(notification.id)}
+
+@app.post("/notify/schedule-smart-notifications")
+async def schedule_smart_notifications(
+    background_tasks: BackgroundTasks,
+    db: Session = Depends(get_db),
+    current_user: Dict[str, Any] = Depends(get_current_user)
+):
+    """Schedule personalized notifications based on user's optimal times"""
+    
+    user_id = current_user["user_id"]
+    
+    try:
+        # Get optimal notification times from mood service
+        import httpx
+        async with httpx.AsyncClient() as client:
+            mood_service_url = os.getenv("MOOD_SERVICE_URL", "http://localhost:8001")
+            response = await client.get(
+                f"{mood_service_url}/api/v1/analytics/optimal-notification-times",
+                headers={"Authorization": f"Bearer {current_user.get('token', '')}"}
+            )
+            
+            if response.status_code == 200:
+                timing_data = response.json()
+                optimal_times = timing_data.get("optimal_times", [])
+                
+                scheduled_count = 0
+                
+                for time_slot in optimal_times[:3]:  # Schedule top 3 optimal times
+                    notification_type = time_slot.get("notification_type", "check_in")
+                    hour = time_slot.get("hour", 9)
+                    day_of_week = time_slot.get("day_of_week")
+                    effectiveness = time_slot.get("effectiveness_score", 7.0)
+                    reason = time_slot.get("reason", "Personalized wellness reminder")
+                    
+                    # Generate appropriate notification content
+                    title, message, action_url = generate_notification_content(notification_type, effectiveness)
+                    
+                    # Store in Redis for scheduler
+                    schedule_key = f"notification_schedule:{user_id}:{uuid.uuid4()}"
+                    schedule_data = {
+                        "user_id": user_id,
+                        "notification_type": notification_type,
+                        "title": title,
+                        "message": message,
+                        "action_url": action_url,
+                        "hour": hour,
+                        "day_of_week": day_of_week,
+                        "effectiveness_score": effectiveness,
+                        "created_at": datetime.utcnow().isoformat()
+                    }
+                    
+                    redis_client.setex(schedule_key, 604800, json.dumps(schedule_data))  # Store for 1 week
+                    scheduled_count += 1
+                
+                return {
+                    "message": f"Successfully scheduled {scheduled_count} personalized notifications",
+                    "optimal_times": optimal_times,
+                    "next_notification": calculate_next_notification_time(optimal_times)
+                }
+            else:
+                # Fallback to default schedule
+                return await schedule_default_notifications(user_id, db, background_tasks)
+                
+    except Exception as e:
+        logging.error(f"Error scheduling smart notifications: {e}")
+        # Fallback to default schedule
+        return await schedule_default_notifications(user_id, db, background_tasks)
+
+def generate_notification_content(notification_type: str, effectiveness: float) -> tuple[str, str, str]:
+    """Generate appropriate notification content based on type and effectiveness"""
+    
+    if notification_type == "morning_boost":
+        return (
+            "Good Morning! 🌅",
+            "Start your day with intention. How are you feeling right now?",
+            "/mood"
+        )
+    elif notification_type == "midday_check":
+        return (
+            "Midday Check-in ☀️",
+            "Take a moment to notice how you're doing. You're halfway through the day!",
+            "/mood"
+        )
+    elif notification_type == "afternoon_support":
+        return (
+            "Afternoon Energy Boost 🌟",
+            "Feeling the afternoon dip? Try a quick breathing exercise or short walk.",
+            "/wellness"
+        )
+    elif notification_type == "evening_reflection":
+        return (
+            "Evening Reflection 🌙",
+            "How did today go? Take a moment to reflect and prepare for rest.",
+            "/journal"
+        )
+    elif notification_type == "day_preparation":
+        return (
+            "Gentle Day Prep 💙",
+            "Today might be challenging. Remember to be kind to yourself and use your support tools.",
+            "/community"
+        )
+    elif notification_type == "preventive":
+        if effectiveness > 8:
+            return (
+                "Wellness Check 🎯",
+                "This is typically when you need extra support. You've got this!",
+                "/mood"
+            )
+        else:
+            return (
+                "Mindful Moment 🧘",
+                "Perfect time for a brief mindfulness practice or mood check.",
+                "/wellness"
+            )
+    else:
+        return (
+            "Wellness Reminder 🌱",
+            "A gentle reminder to check in with yourself. How are you doing?",
+            "/mood"
+        )
+
+async def schedule_default_notifications(user_id: str, db: Session, background_tasks: BackgroundTasks):
+    """Schedule default notifications for users without enough data for personalization"""
+    
+    default_times = [
+        {"hour": 9, "type": "morning_check", "effectiveness": 7.5},
+        {"hour": 15, "type": "afternoon_support", "effectiveness": 8.0},
+        {"hour": 20, "type": "evening_reflection", "effectiveness": 7.0}
+    ]
+    
+    scheduled_count = 0
+    
+    for time_slot in default_times:
+        title, message, action_url = generate_notification_content(
+            time_slot["type"], 
+            time_slot["effectiveness"]
+        )
+        
+        schedule_key = f"notification_schedule:{user_id}:{uuid.uuid4()}"
+        schedule_data = {
+            "user_id": user_id,
+            "notification_type": time_slot["type"],
+            "title": title,
+            "message": message,
+            "action_url": action_url,
+            "hour": time_slot["hour"],
+            "day_of_week": None,
+            "effectiveness_score": time_slot["effectiveness"],
+            "created_at": datetime.utcnow().isoformat()
+        }
+        
+        redis_client.setex(schedule_key, 604800, json.dumps(schedule_data))
+        scheduled_count += 1
+    
+    return {
+        "message": f"Scheduled {scheduled_count} default notifications. Will personalize as you use the app more.",
+        "note": "Notifications will become more personalized as we learn your patterns"
+    }
+
+def calculate_next_notification_time(optimal_times: List[Dict]) -> str:
+    """Calculate when the next notification will be sent"""
+    if not optimal_times:
+        return "No notifications scheduled"
+    
+    now = datetime.utcnow()
+    next_times = []
+    
+    for time_slot in optimal_times:
+        hour = time_slot.get("hour", 9)
+        day_of_week = time_slot.get("day_of_week")
+        
+        if day_of_week is not None:
+            # Specific day of week
+            days_ahead = day_of_week - now.weekday()
+            if days_ahead <= 0:  # Target day has passed this week
+                days_ahead += 7
+            next_time = now + timedelta(days=days_ahead)
+            next_time = next_time.replace(hour=hour, minute=0, second=0, microsecond=0)
+        else:
+            # Daily notification
+            next_time = now.replace(hour=hour, minute=0, second=0, microsecond=0)
+            if next_time <= now:
+                next_time += timedelta(days=1)
+        
+        next_times.append(next_time)
+    
+    next_notification = min(next_times)
+    return next_notification.strftime("%Y-%m-%d %H:%M UTC")
+
+@app.post("/notify/weekly-report-legacy")
+async def send_weekly_report_legacy(
     user_id: str,
     report_data: Dict[str, Any],
     background_tasks: BackgroundTasks,

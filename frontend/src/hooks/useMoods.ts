@@ -1,7 +1,7 @@
 import { useState, useCallback, useEffect } from 'react'
 import { toast } from 'sonner'
 import { apiService } from '@/services/api'
-import { MoodEntry } from '@/types'
+import { MoodEntry } from '@/types/index'
 
 /**
  * Mood-specific hook for tracking and managing mood entries
@@ -26,10 +26,11 @@ export function useMoods() {
 
   // Convert mood number back to string for frontend
   const numberToMood = (score: number): MoodEntry['mood'] => {
-    if (score <= 1.5) return 'very-low'
-    if (score <= 2.5) return 'low'
-    if (score <= 3.5) return 'neutral'
-    if (score <= 4.5) return 'good'
+    // Handle 1-10 scale from backend
+    if (score <= 2) return 'very-low'
+    if (score <= 4) return 'low'
+    if (score <= 6) return 'neutral'
+    if (score <= 8) return 'good'
     return 'excellent'
   }
 
@@ -54,17 +55,17 @@ export function useMoods() {
         mood_score: moodToNumber(mood),
         notes: note,
         context_tags: triggers
-      })
+      }) as any
 
       // Convert backend response to frontend format
       const moodEntry: MoodEntry = {
-        id: backendEntry.id,
+        id: backendEntry.id || `mood_${Date.now()}`,
         mood,
         mood_level: moodToNumber(mood),
         timestamp: Date.now(),
         note,
         triggers,
-        created_at: backendEntry.created_at
+        created_at: backendEntry.created_at || new Date().toISOString()
       }
 
       // Update local state
