@@ -144,8 +144,9 @@ export const moodThemes: Record<string, MoodTheme> = {
 
 export function useMoodBasedTheme() {
   const { moods } = useMoods()
-  const { stats, updateStats } = useUserStats()
+  const { stats } = useUserStats()
   const [isThemeChanging, setIsThemeChanging] = useState(false)
+  const [localTheme, setLocalTheme] = useState<string>('default')
 
   const getCurrentMood = () => {
     // Handle case when moods array is empty or backend is not available
@@ -174,11 +175,9 @@ export function useMoodBasedTheme() {
       root.style.setProperty(property, value)
     })
 
-    // Update stats with functional update to ensure persistence
-    updateStats(currentStats => ({ 
-      ...currentStats, 
-      currentTheme: themeName as any 
-    }))
+    // Store theme locally and update local state
+    localStorage.setItem('mantrapath_theme', themeName)
+    setLocalTheme(themeName)
 
     // Visual feedback for theme change
     setTimeout(() => setIsThemeChanging(false), 1000)
@@ -213,9 +212,11 @@ export function useMoodBasedTheme() {
     }
   }, [moods])
 
-  // Apply saved theme on component mount
+  // Initialize theme from localStorage on mount
   useEffect(() => {
-    const savedTheme = stats.currentTheme || 'default'
+    const savedTheme = localStorage.getItem('mantrapath_theme') || stats?.currentTheme || 'default'
+    setLocalTheme(savedTheme)
+    
     const theme = moodThemes[savedTheme]
     if (theme) {
       const root = document.documentElement
@@ -223,10 +224,20 @@ export function useMoodBasedTheme() {
         root.style.setProperty(property, value)
       })
     }
-  }, [stats.currentTheme])
+  }, [stats?.currentTheme])
+
+  // Auto-apply mood theme when moods change
+  useEffect(() => {
+    if (moods && moods.length > 0) {
+      const currentMood = getCurrentMood()
+      if (currentMood !== 'neutral') {
+        autoApplyMoodTheme()
+      }
+    }
+  }, [moods])
 
   return {
-    currentTheme: stats.currentTheme || 'default',
+    currentTheme: localTheme,
     availableThemes: moodThemes,
     applyTheme,
     autoApplyMoodTheme,

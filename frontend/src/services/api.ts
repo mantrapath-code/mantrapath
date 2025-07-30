@@ -121,9 +121,19 @@ class ApiService {
       const response = await fetch(url, config)
       return this.handleResponse<T>(response)
     } catch (error) {
-      console.error('API request failed, falling back to mock data:', error)
-      this.isBackendAvailable = false
-      return this.handleMockRequest<T>(endpoint, options)
+      // Only fall back to mock data for network/connection errors
+      // Don't use mock data for authentication or other API errors
+      console.error('API request failed:', error)
+      
+      if (error instanceof TypeError && error.message.includes('Failed to fetch')) {
+        // Network error - backend might be down
+        console.warn('Network error detected, backend may be unavailable')
+        this.isBackendAvailable = false
+        return this.handleMockRequest<T>(endpoint, options)
+      }
+      
+      // For other errors (auth, validation, etc.), throw the error
+      throw error
     }
   }
 
@@ -505,6 +515,14 @@ class ApiService {
     localStorage.setItem('mantrapath_token', response.access_token)
     localStorage.setItem('mantrapath_refresh_token', response.refresh_token)
     
+    // Also get and store user data for WebSocket and other services
+    try {
+      const userData = await this.getCurrentUser()
+      localStorage.setItem('user_data', JSON.stringify(userData))
+    } catch (error) {
+      console.warn('Failed to get user data after login:', error)
+    }
+    
     return response
   }
 
@@ -524,6 +542,14 @@ class ApiService {
     localStorage.setItem('mantrapath_token', response.access_token)
     localStorage.setItem('mantrapath_refresh_token', response.refresh_token)
     
+    // Also get and store user data for WebSocket and other services
+    try {
+      const currentUser = await this.getCurrentUser()
+      localStorage.setItem('user_data', JSON.stringify(currentUser))
+    } catch (error) {
+      console.warn('Failed to get user data after registration:', error)
+    }
+    
     return response
   }
 
@@ -541,6 +567,7 @@ class ApiService {
     this.token = null
     localStorage.removeItem('mantrapath_token')
     localStorage.removeItem('mantrapath_refresh_token')
+    localStorage.removeItem('user_data') // Also clear user data
   }
 
   // Mood tracking

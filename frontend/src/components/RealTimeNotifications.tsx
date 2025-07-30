@@ -19,6 +19,7 @@ import { useWebSocket } from '@/hooks/useWebSocket'
 import { notificationApi } from '@/services/api'
 import { SmartNotificationScheduler } from './SmartNotificationScheduler'
 import { formatRelativeTimeDescriptive } from '@/utils/timeFormat'
+import { useAuth } from '@/hooks/useAuth'
 
 interface Notification {
   id: string
@@ -36,10 +37,19 @@ export function RealTimeNotifications() {
   const [unreadCount, setUnreadCount] = useState(0)
   
   const { isConnected, lastMessage } = useWebSocket()
+  const { isAuthenticated } = useAuth()
 
   // Load initial notifications
   useEffect(() => {
     const loadNotifications = async () => {
+      // Only load notifications if user is authenticated
+      if (!isAuthenticated) {
+        console.log('🔐 User not authenticated - skipping notifications load')
+        setNotifications([])
+        setUnreadCount(0)
+        return
+      }
+
       try {
         // Try to load real notifications from backend
         const backendNotifications = await notificationApi.getNotifications(20)
@@ -59,50 +69,29 @@ export function RealTimeNotifications() {
           setNotifications(formattedNotifications)
           setUnreadCount(formattedNotifications.filter(n => !n.read).length)
         } else {
-          // Fallback to mock data
-          console.log('🔧 Using mock notification data (backend empty or unavailable)')
-          const mockNotifications: Notification[] = [
-            {
-              id: '1',
-              title: 'Weekly Report Ready',
-              message: 'Your weekly wellness report is now available',
-              type: 'info',
-              timestamp: new Date().toISOString(),
-              read: false
-            },
-            {
-              id: '2',
-              title: 'Mood Pattern Alert',
-              message: 'Your mood has been trending upward this week! 🌟',
-              type: 'mood_alert',
-              timestamp: new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString(),
-              read: false
-            }
-          ]
-          setNotifications(mockNotifications)
-          setUnreadCount(mockNotifications.filter(n => !n.read).length)
+          // No notifications from backend
+          console.log('📭 No notifications found from backend')
+          setNotifications([])
+          setUnreadCount(0)
         }
-      } catch (error) {
-        console.warn('⚠️ Failed to load notifications from backend, using mock data:', error)
+      } catch (error: any) {
+        console.warn('⚠️ Failed to load notifications from backend:', error)
         
-        // Fallback to mock data
-        const mockNotifications: Notification[] = [
-          {
-            id: '1',
-            title: 'Backend Unavailable',
-            message: 'Using offline mode. Start backend services for real-time notifications.',
-            type: 'info',
-            timestamp: new Date().toISOString(),
-            read: false
-          }
-        ]
-        setNotifications(mockNotifications)
-        setUnreadCount(mockNotifications.filter(n => !n.read).length)
+        // Handle authentication errors specifically
+        if (error.status === 401 || error.status === 403) {
+          console.log('🔐 Authentication required for notifications')
+        } else {
+          console.error('❌ Notification service error:', error)
+        }
+        
+        // Don't use mock data - keep notifications empty
+        setNotifications([])
+        setUnreadCount(0)
       }
     }
 
     loadNotifications()
-  }, [])
+  }, [isAuthenticated])
 
   const mapBackendTypeToFrontend = (backendType: string): Notification['type'] => {
     const typeMap = {

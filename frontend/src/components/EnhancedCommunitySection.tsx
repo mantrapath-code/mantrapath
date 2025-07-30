@@ -151,10 +151,12 @@ export function EnhancedCommunitySection() {
   // Load initial data
   useEffect(() => {
     loadForums()
-    loadUserStats() // Load enhanced reputation data
+    if (isAuthenticated) {
+      loadUserStats() // Only load stats if user is authenticated
+    }
     loadEvents()
     loadChallenges()
-  }, []) // Remove loadForums and loadUserStats from dependencies to prevent infinite loop
+  }, [isAuthenticated]) // Only depend on authentication status
 
   // Load threads when forum is selected
   useEffect(() => {
@@ -795,6 +797,7 @@ export function EnhancedCommunitySection() {
             <ThreadDetailView 
               thread={selectedThread} 
               onReply={(content, parentId) => handleReplyToThread(selectedThread.id, content, parentId)}
+              isAuthenticated={isAuthenticated}
             />
           )}
         </DialogContent>
@@ -1102,10 +1105,12 @@ function ChallengeCard({
 
 function ThreadDetailView({ 
   thread, 
-  onReply 
+  onReply,
+  isAuthenticated
 }: { 
   thread: Thread
   onReply: (content: string, parentId?: string) => void 
+  isAuthenticated: boolean
 }) {
   const [replyContent, setReplyContent] = useState("")
   const [replies, setReplies] = useState<Reply[]>([])
@@ -1114,13 +1119,24 @@ function ThreadDetailView({
 
   // Load replies when component mounts or thread changes
   useEffect(() => {
+    if (!isAuthenticated) {
+      return // Don't load replies if not authenticated
+    }
+    
     const loadReplies = async () => {
       try {
         setLoadingReplies(true)
         const repliesData = await communityApi.getThreadReplies(thread.id)
         setReplies(repliesData || [])
-      } catch (error) {
+      } catch (error: any) {
         console.error('Failed to load replies:', error)
+        
+        // Handle authentication errors gracefully
+        if (error.status === 401 || error.status === 403) {
+          console.log('Not authenticated for replies - skipping')
+          return
+        }
+        
         toast.error('Failed to load replies')
       } finally {
         setLoadingReplies(false)
@@ -1128,7 +1144,7 @@ function ThreadDetailView({
     }
 
     loadReplies()
-  }, [thread.id])
+  }, [thread.id, isAuthenticated])
 
   // Handle liking a reply
   const handleLikeReply = async (replyId: string) => {

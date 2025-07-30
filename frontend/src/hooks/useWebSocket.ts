@@ -33,33 +33,30 @@ export function useWebSocket(url?: string): WebSocketHookReturn {
   const connect = useCallback(() => {
     try {
       // Get auth token and user data for WebSocket connection
-      const token = localStorage.getItem('auth_token')
+      const token = localStorage.getItem('mantrapath_token') // Fix: use correct token key
       const userData = localStorage.getItem('user_data')
       
+      if (!token || !userData) {
+        console.log('🔌 No authentication data available, skipping WebSocket connection')
+        setConnectionError('Authentication required for real-time features')
+        return
+      }
+      
       let userId = 'anonymous'
-      if (userData) {
-        try {
-          const user = JSON.parse(userData)
-          userId = user.id || 'anonymous'
-        } catch (e) {
-          console.warn('Failed to parse user data for WebSocket connection')
-        }
-      } else {
-        // Create a mock user for development if no user data exists
-        userId = `demo_user_${Date.now()}`
-        const mockUser = {
-          id: userId,
-          email: 'demo@example.com',
-          username: 'demo_user'
-        }
-        localStorage.setItem('user_data', JSON.stringify(mockUser))
+      try {
+        const user = JSON.parse(userData)
+        userId = user.id || 'anonymous'
+      } catch (e) {
+        console.warn('Failed to parse user data for WebSocket connection')
+        setConnectionError('Invalid user data for WebSocket connection')
+        return
       }
 
       // Use the correct WebSocket endpoint format: /ws/{user_id}
       const wsUrlWithPath = `${wsUrl}/ws/${userId}`
-      const wsUrlWithAuth = token ? `${wsUrlWithPath}?token=${token}` : wsUrlWithPath
+      const wsUrlWithAuth = `${wsUrlWithPath}?token=${token}`
 
-      console.log('🔌 Connecting to WebSocket:', wsUrlWithAuth)
+      console.log('🔌 Connecting to WebSocket:', wsUrlWithPath)
       wsRef.current = new WebSocket(wsUrlWithAuth)
 
       wsRef.current.onopen = () => {
