@@ -13,7 +13,7 @@ import os
 sys.path.append('/app')
 sys.path.append('/app/shared')
 
-from shared.database import get_database, engine
+from shared.database import get_db, engine
 from shared.models import User, UserProfile, Base
 from shared.auth import (
     verify_password, 
@@ -67,7 +67,7 @@ class UserResponse(BaseModel):
 
 # Auth endpoints
 @app.post("/register", response_model=Token)
-async def register(user_data: UserRegister, db: Session = Depends(get_database)):
+async def register(user_data: UserRegister, db: Session = Depends(get_db)):
     """Register new user"""
     
     # Check if user exists
@@ -86,8 +86,9 @@ async def register(user_data: UserRegister, db: Session = Depends(get_database))
     db_user = User(
         email=user_data.email,
         username=user_data.username,
-        hashed_password=hashed_password,
-        is_verified=True  # Auto-verify for demo
+        password_hash=hashed_password,
+        first_name=user_data.first_name or "",
+        last_name=user_data.last_name or ""
     )
     
     db.add(db_user)
@@ -96,9 +97,7 @@ async def register(user_data: UserRegister, db: Session = Depends(get_database))
     
     # Create profile
     profile = UserProfile(
-        user_id=db_user.id,
-        first_name=user_data.first_name,
-        last_name=user_data.last_name
+        user_id=db_user.id
     )
     
     db.add(profile)
@@ -115,12 +114,12 @@ async def register(user_data: UserRegister, db: Session = Depends(get_database))
     return Token(access_token=access_token, refresh_token=refresh_token)
 
 @app.post("/login", response_model=Token)
-async def login(user_data: UserLogin, db: Session = Depends(get_database)):
+async def login(user_data: UserLogin, db: Session = Depends(get_db)):
     """Login user"""
     
     user = db.query(User).filter(User.email == user_data.email).first()
     
-    if not user or not verify_password(user_data.password, user.hashed_password):
+    if not user or not verify_password(user_data.password, user.password_hash):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Incorrect email or password"
@@ -158,7 +157,7 @@ async def refresh_token(token_data: dict):
     user_id = payload.get("sub")
     
     # Get user from database
-    db = next(get_database())
+    db = next(get_db())
     user = db.query(User).filter(User.id == user_id).first()
     
     if not user or not user.is_active:
@@ -178,7 +177,7 @@ async def refresh_token(token_data: dict):
     return Token(access_token=access_token, refresh_token=new_refresh_token)
 
 @app.get("/me", response_model=UserResponse)
-async def get_current_user_info(current_user: dict = Depends(get_current_user), db: Session = Depends(get_database)):
+async def get_current_user_info(current_user: dict = Depends(get_current_user), db: Session = Depends(get_db)):
     """Get current user information"""
     
     user = db.query(User).filter(User.id == current_user["user_id"]).first()

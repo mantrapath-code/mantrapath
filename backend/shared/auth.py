@@ -20,6 +20,10 @@ def hash_password(password: str) -> str:
     """Hash a password"""
     return pwd_context.hash(password)
 
+def get_password_hash(password: str) -> str:
+    """Alias for hash_password"""
+    return hash_password(password)
+
 def verify_password(plain_password: str, hashed_password: str) -> bool:
     """Verify a password"""
     return pwd_context.verify(plain_password, hashed_password)
@@ -58,3 +62,64 @@ def extract_user_id(token: str) -> Optional[str]:
     if payload:
         return payload.get("sub")
     return None
+
+# FastAPI dependency for getting current user
+from fastapi import HTTPException, Depends, status
+from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
+
+security = HTTPBearer()
+
+def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(security)):
+    """Get current user from JWT token"""
+    token = credentials.credentials
+    payload = verify_token(token)
+    
+    if payload is None:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Could not validate credentials",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+    
+    user_id = payload.get("sub")
+    if user_id is None:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Could not validate credentials",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+    
+    return {"user_id": user_id, "email": payload.get("email")}
+
+def get_optional_user(credentials: HTTPAuthorizationCredentials = Depends(security)):
+    """Get current user from JWT token, but don't raise error if token is invalid"""
+    try:
+        token = credentials.credentials
+        payload = verify_token(token)
+        
+        if payload is None:
+            return None
+        
+        user_id = payload.get("sub")
+        if user_id is None:
+            return None
+        
+        return {"user_id": user_id, "email": payload.get("email")}
+    except:
+        return None
+
+def verify_user_access(user_id: str, resource_user_id: str) -> bool:
+    """Verify that a user has access to a resource"""
+    return user_id == resource_user_id
+
+def require_moderator(credentials: HTTPAuthorizationCredentials = Depends(security)):
+    """Require moderator role (for now, just check if user is authenticated)"""
+    # TODO: Implement actual role checking when roles are properly implemented
+    user = get_current_user(credentials)
+    return user
+
+def require_admin(credentials: HTTPAuthorizationCredentials = Depends(security)):
+    """Require admin role (for now, just check if user is authenticated)"""
+    # TODO: Implement actual role checking when roles are properly implemented
+    user = get_current_user(credentials)
+    return user

@@ -10,13 +10,18 @@ from typing import Optional, List
 from datetime import datetime, timedelta
 import sys
 import json
-from textblob import TextBlob
+
+try:
+    from textblob import TextBlob
+    TEXTBLOB_AVAILABLE = True
+except ImportError:
+    TEXTBLOB_AVAILABLE = False
 
 # Add parent directories to path
 sys.path.append('/app')
 sys.path.append('/app/shared')
 
-from shared.database import get_database, engine
+from shared.database import get_db, engine
 from shared.models import MoodEntry, JournalEntry, User, Base
 from shared.auth import get_current_user
 
@@ -88,7 +93,7 @@ class AnalyticsResponse(BaseModel):
 async def get_mood_entries(
     limit: int = Query(50, le=100),
     current_user: dict = Depends(get_current_user),
-    db: Session = Depends(get_database)
+    db: Session = Depends(get_db)
 ):
     """Get user's mood entries"""
     
@@ -114,7 +119,7 @@ async def get_mood_entries(
 async def create_mood_entry(
     mood_data: MoodEntryCreate,
     current_user: dict = Depends(get_current_user),
-    db: Session = Depends(get_database)
+    db: Session = Depends(get_db)
 ):
     """Create new mood entry"""
     
@@ -148,7 +153,7 @@ async def create_mood_entry(
 async def get_journal_entries(
     limit: int = Query(20, le=50),
     current_user: dict = Depends(get_current_user),
-    db: Session = Depends(get_database)
+    db: Session = Depends(get_db)
 ):
     """Get user's journal entries"""
     
@@ -176,7 +181,7 @@ async def get_journal_entries(
 async def create_journal_entry(
     journal_data: JournalEntryCreate,
     current_user: dict = Depends(get_current_user),
-    db: Session = Depends(get_database)
+    db: Session = Depends(get_db)
 ):
     """Create new journal entry with sentiment analysis"""
     
@@ -239,7 +244,7 @@ async def create_journal_entry(
 @app.get("/api/v1/analytics/overview", response_model=AnalyticsResponse)
 async def get_analytics_overview(
     current_user: dict = Depends(get_current_user),
-    db: Session = Depends(get_database)
+    db: Session = Depends(get_db)
 ):
     """Get comprehensive analytics overview"""
     
@@ -321,7 +326,7 @@ async def get_analytics_overview(
 @app.get("/api/v1/analytics/patterns/weekly")
 async def get_weekly_patterns(
     current_user: dict = Depends(get_current_user),
-    db: Session = Depends(get_database)
+    db: Session = Depends(get_db)
 ):
     """Get weekly mood patterns for trend analysis"""
     
@@ -374,6 +379,105 @@ async def get_weekly_patterns(
 async def health_check():
     """Health check endpoint"""
     return {"status": "healthy", "service": "mood-service"}
+
+# User Data Management Endpoints
+@app.delete("/api/v1/user/{user_id}/delete")
+async def delete_user_data(
+    user_id: str,
+    current_user: dict = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """Delete all user data from mood service"""
+    # Verify user authorization
+    if current_user["user_id"] != user_id:
+        raise HTTPException(status_code=403, detail="Unauthorized to delete this user's data")
+    
+    try:
+        # Delete mood entries
+        mood_entries_deleted = db.query(MoodEntry).filter(MoodEntry.user_id == user_id).delete()
+        
+        # Delete journal entries
+        journal_entries_deleted = db.query(JournalEntry).filter(JournalEntry.user_id == user_id).delete()
+        
+        db.commit()
+        
+        return {
+            "message": "User data deleted successfully",
+            "user_id": user_id,
+            "deleted_items": {
+                "mood_entries": mood_entries_deleted,
+                "journal_entries": journal_entries_deleted
+            },
+            "timestamp": datetime.utcnow().isoformat()
+        }
+        
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=f"Failed to delete user data: {str(e)}")
+
+@app.get("/api/v1/user/{user_id}/export")
+async def export_user_data(
+    user_id: str,
+    current_user: dict = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """Export all user data from mood service"""
+    # Verify user authorization
+    if current_user["user_id"] != user_id:
+        raise HTTPException(status_code=403, detail="Unauthorized to export this user's data")
+    
+    try:
+        # Get mood entries
+        mood_entries = db.query(MoodEntry).filter(MoodEntry.user_id == user_id).all()
+        mood_data = []
+        for entry in mood_entries:
+            mood_data.append({
+                "id": entry.id,
+                "mood_score": entry.mood_score,
+                "energy_level": entry.energy_level,
+                "stress_level": entry.stress_level,
+                "sleep_quality": entry.sleep_quality,
+                "notes": entry.notes,
+                "context_tags": json.loads(entry.context_tags) if entry.context_tags else [],
+                "created_at": entry.created_at.isoformat() if entry.created_at else None
+            })
+        
+        # Get journal entries
+        journal_entries = db.query(JournalEntry).filter(JournalEntry.user_id == user_id).all()
+        journal_data = []
+        for entry in journal_entries:
+            journal_data.append({
+                "id": entry.id,
+                "title": entry.title,
+                "content": entry.content,
+                "mood_before": entry.mood_before,
+                "mood_after": entry.mood_after,
+                "tags": json.loads(entry.tags) if entry.tags else [],
+                "sentiment_score": entry.sentiment_score,
+                "created_at": entry.created_at.isoformat() if entry.created_at else None
+            })
+        
+        return {
+            "user_id": user_id,
+            "export_timestamp": datetime.utcnow().isoformat(),
+            "data": {
+                "mood_entries": mood_data,
+                "journal_entries": journal_data,
+                "summary": {
+                    "total_mood_entries": len(mood_data),
+                    "total_journal_entries": len(journal_data),
+                    "date_range": {
+                        "earliest_mood": mood_data[0]["created_at"] if mood_data else None,
+                        "latest_mood": mood_data[-1]["created_at"] if mood_data else None,
+                        "earliest_journal": journal_data[0]["created_at"] if journal_data else None,
+                        "latest_journal": journal_data[-1]["created_at"] if journal_data else None
+                    }
+                }
+            }
+        }
+        
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to export user data: {str(e)}")
 
 if __name__ == "__main__":
     import uvicorn

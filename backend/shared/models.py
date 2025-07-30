@@ -121,7 +121,7 @@ class ChatMessage(Base):
     sender = Column(String, nullable=False)  # "user" or "mitra"
     content = Column(Text, nullable=False)
     message_type = Column(String, default="text")  # text, breathing_exercise, etc.
-    metadata = Column(JSON)  # Additional data like breathing exercise details
+    message_metadata = Column(JSON)  # Additional data like breathing exercise details
     
     created_at = Column(DateTime, default=datetime.utcnow)
     
@@ -190,9 +190,96 @@ class Notification(Base):
     user_id = Column(String, ForeignKey("users.id"), nullable=False)
     title = Column(String, nullable=False)
     message = Column(Text, nullable=False)
-    type = Column(String, default="info")  # info, warning, achievement, reminder
+    notification_type = Column(String, default="info")  # mood_reminder, insight, community, system, crisis
+    priority = Column(String, default="normal")  # low, normal, high, urgent
     is_read = Column(Boolean, default=False)
+    is_sent = Column(Boolean, default=False)
     action_url = Column(String)  # URL to navigate to when clicked
     
     created_at = Column(DateTime, default=datetime.utcnow)
     read_at = Column(DateTime)
+    sent_at = Column(DateTime)
+
+# Create aliases for backward compatibility
+Forum = CommunityForum
+ForumReply = ThreadReply
+
+class ForumMembership(Base):
+    """Forum membership tracking"""
+    __tablename__ = "forum_memberships"  # Reverted back
+    
+    id = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
+    user_id = Column(String, ForeignKey("users.id"), nullable=False)
+    forum_id = Column(String, ForeignKey("community_forums.id"), nullable=False)
+    role = Column(String, default="member")  # member, moderator, admin
+    joined_at = Column(DateTime, default=datetime.utcnow)
+    is_active = Column(Boolean, default=True)
+
+class Like(Base):
+    """Likes for content (threads, replies, etc.)"""
+    __tablename__ = "likes"
+    
+    id = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
+    user_id = Column(String, ForeignKey("users.id"), nullable=False)
+    content_type = Column(String, nullable=False)  # thread, reply, etc.
+    content_id = Column(String, nullable=False)  # ID of the liked content
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+class Content(Base):
+    """Content articles and resources"""
+    __tablename__ = "content"
+    
+    id = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
+    title = Column(String, nullable=False)
+    content = Column(Text, nullable=False)
+    excerpt = Column(Text)
+    author_id = Column(String, ForeignKey("users.id"), nullable=False)
+    content_type = Column(String, default="article")  # article, guide, resource
+    category = Column(String)
+    tags = Column(JSON)  # Array of tags
+    is_published = Column(Boolean, default=False)
+    featured = Column(Boolean, default=False)
+    read_time = Column(Integer)  # Estimated read time in minutes
+    view_count = Column(Integer, default=0)
+    like_count = Column(Integer, default=0)
+    
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    published_at = Column(DateTime)
+
+class Affirmation(Base):
+    """Daily affirmations and positive messages"""
+    __tablename__ = "affirmations"
+    
+    id = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
+    text = Column(Text, nullable=False)
+    category = Column(String)  # self-love, confidence, peace, etc.
+    author = Column(String)
+    is_daily = Column(Boolean, default=False)
+    popularity_score = Column(Float, default=0.0)
+    
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+class MediaFile(Base):
+    """Uploaded media files"""
+    __tablename__ = "media_files"
+    
+    id = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
+    user_id = Column(String, ForeignKey("users.id"), nullable=False)
+    filename = Column(String, nullable=False)
+    original_filename = Column(String, nullable=False)
+    file_path = Column(String, nullable=False)
+    file_size = Column(Integer, nullable=False)
+    mime_type = Column(String, nullable=False)
+    file_type = Column(String, nullable=False)  # image, audio, video, document
+    
+    # Image-specific fields
+    width = Column(Integer)
+    height = Column(Integer)
+    
+    # Audio-specific fields
+    duration = Column(Float)  # Duration in seconds
+    
+    is_public = Column(Boolean, default=False)
+    
+    created_at = Column(DateTime, default=datetime.utcnow)

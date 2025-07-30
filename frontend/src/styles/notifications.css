@@ -1,0 +1,129 @@
+/* Enhanced notification styles */
+.enhanced-notification-container {
+  position: relative;
+  z-index: 10;
+  margin-top: 0.5rem;
+  margin-bottom: 1rem;
+  /* Ensure notifications don't cover header */
+  padding-top: 0.5rem;
+}
+
+.enhanced-notification-container .notification-card {
+  border-radius: 0.75rem;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+  backdrop-filter: blur(8px);
+  max-height: 180px;
+  overflow: hidden;
+  transition: max-height 0.3s ease-in-out, box-shadow 0.2s ease;
+  /* Ensure proper spacing */
+  margin-bottom: 0.75rem;
+}
+
+.enhanced-notification-container .notification-card:hover {
+  max-height: 300px;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.12);
+}
+
+.enhanced-notification-container .notification-content {
+  font-size: 0.875rem;
+  line-height: 1.5;
+  /* Better readability */
+  color: rgb(107 114 128);
+}
+
+.enhanced-notification-container .badge-compact {
+  font-size: 0.7rem;
+  padding: 0.125rem 0.375rem;
+  height: 1.25rem;
+  font-weight: 500;
+}
+
+.enhanced-notification-container .button-compact {
+  font-size: 0.75rem;
+  height: 1.5rem;
+  padding: 0 0.5rem;
+}
+
+/* Better spacing for dashboard layout */
+.enhanced-notification-container + * {
+  margin-top: 1.5rem;
+}
+
+/* Mobile responsiveness */
+@media (max-width: 768px) {
+  .enhanced-notification-container {
+    margin-left: 1rem;
+    margin-right: 1rem;
+    margin-bottom: 1.5rem;
+  }
+  
+  .enhanced-notification-container .notification-card {
+    max-height: 140px;
+    margin-bottom: 0.5rem;
+  }
+  
+  .enhanced-notification-container .notification-card:hover {
+    max-height: 250px;
+  }
+}
+
+@media (max-width: 640px) {
+  .enhanced-notification-container {
+    margin-left: 0.75rem;
+    margin-right: 0.75rem;
+  }
+}
+
+/* Smooth animations for notification appearance */
+.notification-enter {
+  opacity: 0;
+  transform: translateX(100px) scale(0.95);
+}
+
+.notification-enter-active {
+  opacity: 1;
+  transform: translateX(0) scale(1);
+  transition: opacity 400ms cubic-bezier(0.25, 0.46, 0.45, 0.94), transform 400ms cubic-bezier(0.25, 0.46, 0.45, 0.94);
+}
+
+.notification-exit {
+  opacity: 1;
+  transform: translateX(0) scale(1);
+}
+
+.notification-exit-active {
+  opacity: 0;
+  transform: translateX(100px) scale(0.95);
+  transition: opacity 300ms cubic-bezier(0.25, 0.46, 0.45, 0.94), transform 300ms cubic-bezier(0.25, 0.46, 0.45, 0.94);
+}
+
+/* Prevent layout shift */
+.enhanced-notification-container:empty {
+  display: none;
+}
+
+/* Ensure proper text contrast */
+.enhanced-notification-container .text-muted-foreground {
+  color: rgb(107 114 128);
+}
+
+/* Better visual hierarchy */
+.enhanced-notification-container h4 {
+  font-weight: 600;
+  color: rgb(17 24 39);
+}
+
+/* Improve badge visibility */
+.enhanced-notification-container .badge {
+  border-width: 1px;
+}
+
+/* Ensure close button is always visible */
+.enhanced-notification-container .close-button {
+  opacity: 0.7;
+  transition: opacity 0.2s ease;
+}
+
+.enhanced-notification-container .close-button:hover {
+  opacity: 1;
+}

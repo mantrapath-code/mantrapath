@@ -1,0 +1,47 @@
+# Python cache
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# Virtual environments
+venv/
+.venv/
+env/
+
+# Environment files
+.env
+.env.local
+
+# Temporary files
+*.tmp
+*.temp
+temp/
+tmp/
+
+# Log files
+*.log
+logs/
+
+# Backup files
+*.backup
+*.bak
+*.old
+*~
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Output files
+output/
+reports/
+results/
+
+# Database dumps
+*.sql
+*.dump
+
+# Configuration overrides
+config.local.py
+settings.local.py

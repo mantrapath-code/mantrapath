@@ -22,7 +22,7 @@ app = FastAPI(
 # CORS middleware
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000", "http://localhost:5173"],  # Vite dev server
+    allow_origins=["http://localhost:3000", "http://localhost:5173", "http://localhost:5174"],  # Vite dev server
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -64,7 +64,7 @@ def get_service_url(path: str) -> tuple[str, str]:
         return SERVICES["content"], path
     
     # Community service routes
-    if path.startswith("/forums/"):
+    if path.startswith("/forums"):
         return SERVICES["community"], path
     
     # Notification service routes

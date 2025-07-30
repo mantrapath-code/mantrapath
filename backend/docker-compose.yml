@@ -1,5 +1,3 @@
-version: '3.8'
-
 services:
   # Database
   postgres:
@@ -10,11 +8,17 @@ services:
       POSTGRES_PASSWORD: mantrapath123
     volumes:
       - postgres_data:/var/lib/postgresql/data
-      - ./init.sql:/docker-entrypoint-initdb.d/init.sql
+      - ./database/init.sql:/docker-entrypoint-initdb.d/init.sql
     ports:
       - "5432:5432"
     networks:
       - mantrapath-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U mantrapath -d mantrapath"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 30s
 
   # Redis for caching and real-time features
   redis:
@@ -23,28 +27,61 @@ services:
       - "6379:6379"
     networks:
       - mantrapath-network
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 30s
 
   # API Gateway
   api-gateway:
     build:
       context: .
-      dockerfile: services/gateway/Dockerfile
+      dockerfile: services/api_gateway/Dockerfile
     ports:
       - "8000:8000"
     environment:
       - DATABASE_URL=postgresql://mantrapath:mantrapath123@postgres:5432/mantrapath
       - REDIS_URL=redis://redis:6379
+      - AUTH_SERVICE_URL=http://auth-service:8001
+      - PROFILE_SERVICE_URL=http://profile-service:8002
+      - MOOD_SERVICE_URL=http://mood-service:8003
+      - CHATBOT_SERVICE_URL=http://chatbot-service:8004
+      - CONTENT_SERVICE_URL=http://content-service:8005
+      - COMMUNITY_SERVICE_URL=http://community-service:8006
+      - NOTIFICATION_SERVICE_URL=http://notification-service:8007
+      - MEDIA_SERVICE_URL=http://media-service:8008
     depends_on:
-      - postgres
-      - redis
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      auth-service:
+        condition: service_started
+      profile-service:
+        condition: service_started
+      mood-service:
+        condition: service_started
+      chatbot-service:
+        condition: service_started
+      content-service:
+        condition: service_started
+      community-service:
+        condition: service_started
+      notification-service:
+        condition: service_started
+      media-service:
+        condition: service_started
     networks:
       - mantrapath-network
+    restart: unless-stopped
 
   # Auth Service
   auth-service:
     build:
       context: .
-      dockerfile: services/auth/Dockerfile
+      dockerfile: services/auth_service/Dockerfile
     ports:
       - "8001:8001"
     environment:
@@ -52,123 +89,147 @@ services:
       - REDIS_URL=redis://redis:6379
       - JWT_SECRET_KEY=your-super-secret-jwt-key-change-in-production
     depends_on:
-      - postgres
-      - redis
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
     networks:
       - mantrapath-network
+    restart: unless-stopped
 
   # Profile Service
   profile-service:
     build:
       context: .
-      dockerfile: services/profile/Dockerfile
+      dockerfile: services/profile_service/Dockerfile
     ports:
       - "8002:8002"
     environment:
       - DATABASE_URL=postgresql://mantrapath:mantrapath123@postgres:5432/mantrapath
       - REDIS_URL=redis://redis:6379
     depends_on:
-      - postgres
-      - redis
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
     networks:
       - mantrapath-network
+    restart: unless-stopped
 
   # Mood Service
   mood-service:
     build:
       context: .
-      dockerfile: services/mood/Dockerfile
+      dockerfile: services/mood_service/Dockerfile
     ports:
       - "8003:8003"
     environment:
       - DATABASE_URL=postgresql://mantrapath:mantrapath123@postgres:5432/mantrapath
       - REDIS_URL=redis://redis:6379
     depends_on:
-      - postgres
-      - redis
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
     networks:
       - mantrapath-network
+    restart: unless-stopped
 
   # Chatbot Service
   chatbot-service:
     build:
       context: .
-      dockerfile: services/chatbot/Dockerfile
+      dockerfile: services/chatbot_service/Dockerfile
     ports:
       - "8004:8004"
     environment:
       - DATABASE_URL=postgresql://mantrapath:mantrapath123@postgres:5432/mantrapath
       - REDIS_URL=redis://redis:6379
-      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - OPENAI_API_KEY=${OPENAI_API_KEY:-your-openai-api-key-here}
     depends_on:
-      - postgres
-      - redis
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
     networks:
       - mantrapath-network
+    restart: unless-stopped
 
   # Content Service
   content-service:
     build:
       context: .
-      dockerfile: services/content/Dockerfile
+      dockerfile: services/content_service/Dockerfile
     ports:
       - "8005:8005"
     environment:
       - DATABASE_URL=postgresql://mantrapath:mantrapath123@postgres:5432/mantrapath
       - REDIS_URL=redis://redis:6379
     depends_on:
-      - postgres
-      - redis
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
     networks:
       - mantrapath-network
+    restart: unless-stopped
 
   # Community Service
   community-service:
     build:
       context: .
-      dockerfile: services/community/Dockerfile
+      dockerfile: services/community_service/Dockerfile
     ports:
       - "8006:8006"
     environment:
       - DATABASE_URL=postgresql://mantrapath:mantrapath123@postgres:5432/mantrapath
       - REDIS_URL=redis://redis:6379
     depends_on:
-      - postgres
-      - redis
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
     networks:
       - mantrapath-network
+    restart: unless-stopped
 
   # Notification Service
   notification-service:
     build:
       context: .
-      dockerfile: services/notification/Dockerfile
+      dockerfile: services/notification_service/Dockerfile
     ports:
       - "8007:8007"
     environment:
       - DATABASE_URL=postgresql://mantrapath:mantrapath123@postgres:5432/mantrapath
       - REDIS_URL=redis://redis:6379
     depends_on:
-      - postgres
-      - redis
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
     networks:
       - mantrapath-network
+    restart: unless-stopped
 
   # Media Service
   media-service:
     build:
       context: .
-      dockerfile: services/media/Dockerfile
+      dockerfile: services/media_service/Dockerfile
     ports:
-      - "8009:8009"
+      - "8008:8008"
     environment:
       - DATABASE_URL=postgresql://mantrapath:mantrapath123@postgres:5432/mantrapath
       - REDIS_URL=redis://redis:6379
     depends_on:
-      - postgres
-      - redis
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
     networks:
       - mantrapath-network
+    restart: unless-stopped
 
 volumes:
   postgres_data:

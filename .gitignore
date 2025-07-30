@@ -7,25 +7,145 @@ yarn-error.log*
 pnpm-debug.log*
 lerna-debug.log*
 
-node_modules
-dist
-dist-ssr
-*-dist
+# Dependency directories
+node_modules/
+venv/
+.venv/
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Distribution / packaging
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# Build outputs
+dist/
+dist-ssr/
+*-dist/
 *.local
+out/
+.next/
+.nuxt/
+.output/
 
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json
-.idea
+!.vscode/settings.json
+!.vscode/tasks.json
+!.vscode/launch.json
+.idea/
 .DS_Store
 *.suo
 *.ntvs*
 *.njsproj
 *.sln
 *.sw?
+*~
 
+# Environment variables and secrets
 .env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+.env.production
+*.pem
+*.key
+*.crt
+*.p12
+*.pfx
+
+# Database files
+*.db
+*.sqlite
+*.sqlite3
+
+# Runtime data
+pids/
+*.pid
+*.seed
+*.pid.lock
+
+# Coverage directory used by tools like istanbul
+coverage/
+*.lcov
+.nyc_output/
+
+# Temporary files
+tmp/
+temp/
+.tmp/
+.cache/
+.parcel-cache/
+
+# Docker
+.dockerignore
+docker-compose.override.yml
+
+# Package manager files
+package-lock.json
+yarn.lock
+pnpm-lock.yaml
+
+# Python specific
+*.pyc
+__pycache__/
+.pytest_cache/
+.coverage
+.tox/
+.mypy_cache/
+.dmypy.json
+dmypy.json
+
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+Icon
+._*
+
+# Windows
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+$RECYCLE.BIN/
+
+# Linux
+*~
+.nfs*
+
+# Application specific
 **/agent-eval-report*
-packages
+packages/
 .file-manifest
 .devcontainer/
+.spark-*
+
+# Logs and monitoring
+logs/
+*.log
+access.log
+error.log
+
+# SSL certificates
+ssl/
+certs/
+*.crt
+*.key
+*.pem

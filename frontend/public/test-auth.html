@@ -1,0 +1,42 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>MantraPath Auth Test</title>
+</head>
+<body>
+    <h1>Authentication Test</h1>
+    <button onclick="checkAuth()">Check Authentication Status</button>
+    <button onclick="clearAuth()">Clear Authentication</button>
+    <div id="result"></div>
+    
+    <script>
+        function checkAuth() {
+            const token = localStorage.getItem('mantrapath_token');
+            const result = document.getElementById('result');
+            
+            if (token) {
+                result.innerHTML = `
+                    <h3>Authenticated</h3>
+                    <p>Token found: ${token.substring(0, 50)}...</p>
+                    <p>Token length: ${token.length}</p>
+                `;
+            } else {
+                result.innerHTML = `
+                    <h3>Not Authenticated</h3>
+                    <p>No token found in localStorage</p>
+                    <p>You need to log in through the auth screen</p>
+                `;
+            }
+        }
+        
+        function clearAuth() {
+            localStorage.removeItem('mantrapath_token');
+            localStorage.removeItem('mantrapath_refresh_token');
+            document.getElementById('result').innerHTML = '<p>Authentication cleared</p>';
+        }
+        
+        // Auto-check on load
+        checkAuth();
+    </script>
+</body>
+</html>

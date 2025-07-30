@@ -1,79 +1,55 @@
 #!/bin/bash
 
-# MantraPath Backend Startup Script
+# MantraPath Backend Development Startup Script
 
 echo "🚀 Starting MantraPath Backend Services..."
 
-# Check if Python 3.11+ is installed
-if ! python3 --version | grep -E "3\.(11|12)" > /dev/null; then
-    echo "❌ Python 3.11+ is required"
+# Check if Docker is running
+if ! docker info > /dev/null 2>&1; then
+    echo "❌ Docker is not running. Please start Docker first."
     exit 1
 fi
 
-# Install dependencies
-echo "📦 Installing Python dependencies..."
-pip install -r requirements.txt
+# Stop any existing containers
+echo "🛑 Stopping existing containers..."
+docker-compose down
 
-# Start all services in development mode
-echo "🔧 Starting microservices..."
+# Build and start services
+echo "🔨 Building and starting services..."
+docker-compose up --build -d
 
-# API Gateway (Port 8000)
-echo "Starting API Gateway on port 8000..."
-python -m services.api_gateway.main &
-API_GATEWAY_PID=$!
+# Wait a moment for services to initialize
+echo "⏳ Waiting for services to initialize..."
+sleep 10
 
-# Wait a bit for the gateway to start
-sleep 2
-
-# Auth Service (Port 8001)
-echo "Starting Auth Service on port 8001..."
-python -m services.auth_service.main &
-AUTH_PID=$!
-
-# Mood Service (Port 8003)
-echo "Starting Mood Service on port 8003..."
-python -m services.mood_service.main &
-MOOD_PID=$!
-
-# Chatbot Service (Port 8004)
-echo "Starting Chatbot Service on port 8004..."
-python -m services.chatbot_service.main &
-CHATBOT_PID=$!
-
-# Community Service (Port 8006)
-echo "Starting Community Service on port 8006..."
-python -m services.community_service.main &
-COMMUNITY_PID=$!
-
-echo ""
 echo "✅ All services started successfully!"
 echo ""
-echo "🌐 API Gateway: http://localhost:8000"
-echo "🔐 Auth Service: http://localhost:8001"
-echo "😊 Mood Service: http://localhost:8003"
-echo "🤖 Chatbot Service: http://localhost:8004"
-echo "👥 Community Service: http://localhost:8006"
+echo "📍 Service Endpoints:"
+echo "   🌐 API Gateway: http://localhost:8000"
+echo "   🔐 Auth Service: http://localhost:8001"
+echo "   👤 Profile Service: http://localhost:8002"
+echo "   😊 Mood Service: http://localhost:8003"
+echo "   🤖 Chatbot Service: http://localhost:8004"
+echo "   📝 Content Service: http://localhost:8005"
+echo "   👥 Community Service: http://localhost:8006"
+echo "   🔔 Notification Service: http://localhost:8007"
+echo "   📁 Media Service: http://localhost:8008"
+echo "   🗄️  PostgreSQL: localhost:5432"
+echo "   ⚡ Redis: localhost:6379"
 echo ""
-echo "📚 API Documentation:"
-echo "   - API Gateway: http://localhost:8000/docs"
-echo "   - Auth Service: http://localhost:8001/docs"
-echo "   - Mood Service: http://localhost:8003/docs"
-echo "   - Chatbot Service: http://localhost:8004/docs"
-echo "   - Community Service: http://localhost:8006/docs"
+echo "🔍 Health Checks:"
+echo "   curl http://localhost:8000/health  # API Gateway"
+echo "   curl http://localhost:8001/health  # Auth Service"
+echo "   curl http://localhost:8002/health  # Profile Service"
+echo "   curl http://localhost:8003/health  # Mood Service"
+echo "   curl http://localhost:8004/health  # Chatbot Service"
+echo "   curl http://localhost:8005/health  # Content Service"
+echo "   curl http://localhost:8006/health  # Community Service"
+echo "   curl http://localhost:8007/health  # Notification Service"
+echo "   curl http://localhost:8008/health  # Media Service"
 echo ""
-echo "Press Ctrl+C to stop all services"
-
-# Function to cleanup processes on exit
-cleanup() {
-    echo ""
-    echo "🛑 Stopping all services..."
-    kill $API_GATEWAY_PID $AUTH_PID $MOOD_PID $CHATBOT_PID $COMMUNITY_PID 2>/dev/null
-    echo "✅ All services stopped"
-    exit 0
-}
-
-# Set trap to cleanup on script exit
-trap cleanup SIGINT SIGTERM
-
-# Wait for all background processes
-wait
+echo "🧪 Test Community Features:"
+echo "   # Register a user:"
+echo "   curl -X POST http://localhost:8000/register -H 'Content-Type: application/json' -d '{\"email\":\"test@example.com\",\"username\":\"testuser\",\"password\":\"password123\"}'"
+echo "   # Get forums:"
+echo "   curl -H 'Authorization: Bearer YOUR_TOKEN' http://localhost:8000/forums"

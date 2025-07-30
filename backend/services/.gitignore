@@ -1,0 +1,60 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+
+# Virtual environments
+venv/
+.venv/
+env/
+
+# Environment variables
+.env
+.env.local
+.env.production
+.env.development
+
+# Database
+*.db
+*.sqlite
+*.sqlite3
+
+# Logs
+*.log
+logs/
+access.log
+error.log
+
+# Testing
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Service-specific files
+auth_cache/
+session_store/
+uploads/
+temp/
+tmp/
+
+# Configuration overrides
+config.local.py
+settings.local.py
+
+# Backup files
+*.backup
+*.bak
+*.old
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Docker
+.dockerignore
+
+# SSL/TLS
+*.key
+*.crt
+*.pem

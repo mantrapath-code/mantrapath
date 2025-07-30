@@ -1,0 +1,49 @@
+# Test outputs
+coverage/
+.coverage
+htmlcov/
+.nyc_output/
+junit.xml
+test-results/
+test-reports/
+
+# Cache files
+.pytest_cache/
+.cache/
+node_modules/
+
+# Screenshots and videos (from E2E tests)
+screenshots/
+videos/
+cypress/screenshots/
+cypress/videos/
+
+# Temporary test files
+*.tmp
+tmp/
+temp/
+test-temp/
+
+# Environment files for testing
+.env.test
+.env.test.local
+
+# Log files
+*.log
+test.log
+debug.log
+
+# Backup files
+*.backup
+*.bak
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Python test cache
+__pycache__/
+*.pyc
+
+# Jest
+jest-report.xml

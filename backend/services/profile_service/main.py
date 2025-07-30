@@ -72,10 +72,10 @@ class PreferencesUpdate(BaseModel):
     weekly_reports: Optional[bool] = None
 
 class ThemePreferences(BaseModel):
-    theme: str = Field(..., regex="^(light|dark|auto)$")
+    theme: str = Field(..., pattern="^(light|dark|auto)$")
 
 class PrivacyPreferences(BaseModel):
-    privacy_level: str = Field(..., regex="^(public|friends|private)$")
+    privacy_level: str = Field(..., pattern="^(public|friends|private)$")
 
 class ProfileCreate(BaseModel):
     bio: Optional[str] = None

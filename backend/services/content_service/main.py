@@ -44,12 +44,12 @@ redis_client = redis.from_url(os.getenv("REDIS_URL", "redis://localhost:6379"))
 class ContentCreate(BaseModel):
     title: str
     content: str
-    content_type: str = Field(..., regex="^(article|video|audio|exercise)$")
+    content_type: str = Field(..., pattern="^(article|video|audio|exercise)$")
     category: str
     author: Optional[str] = None
     source_url: Optional[str] = None
     duration_minutes: Optional[int] = None
-    difficulty_level: str = Field("beginner", regex="^(beginner|intermediate|advanced)$")
+    difficulty_level: str = Field("beginner", pattern="^(beginner|intermediate|advanced)$")
     tags: Optional[List[str]] = []
 
 class ContentResponse(BaseModel):

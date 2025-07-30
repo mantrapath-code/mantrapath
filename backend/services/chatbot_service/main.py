@@ -14,7 +14,7 @@ import json
 sys.path.append('/app')
 sys.path.append('/app/shared')
 
-from shared.database import get_database, engine
+from shared.database import get_db, engine
 from shared.models import ChatSession, ChatMessage, Base
 from shared.auth import get_current_user
 
@@ -162,7 +162,7 @@ def generate_ai_response(message: str, conversation_history: List[dict]) -> dict
 async def chat_with_bot(
     chat_request: ChatRequest,
     current_user: dict = Depends(get_current_user),
-    db: Session = Depends(get_database)
+    db: Session = Depends(get_db)
 ):
     """Chat with the AI bot"""
     
@@ -228,7 +228,7 @@ async def chat_with_bot(
 @app.get("/api/chatbot/chat/sessions", response_model=List[SessionResponse])
 async def get_chat_sessions(
     current_user: dict = Depends(get_current_user),
-    db: Session = Depends(get_database)
+    db: Session = Depends(get_db)
 ):
     """Get user's chat sessions"""
     
@@ -251,7 +251,7 @@ async def get_chat_sessions(
 async def get_chat_history(
     session_id: str,
     current_user: dict = Depends(get_current_user),
-    db: Session = Depends(get_database)
+    db: Session = Depends(get_db)
 ):
     """Get chat history for a session"""
     
@@ -287,7 +287,7 @@ async def get_breathing_exercises():
 @app.post("/api/chatbot/chat/session")
 async def create_chat_session(
     current_user: dict = Depends(get_current_user),
-    db: Session = Depends(get_database)
+    db: Session = Depends(get_db)
 ):
     """Create new chat session"""
     

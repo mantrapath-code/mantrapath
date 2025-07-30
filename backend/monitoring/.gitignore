@@ -1,0 +1,41 @@
+# Prometheus data
+prometheus/data/
+data/
+
+# Grafana data
+grafana/data/
+grafana/logs/
+grafana/plugins/
+grafana.ini
+
+# Log files
+*.log
+logs/
+
+# Configuration overrides
+prometheus.local.yml
+grafana.local.ini
+alertmanager.local.yml
+
+# SSL certificates
+ssl/
+certs/
+*.crt
+*.key
+*.pem
+
+# Backup files
+*.backup
+*.bak
+
+# Temporary files
+tmp/
+temp/
+*.tmp
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Docker volumes data
+volumes/

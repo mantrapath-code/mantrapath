@@ -1,0 +1,56 @@
+# Deployment secrets
+*.env
+*.env.production
+*.env.staging
+.env.local
+
+# SSL certificates and keys
+*.key
+*.crt
+*.pem
+*.p12
+*.pfx
+ssl/
+certs/
+
+# Docker secrets
+docker-compose.override.yml
+docker-compose.prod.yml
+docker-compose.staging.yml
+
+# Kubernetes secrets
+*-secret.yaml
+*-secret.yml
+secrets/
+
+# Terraform
+*.tfstate
+*.tfstate.*
+.terraform/
+.terraform.lock.hcl
+terraform.tfvars
+terraform.tfvars.json
+
+# AWS/Cloud credentials
+.aws/
+gcp-credentials.json
+azure-credentials.json
+
+# Backup files
+*.backup
+*.bak
+*.old
+
+# Logs
+*.log
+logs/
+
+# Temporary deployment files
+tmp/
+temp/
+.tmp/
+
+# Build artifacts
+dist/
+build/
+out/
