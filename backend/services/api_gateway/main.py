@@ -74,7 +74,9 @@ def get_service_url(path: str) -> tuple[str, str]:
     
     # ML service routes
     if path.startswith("/api/ml/"):
-        return SERVICES["ml"], path
+        # Strip the /api/ml/ prefix for the ML service
+        ml_path = path[8:]  # Remove "/api/ml/" (8 characters)
+        return SERVICES["ml"], ml_path
     
     # Media service routes
     if path.startswith("/api/v1/media/"):
@@ -86,6 +88,9 @@ def get_service_url(path: str) -> tuple[str, str]:
 async def proxy_request(request: Request, service_url: str, path: str):
     """Proxy request to appropriate microservice"""
     
+    # Ensure proper URL construction with slash
+    if not path.startswith("/"):
+        path = f"/{path}"
     url = f"{service_url}{path}"
     
     # Extract headers

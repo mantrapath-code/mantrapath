@@ -7,6 +7,7 @@ import { JournalSection } from "@/components/JournalSection"
 import { ChatBot } from "@/components/ChatBot"
 import { EnhancedCommunitySection } from "@/components/EnhancedCommunitySection"
 import { WellnessDashboard } from "@/components/WellnessDashboard"
+import { CrisisPredictionDashboard } from "@/components/CrisisPredictionDashboard"
 import { MoodPatternNotifications } from "@/components/MoodPatternNotifications"
 import { RealTimeNotifications } from "@/components/RealTimeNotifications"
 import { AuthScreen } from "@/components/AuthScreen"
@@ -119,8 +120,9 @@ function AppContent() {
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
           <div className="lg:col-span-2">
             <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-              <TabsList className="grid grid-cols-4 w-full mb-6">
+              <TabsList className="grid grid-cols-5 w-full mb-6">
                 <TabsTrigger value="dashboard">Dashboard</TabsTrigger>
+                <TabsTrigger value="crisis">Crisis Monitor</TabsTrigger>
                 <TabsTrigger value="mood">Mood</TabsTrigger>
                 <TabsTrigger value="journal">Journal</TabsTrigger>
                 <TabsTrigger value="community">Community</TabsTrigger>
@@ -132,6 +134,15 @@ function AppContent() {
                   animate={{ opacity: 1, y: 0 }}
                 >
                   <WellnessDashboard />
+                </motion.div>
+              </TabsContent>
+              
+              <TabsContent value="crisis" className="space-y-6">
+                <motion.div
+                  initial={{ opacity: 0, y: 20 }}
+                  animate={{ opacity: 1, y: 0 }}
+                >
+                  <CrisisPredictionDashboard />
                 </motion.div>
               </TabsContent>
               

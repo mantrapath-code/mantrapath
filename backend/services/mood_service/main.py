@@ -92,7 +92,7 @@ class AnalyticsResponse(BaseModel):
 # Mood tracking endpoints
 @app.get("/api/v1/mood/", response_model=List[MoodEntryResponse])
 async def get_mood_entries(
-    limit: int = Query(50, le=100),
+    limit: int = Query(50, le=1000),  # Allow up to 1000 entries for stats calculations
     current_user: dict = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):

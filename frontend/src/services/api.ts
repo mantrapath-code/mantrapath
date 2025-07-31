@@ -21,6 +21,11 @@ class ApiService {
     this.checkBackendAvailability()
   }
 
+  // Refresh token from localStorage (useful when token is updated by auth service)
+  refreshToken() {
+    this.token = localStorage.getItem('mantrapath_token')
+  }
+
   private async checkBackendAvailability(): Promise<boolean> {
     if (this.backendCheckPromise) {
       return this.backendCheckPromise
@@ -531,14 +536,6 @@ class ApiService {
     localStorage.setItem('mantrapath_token', response.access_token)
     localStorage.setItem('mantrapath_refresh_token', response.refresh_token)
     
-    // Also get and store user data for WebSocket and other services
-    try {
-      const userData = await this.getCurrentUser()
-      localStorage.setItem('user_data', JSON.stringify(userData))
-    } catch (error) {
-      console.warn('Failed to get user data after login:', error)
-    }
-    
     return response
   }
 
@@ -581,8 +578,8 @@ class ApiService {
 
   logout() {
     this.token = null
-    localStorage.removeItem('mantrapath_token')
-    localStorage.removeItem('mantrapath_refresh_token')
+    localStorage.removeItem('auth_token')
+    localStorage.removeItem('refresh_token')
     localStorage.removeItem('user_data') // Also clear user data
   }
 
@@ -930,6 +927,9 @@ class ApiService {
     endpoint: string,
     options: RequestInit = {}
   ): Promise<T> {
+    // Refresh token from localStorage in case it was updated
+    this.refreshToken()
+    
     const profileServiceUrl = 'http://localhost:8002'
     const url = `${profileServiceUrl}${endpoint}`
     
@@ -970,11 +970,15 @@ class ApiService {
     bio?: string
     avatar_url?: string
     timezone?: string
-    date_of_birth?: string
-    location?: string
+    notifications_enabled?: boolean
+    daily_reminder_enabled?: boolean
+    daily_reminder_time?: string
+    weekly_report_enabled?: boolean
+    theme_preference?: string
+    privacy_mode?: boolean
   }) {
-    return this.profileRequest('/api/profiles/me', {
-      method: 'PUT',
+    return this.profileRequest('/api/profiles/', {
+      method: 'PATCH',
       body: JSON.stringify(profileData)
     })
   }
