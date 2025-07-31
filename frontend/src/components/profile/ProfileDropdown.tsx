@@ -8,9 +8,9 @@ import { useProfile } from '@/hooks/useProfile'
 interface User {
   id: string
   username: string
-  email?: string
-  first_name?: string
-  last_name?: string
+  email: string
+  first_name: string
+  last_name: string
   created_at?: string
 }
 

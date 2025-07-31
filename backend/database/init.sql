@@ -16,15 +16,25 @@ CREATE SCHEMA IF NOT EXISTS media;
 CREATE TABLE IF NOT EXISTS auth.users (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     email VARCHAR(255) UNIQUE NOT NULL,
-    username VARCHAR(50) UNIQUE NOT NULL,
+    username VARCHAR(50) NOT NULL,  -- Removed UNIQUE constraint to allow duplicate usernames
     password_hash VARCHAR(255) NOT NULL,
+    first_name VARCHAR(100),
+    last_name VARCHAR(100),
     is_active BOOLEAN DEFAULT true,
-    is_verified BOOLEAN DEFAULT false,
+    is_verified BOOLEAN DEFAULT false,  -- Email verification status
+    verification_token VARCHAR(255) UNIQUE,  -- Email verification token
+    verification_token_expires TIMESTAMP WITH TIME ZONE,  -- Token expiration
     role VARCHAR(20) DEFAULT 'user',
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
     last_login_at TIMESTAMP WITH TIME ZONE
 );
+
+-- Create indexes for auth.users
+CREATE INDEX IF NOT EXISTS idx_users_email ON auth.users(email);
+CREATE INDEX IF NOT EXISTS idx_users_username ON auth.users(username);  -- Non-unique index
+CREATE INDEX IF NOT EXISTS idx_users_active ON auth.users(is_active);
+CREATE INDEX IF NOT EXISTS idx_users_verified ON auth.users(is_verified);
 
 CREATE TABLE IF NOT EXISTS auth.refresh_tokens (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),

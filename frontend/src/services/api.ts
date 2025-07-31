@@ -526,10 +526,10 @@ class ApiService {
   }
 
   // Auth methods
-  async login(email: string, password: string) {
+  async login(emailOrUsername: string, password: string) {
     const response = await this.request<{access_token: string, refresh_token: string}>('/login', {
       method: 'POST',
-      body: JSON.stringify({ email, password }),
+      body: JSON.stringify({ email_or_username: emailOrUsername, password }),
     })
 
     this.token = response.access_token
@@ -543,27 +543,30 @@ class ApiService {
     email: string
     username: string
     password: string
-    first_name?: string
-    last_name?: string
+    first_name: string
+    last_name: string
   }) {
-    const response = await this.request<{access_token: string, refresh_token: string}>('/register', {
+    const response = await this.request<{message: string, user_id: string, verification_required: boolean}>('/register', {
       method: 'POST',
       body: JSON.stringify(userData),
     })
 
-    this.token = response.access_token
-    localStorage.setItem('mantrapath_token', response.access_token)
-    localStorage.setItem('mantrapath_refresh_token', response.refresh_token)
-    
-    // Also get and store user data for WebSocket and other services
-    try {
-      const currentUser = await this.getCurrentUser()
-      localStorage.setItem('user_data', JSON.stringify(currentUser))
-    } catch (error) {
-      console.warn('Failed to get user data after registration:', error)
-    }
-    
+    // Don't store tokens since verification is required
     return response
+  }
+
+  async verifyEmail(token: string) {
+    return this.request<{message: string}>('/verify-email', {
+      method: 'POST',
+      body: JSON.stringify({ token }),
+    })
+  }
+
+  async resendVerification(email: string) {
+    return this.request<{message: string}>('/resend-verification', {
+      method: 'POST',
+      body: JSON.stringify({ email }),
+    })
   }
 
   async getCurrentUser() {
@@ -572,6 +575,7 @@ class ApiService {
       email: string
       username: string
       is_active: boolean
+      is_verified: boolean
       role: string
     }>('/me')
   }

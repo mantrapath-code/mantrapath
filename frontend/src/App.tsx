@@ -11,6 +11,7 @@ import { CrisisPredictionDashboard } from "@/components/CrisisPredictionDashboar
 import { MoodPatternNotifications } from "@/components/MoodPatternNotifications"
 import { RealTimeNotifications } from "@/components/RealTimeNotifications"
 import { AuthScreen } from "@/components/AuthScreen"
+import { EmailVerification } from "@/components/EmailVerification"
 import { DevelopmentBanner } from "@/components/DevelopmentBanner"
 import { ProfileDropdown, ProfileDashboard } from "@/components/profile"
 import { AuthProvider, useAuth } from "@/hooks/useAuth"
@@ -29,6 +30,7 @@ function AppContent() {
   const [showChat, setShowChat] = useState(false)
   const [isMobile, setIsMobile] = useState(false)
   const [showProfile, setShowProfile] = useState(false)
+  const [showEmailVerification, setShowEmailVerification] = useState(false)
   
   // Initialize mood-based theme system
   const { currentTheme } = useMoodBasedTheme()
@@ -46,6 +48,34 @@ function AppContent() {
     return () => window.removeEventListener('resize', checkMobile)
   }, [])
 
+  // Check for email verification token in URL
+  useEffect(() => {
+    const urlParams = new URLSearchParams(window.location.search)
+    const verificationToken = urlParams.get('token')
+    
+    if (verificationToken) {
+      setShowEmailVerification(true)
+    }
+  }, [])
+
+  const handleCloseEmailVerification = () => {
+    setShowEmailVerification(false)
+    // Clear the token from URL
+    const url = new URL(window.location.href)
+    url.searchParams.delete('token')
+    window.history.replaceState({}, document.title, url.pathname)
+  }
+
+  const handleLoginRedirect = () => {
+    setShowEmailVerification(false)
+    // Clear the token from URL and show auth screen
+    const url = new URL(window.location.href)
+    url.searchParams.delete('token')
+    window.history.replaceState({}, document.title, url.pathname)
+    // Force re-authentication check
+    window.location.reload()
+  }
+
   // Show loading screen while checking authentication
   if (loading) {
     return (
@@ -62,7 +92,17 @@ function AppContent() {
 
   // Show auth screen if not authenticated
   if (!isAuthenticated) {
-    return <AuthScreen />
+    return (
+      <>
+        <AuthScreen />
+        {showEmailVerification && (
+          <EmailVerification
+            onClose={handleCloseEmailVerification}
+            onLoginRedirect={handleLoginRedirect}
+          />
+        )}
+      </>
+    )
   }
   
   return (

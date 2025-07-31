@@ -15,11 +15,14 @@ class User(Base):
     
     id = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
     email = Column(String, unique=True, nullable=False, index=True)
-    username = Column(String, unique=True, nullable=False, index=True)
+    username = Column(String, nullable=False, index=True)  # Remove unique constraint
     password_hash = Column(String, nullable=False)
     first_name = Column(String, default="")
     last_name = Column(String, default="")
     is_active = Column(Boolean, default=True)
+    is_verified = Column(Boolean, default=False)  # Email verification status
+    verification_token = Column(String, unique=True, nullable=True)  # Email verification token
+    verification_token_expires = Column(DateTime, nullable=True)  # Token expiration
     role = Column(String, default="user")  # user, moderator, admin
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
