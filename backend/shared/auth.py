@@ -6,6 +6,11 @@ from typing import Optional, Dict, Any
 import jwt
 from passlib.context import CryptContext
 import os
+import re
+import secrets
+import smtplib
+from email.mime.text import MIMEText
+from email.mime.multipart import MIMEMultipart
 
 # Security configuration
 SECRET_KEY = os.getenv("JWT_SECRET_KEY", "your-super-secret-jwt-key-change-in-production")
@@ -15,6 +20,144 @@ REFRESH_TOKEN_EXPIRE_DAYS = 7
 
 # Password hashing
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+
+def validate_password_strength(password: str) -> tuple[bool, str]:
+    """
+    Validate password strength
+    Returns (is_valid, error_message)
+    """
+    if len(password) < 8:
+        return False, "Password must be at least 8 characters long"
+    
+    if not re.search(r"[a-z]", password):
+        return False, "Password must contain at least one lowercase letter"
+    
+    if not re.search(r"[A-Z]", password):
+        return False, "Password must contain at least one uppercase letter"
+    
+    if not re.search(r"\d", password):
+        return False, "Password must contain at least one number"
+    
+    if not re.search(r"[!@#$%^&*(),.?\":{}|<>]", password):
+        return False, "Password must contain at least one special character"
+    
+    return True, ""
+
+def generate_verification_token() -> str:
+    """Generate a secure random verification token"""
+    return secrets.token_urlsafe(32)
+
+def send_verification_email(email: str, token: str, username: str) -> bool:
+    """
+    Send email verification link
+    Returns True if email was sent successfully
+    """
+    try:
+        # Email configuration from environment variables
+        smtp_server = os.getenv("SMTP_SERVER", "smtp.gmail.com")
+        smtp_port = int(os.getenv("SMTP_PORT", "587"))
+        smtp_username = os.getenv("SMTP_USERNAME", "")
+        smtp_password = os.getenv("SMTP_PASSWORD", "")
+        from_email = os.getenv("FROM_EMAIL", smtp_username)
+        app_url = os.getenv("APP_URL", "http://localhost:5173")
+        
+        if not smtp_username or not smtp_password:
+            # For development/testing - print verification link to console
+            verification_url = f"{app_url}/verify-email?token={token}"
+            print("\n" + "="*80)
+            print("🔐 EMAIL VERIFICATION REQUIRED")
+            print("="*80)
+            print(f"User: {username} ({email})")
+            print(f"Verification URL: {verification_url}")
+            print(f"Verification Token: {token}")
+            print("="*80)
+            print("💡 SMTP not configured. In production, set these environment variables:")
+            print("   SMTP_USERNAME, SMTP_PASSWORD, FROM_EMAIL")
+            print("="*80 + "\n")
+            return True  # Return true for development
+        
+        # Create verification URL
+        verification_url = f"{app_url}/verify-email?token={token}"
+        
+        # Create email content
+        subject = "Welcome to MantraPath - Verify Your Email"
+        html_content = f"""
+        <html>
+          <body style="font-family: Arial, sans-serif; margin: 0; padding: 20px; background-color: #f5f5f5;">
+            <div style="max-width: 600px; margin: 0 auto; background-color: white; padding: 30px; border-radius: 10px; box-shadow: 0 2px 10px rgba(0,0,0,0.1);">
+              <div style="text-align: center; margin-bottom: 30px;">
+                <h1 style="color: #6366f1; margin: 0;">MantraPath</h1>
+                <p style="color: #6b7280; margin: 5px 0;">Holistic Mental Wellness Platform</p>
+              </div>
+              
+              <h2 style="color: #111827; margin-bottom: 20px;">Welcome, {username}!</h2>
+              
+              <p style="color: #374151; line-height: 1.6; margin-bottom: 25px;">
+                Thank you for joining MantraPath! We're excited to support you on your mental wellness journey.
+              </p>
+              
+              <p style="color: #374151; line-height: 1.6; margin-bottom: 25px;">
+                To complete your registration and start using all features, please verify your email address by clicking the button below:
+              </p>
+              
+              <div style="text-align: center; margin: 30px 0;">
+                <a href="{verification_url}" 
+                   style="background-color: #6366f1; color: white; padding: 15px 30px; text-decoration: none; border-radius: 8px; font-weight: bold; display: inline-block;">
+                  Verify Email Address
+                </a>
+              </div>
+              
+              <p style="color: #6b7280; font-size: 14px; line-height: 1.5; margin-top: 30px;">
+                If the button doesn't work, you can copy and paste this link into your browser:<br>
+                <a href="{verification_url}" style="color: #6366f1; word-break: break-all;">{verification_url}</a>
+              </p>
+              
+              <p style="color: #6b7280; font-size: 14px; line-height: 1.5; margin-top: 20px;">
+                This verification link will expire in 24 hours. If you didn't create an account with MantraPath, please ignore this email.
+              </p>
+              
+              <div style="border-top: 1px solid #e5e7eb; margin-top: 30px; padding-top: 20px; text-align: center;">
+                <p style="color: #9ca3af; font-size: 12px; margin: 0;">
+                  MantraPath - Supporting your mental wellness journey
+                </p>
+              </div>
+            </div>
+          </body>
+        </html>
+        """
+        
+        # Create message
+        msg = MIMEMultipart('alternative')
+        msg['Subject'] = subject
+        msg['From'] = from_email
+        msg['To'] = email
+        
+        # Add HTML content
+        html_part = MIMEText(html_content, 'html')
+        msg.attach(html_part)
+        
+        # Send email
+        with smtplib.SMTP(smtp_server, smtp_port) as server:
+            server.starttls()
+            server.login(smtp_username, smtp_password)
+            server.send_message(msg)
+        
+        print(f"✅ Verification email sent to {email}")
+        return True
+        
+    except Exception as e:
+        print(f"❌ Error sending verification email: {e}")
+        # For development - still show the verification link in console
+        app_url = os.getenv("APP_URL", "http://localhost:5173")
+        verification_url = f"{app_url}/verify-email?token={token}"
+        print("\n" + "="*80)
+        print("🔐 EMAIL VERIFICATION REQUIRED (Email send failed)")
+        print("="*80)
+        print(f"User: {username} ({email})")
+        print(f"Verification URL: {verification_url}")
+        print(f"Verification Token: {token}")
+        print("="*80 + "\n")
+        return False
 
 def hash_password(password: str) -> str:
     """Hash a password"""
@@ -48,10 +191,15 @@ def create_refresh_token(data: Dict[Any, Any]) -> str:
     encoded_jwt = jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
     return encoded_jwt
 
-def verify_token(token: str) -> Optional[Dict[Any, Any]]:
+def verify_token(token: str, expected_type: Optional[str] = None) -> Optional[Dict[Any, Any]]:
     """Verify and decode JWT token"""
     try:
         payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+        
+        # Check token type if specified
+        if expected_type and payload.get("type") != expected_type:
+            return None
+            
         return payload
     except jwt.PyJWTError:
         return None

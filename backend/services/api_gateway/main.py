@@ -37,6 +37,7 @@ SERVICES = {
     "content": os.getenv("CONTENT_SERVICE_URL", "http://localhost:8005"),
     "community": os.getenv("COMMUNITY_SERVICE_URL", "http://localhost:8006"),
     "notification": os.getenv("NOTIFICATION_SERVICE_URL", "http://localhost:8007"),
+    "ml": os.getenv("ML_SERVICE_URL", "http://localhost:8008"),
     "media": os.getenv("MEDIA_SERVICE_URL", "http://localhost:8009"),
 }
 
@@ -71,6 +72,12 @@ def get_service_url(path: str) -> tuple[str, str]:
     if path.startswith("/notify/"):
         return SERVICES["notification"], path
     
+    # ML service routes
+    if path.startswith("/api/ml/"):
+        # Strip the /api/ml/ prefix for the ML service
+        ml_path = path[8:]  # Remove "/api/ml/" (8 characters)
+        return SERVICES["ml"], ml_path
+    
     # Media service routes
     if path.startswith("/api/v1/media/"):
         return SERVICES["media"], path
@@ -81,6 +88,9 @@ def get_service_url(path: str) -> tuple[str, str]:
 async def proxy_request(request: Request, service_url: str, path: str):
     """Proxy request to appropriate microservice"""
     
+    # Ensure proper URL construction with slash
+    if not path.startswith("/"):
+        path = f"/{path}"
     url = f"{service_url}{path}"
     
     # Extract headers

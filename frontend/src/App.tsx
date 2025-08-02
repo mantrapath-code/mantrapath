@@ -1,16 +1,23 @@
 import { useState, useEffect } from "react"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Button } from "@/components/ui/button"
-import { ChatCircle, X, SignOut } from "@phosphor-icons/react"
-import { MoodTracker } from "@/components/MoodTracker"
-import { JournalSection } from "@/components/JournalSection"
-import { ChatBot } from "@/components/ChatBot"
-import { EnhancedCommunitySection } from "@/components/EnhancedCommunitySection"
-import { WellnessDashboard } from "@/components/WellnessDashboard"
-import { MoodPatternNotifications } from "@/components/MoodPatternNotifications"
-import { RealTimeNotifications } from "@/components/RealTimeNotifications"
-import { AuthScreen } from "@/components/AuthScreen"
-import { DevelopmentBanner } from "@/components/DevelopmentBanner"
+import { ChatCircle, X } from "@phosphor-icons/react"
+import { MoodTracker } from "@/components/mood"
+import { PersonalizedInsights } from "@/components/mood"
+import { JournalSection } from "@/components/journal"
+import { ChatBot } from "@/components/chatbot"
+import { EnhancedCommunitySection } from "@/components/community"
+import { WellnessDashboard } from "@/components/dashboard"
+import { CrisisPredictionDashboard } from "@/components/dashboard"
+import { MoodPatternNotifications } from "@/components/mood"
+import { RealTimeNotifications } from "@/components/notifications"
+import { AuthScreen } from "@/components/auth"
+import { EmailVerification } from "@/components/auth"
+import { DevelopmentBanner } from "@/components/common"
+import { ProfileDropdown, ProfileDashboard } from "@/components/profile"
+import { InsightsPage } from "@/pages/InsightsPage"
+import { WeatherPage } from "@/pages/WeatherPage"
+import { AchievementsPage } from "@/pages/AchievementsPage"
 import { AuthProvider, useAuth } from "@/hooks/useAuth"
 import { useMoodBasedTheme } from "@/hooks/useMoodTheme"
 import { useWebSocket } from "@/hooks/useWebSocket"
@@ -26,6 +33,8 @@ function AppContent() {
   const [activeTab, setActiveTab] = useState("dashboard")
   const [showChat, setShowChat] = useState(false)
   const [isMobile, setIsMobile] = useState(false)
+  const [showProfile, setShowProfile] = useState(false)
+  const [showEmailVerification, setShowEmailVerification] = useState(false)
   
   // Initialize mood-based theme system
   const { currentTheme } = useMoodBasedTheme()
@@ -43,6 +52,34 @@ function AppContent() {
     return () => window.removeEventListener('resize', checkMobile)
   }, [])
 
+  // Check for email verification token in URL
+  useEffect(() => {
+    const urlParams = new URLSearchParams(window.location.search)
+    const verificationToken = urlParams.get('token')
+    
+    if (verificationToken) {
+      setShowEmailVerification(true)
+    }
+  }, [])
+
+  const handleCloseEmailVerification = () => {
+    setShowEmailVerification(false)
+    // Clear the token from URL
+    const url = new URL(window.location.href)
+    url.searchParams.delete('token')
+    window.history.replaceState({}, document.title, url.pathname)
+  }
+
+  const handleLoginRedirect = () => {
+    setShowEmailVerification(false)
+    // Clear the token from URL and show auth screen
+    const url = new URL(window.location.href)
+    url.searchParams.delete('token')
+    window.history.replaceState({}, document.title, url.pathname)
+    // Force re-authentication check
+    window.location.reload()
+  }
+
   // Show loading screen while checking authentication
   if (loading) {
     return (
@@ -59,7 +96,17 @@ function AppContent() {
 
   // Show auth screen if not authenticated
   if (!isAuthenticated) {
-    return <AuthScreen />
+    return (
+      <>
+        <AuthScreen />
+        {showEmailVerification && (
+          <EmailVerification
+            onClose={handleCloseEmailVerification}
+            onLoginRedirect={handleLoginRedirect}
+          />
+        )}
+      </>
+    )
   }
   
   return (
@@ -81,7 +128,7 @@ function AppContent() {
               </div>
             </motion.div>
             
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-3">
               <RealTimeNotifications />
               
               <Button
@@ -93,29 +140,36 @@ function AppContent() {
                 <ChatCircle size={16} />
               </Button>
               
-              <Button
-                onClick={logout}
-                variant="ghost"
-                size="sm"
-                className="text-muted-foreground hover:text-foreground"
-              >
-                <SignOut size={16} />
-                <span className="hidden sm:inline ml-2">Logout</span>
-              </Button>
+              <ProfileDropdown
+                user={user!}
+                onProfileView={() => setShowProfile(true)}
+                onProfileEdit={() => {
+                  setShowProfile(true)
+                  // Could set a specific tab here for editing
+                }}
+                onSettings={() => {
+                  setShowProfile(true)
+                  // Could set a specific tab here for settings
+                }}
+                onLogout={logout}
+              />
             </div>
           </div>
         </div>
       </header>
       
-      <div className="container mx-auto px-4 py-6">
+      <div className="container mx-auto px-4 py-6 min-h-[calc(100vh-200px)]">
         <DevelopmentBanner />
         
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 pb-8">
           <div className="lg:col-span-2">
             <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-              <TabsList className="grid grid-cols-4 w-full mb-6">
+              <TabsList className="grid grid-cols-7 w-full mb-6">
                 <TabsTrigger value="dashboard">Dashboard</TabsTrigger>
                 <TabsTrigger value="mood">Mood</TabsTrigger>
+                <TabsTrigger value="insights">Insights</TabsTrigger>
+                <TabsTrigger value="weather">Weather</TabsTrigger>
+                <TabsTrigger value="achievements">Achievements</TabsTrigger>
                 <TabsTrigger value="journal">Journal</TabsTrigger>
                 <TabsTrigger value="community">Community</TabsTrigger>
               </TabsList>
@@ -135,6 +189,33 @@ function AppContent() {
                   animate={{ opacity: 1, y: 0 }}
                 >
                   <MoodTracker />
+                </motion.div>
+              </TabsContent>
+
+              <TabsContent value="insights" className="space-y-6">
+                <motion.div
+                  initial={{ opacity: 0, y: 20 }}
+                  animate={{ opacity: 1, y: 0 }}
+                >
+                  <InsightsPage />
+                </motion.div>
+              </TabsContent>
+
+              <TabsContent value="weather" className="space-y-6">
+                <motion.div
+                  initial={{ opacity: 0, y: 20 }}
+                  animate={{ opacity: 1, y: 0 }}
+                >
+                  <WeatherPage />
+                </motion.div>
+              </TabsContent>
+
+              <TabsContent value="achievements" className="space-y-6">
+                <motion.div
+                  initial={{ opacity: 0, y: 20 }}
+                  animate={{ opacity: 1, y: 0 }}
+                >
+                  <AchievementsPage />
                 </motion.div>
               </TabsContent>
               
@@ -174,6 +255,31 @@ function AppContent() {
         </div>
       </div>
       
+      {/* Profile Dashboard Modal */}
+      <AnimatePresence>
+        {showProfile && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4"
+            onClick={() => setShowProfile(false)}
+          >
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95, y: 20 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.95, y: 20 }}
+              className="bg-background rounded-lg max-w-4xl w-full max-h-[90vh] overflow-y-auto"
+              onClick={(e) => e.stopPropagation()}
+            >
+                          <div className="p-6">
+              <ProfileDashboard onClose={() => setShowProfile(false)} />
+            </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
       {/* Mobile chatbot overlay */}
       <AnimatePresence>
         {isMobile && showChat && (

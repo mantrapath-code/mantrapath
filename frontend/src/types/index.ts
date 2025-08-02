@@ -11,6 +11,8 @@ export interface MoodEntry {
   timeOfDay?: 'morning' | 'afternoon' | 'evening' | 'night'
   energy?: 'high' | 'medium' | 'low'
   energy_level?: number // 1-5 scale for backend
+  stress_level?: number // 1-5 scale for enhanced mood tracking
+  sleep_quality?: number // 1-5 scale for enhanced mood tracking
   context?: string[]
   context_tags?: string[] // Backend field name
   created_at?: string

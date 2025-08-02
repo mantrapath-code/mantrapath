@@ -5,23 +5,29 @@ interface User {
   id: string
   email: string
   username: string
+  first_name?: string
+  last_name?: string
   is_active: boolean
+  is_verified: boolean
   role: string
+  created_at?: string
 }
 
 interface AuthContextType {
   user: User | null
   loading: boolean
-  login: (email: string, password: string) => Promise<void>
+  login: (emailOrUsername: string, password: string) => Promise<void>
   register: (userData: {
     email: string
     username: string
     password: string
-    first_name?: string
-    last_name?: string
-  }) => Promise<void>
+    first_name: string
+    last_name: string
+  }) => Promise<{ message: string; verification_required: boolean }>
   logout: () => void
   isAuthenticated: boolean
+  verifyEmail: (token: string) => Promise<{ message: string }>
+  resendVerification: (email: string) => Promise<{ message: string }>
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined)
@@ -50,9 +56,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     checkAuth()
   }, [])
 
-  const login = async (email: string, password: string) => {
+  const login = async (emailOrUsername: string, password: string) => {
     try {
-      await apiService.login(email, password)
+      await apiService.login(emailOrUsername, password)
       const userData = await apiService.getCurrentUser()
       setUser(userData)
     } catch (error) {
@@ -64,13 +70,31 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     email: string
     username: string
     password: string
-    first_name?: string
-    last_name?: string
+    first_name: string
+    last_name: string
   }) => {
     try {
-      await apiService.register(userData)
-      const user = await apiService.getCurrentUser()
-      setUser(user)
+      const result = await apiService.register(userData)
+      // Don't set user after registration since email verification is required
+      return result
+    } catch (error) {
+      throw error
+    }
+  }
+
+  const verifyEmail = async (token: string) => {
+    try {
+      const result = await apiService.verifyEmail(token)
+      return result
+    } catch (error) {
+      throw error
+    }
+  }
+
+  const resendVerification = async (email: string) => {
+    try {
+      const result = await apiService.resendVerification(email)
+      return result
     } catch (error) {
       throw error
     }
@@ -87,6 +111,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     login,
     register,
     logout,
+    verifyEmail,
+    resendVerification,
     isAuthenticated: !!user
   }
 

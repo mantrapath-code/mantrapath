@@ -116,6 +116,10 @@ export function useWellness() {
     sleep?: number
     note?: string
     tags?: string[]
+    emotional_granularity?: number
+    mood_confidence?: number
+    adaptive_responses?: any[]
+    environmental_context?: any
   }) => {
     try {
       setLoading(true)
@@ -127,7 +131,11 @@ export function useWellness() {
         stress_level: moodData.stress,
         sleep_quality: moodData.sleep,
         notes: moodData.note,
-        context_tags: moodData.tags
+        context_tags: moodData.tags,
+        emotional_granularity: moodData.emotional_granularity,
+        mood_confidence: moodData.mood_confidence,
+        adaptive_responses: moodData.adaptive_responses,
+        environmental_context: moodData.environmental_context
       })
 
       // Convert and add to local state
@@ -298,8 +306,58 @@ export const useUserStats = () => {
 }
 
 export const useMoodAnalytics = () => {
+  const [personalizedInsights, setPersonalizedInsights] = useState(null)
+  const [optimalTimes, setOptimalTimes] = useState(null)
+  const [loading, setLoading] = useState(false)
+
+  const getPersonalizedInsights = useCallback(async () => {
+    setLoading(true)
+    try {
+      const insights = await apiService.getPersonalizedInsights()
+      setPersonalizedInsights(insights)
+      return insights
+    } catch (error) {
+      console.error('Failed to fetch personalized insights:', error)
+      // Return fallback insights
+      return {
+        insights: [],
+        recommendations: [],
+        optimal_times: [],
+        weekly_summary: {
+          current_week_score: 0,
+          trend: 'stable',
+          improvement_areas: []
+        }
+      }
+    } finally {
+      setLoading(false)
+    }
+  }, [])
+
+  const getOptimalNotificationTimes = useCallback(async () => {
+    try {
+      const times = await apiService.getOptimalNotificationTimes()
+      setOptimalTimes(times)
+      return times
+    } catch (error) {
+      console.error('Failed to fetch optimal notification times:', error)
+      return null
+    }
+  }, [])
+
   const getWeeklyInsights = useCallback(() => {
-    // Mock weekly insights for now - this should connect to backend analytics
+    // Mock weekly insights for backward compatibility
+    if (personalizedInsights) {
+      return {
+        averageMood: personalizedInsights.weekly_summary.current_week_score || 4.2,
+        moodVariability: 0.8,
+        dominantMood: personalizedInsights.weekly_summary.trend === 'improving' ? 'good' : 'neutral',
+        patterns: [],
+        insights: personalizedInsights.insights || [],
+        recommendations: personalizedInsights.recommendations || []
+      }
+    }
+    
     return {
       averageMood: 4.2,
       moodVariability: 0.8,
@@ -308,9 +366,37 @@ export const useMoodAnalytics = () => {
       insights: [],
       recommendations: []
     }
+  }, [personalizedInsights])
+
+  const scheduleSmartNotifications = useCallback(async () => {
+    try {
+      const response = await fetch('/api/notifications/schedule-smart-notifications', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${localStorage.getItem('mantrapath_token')}`
+        }
+      })
+      
+      if (response.ok) {
+        const data = await response.json()
+        return data
+      } else {
+        throw new Error('Failed to schedule notifications')
+      }
+    } catch (error) {
+      console.error('Error scheduling smart notifications:', error)
+      return null
+    }
   }, [])
 
   return {
-    getWeeklyInsights
+    personalizedInsights,
+    optimalTimes,
+    loading,
+    getPersonalizedInsights,
+    getOptimalNotificationTimes,
+    getWeeklyInsights,
+    scheduleSmartNotifications
   }
 }

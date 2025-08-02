@@ -21,6 +21,11 @@ class ApiService {
     this.checkBackendAvailability()
   }
 
+  // Refresh token from localStorage (useful when token is updated by auth service)
+  refreshToken() {
+    this.token = localStorage.getItem('mantrapath_token')
+  }
+
   private async checkBackendAvailability(): Promise<boolean> {
     if (this.backendCheckPromise) {
       return this.backendCheckPromise
@@ -167,18 +172,34 @@ class ApiService {
       } as T)
     }
 
-    // Mock mood data
+    // Mock mood data with realistic patterns
     if (endpoint.startsWith('/api/v1/mood/') && options.method !== 'POST') {
-      const mockMoods = Array.from({ length: 30 }, (_, i) => ({
-        id: `mood_${i}`,
-        mood_score: Math.floor(Math.random() * 10) + 1,
-        energy_level: Math.floor(Math.random() * 10) + 1,
-        stress_level: Math.floor(Math.random() * 10) + 1,
-        sleep_quality: Math.floor(Math.random() * 10) + 1,
-        notes: `Mock mood entry ${i}`,
-        context_tags: ['work', 'exercise', 'sleep'][Math.floor(Math.random() * 3)] ? ['work'] : [],
-        created_at: new Date(Date.now() - i * 24 * 60 * 60 * 1000).toISOString()
-      }))
+      const moods = ['very-low', 'low', 'neutral', 'good', 'excellent']
+      const mockMoods = Array.from({ length: 30 }, (_, i) => {
+        // Create realistic mood patterns
+        const dayOffset = i * 24 * 60 * 60 * 1000
+        const baseScore = 5 + Math.sin(i * 0.3) * 2 + Math.random() * 2 // Creates wave pattern with randomness
+        const moodScore = Math.max(1, Math.min(10, Math.floor(baseScore)))
+        
+        return {
+          id: `mood_${i}`,
+          mood_score: moodScore,
+          energy_level: Math.floor(Math.random() * 5) + 3, // 3-7 range
+          stress_level: Math.floor(Math.random() * 5) + 3,
+          sleep_quality: Math.floor(Math.random() * 5) + 3,
+          notes: `Mood entry from ${Math.floor(i/7)} weeks ago`,
+          context_tags: [
+            ['work', 'stress'], 
+            ['exercise', 'health'], 
+            ['social', 'friends'], 
+            ['relaxation'], 
+            ['creative']
+          ][Math.floor(Math.random() * 5)],
+          created_at: new Date(Date.now() - dayOffset).toISOString()
+        }
+      }).reverse() // Show newest first
+      
+      console.log('🔧 Generated mock mood data:', mockMoods.length, 'entries')
       return Promise.resolve(mockMoods as T)
     }
 
@@ -505,23 +526,15 @@ class ApiService {
   }
 
   // Auth methods
-  async login(email: string, password: string) {
+  async login(emailOrUsername: string, password: string) {
     const response = await this.request<{access_token: string, refresh_token: string}>('/login', {
       method: 'POST',
-      body: JSON.stringify({ email, password }),
+      body: JSON.stringify({ email_or_username: emailOrUsername, password }),
     })
 
     this.token = response.access_token
     localStorage.setItem('mantrapath_token', response.access_token)
     localStorage.setItem('mantrapath_refresh_token', response.refresh_token)
-    
-    // Also get and store user data for WebSocket and other services
-    try {
-      const userData = await this.getCurrentUser()
-      localStorage.setItem('user_data', JSON.stringify(userData))
-    } catch (error) {
-      console.warn('Failed to get user data after login:', error)
-    }
     
     return response
   }
@@ -530,27 +543,30 @@ class ApiService {
     email: string
     username: string
     password: string
-    first_name?: string
-    last_name?: string
+    first_name: string
+    last_name: string
   }) {
-    const response = await this.request<{access_token: string, refresh_token: string}>('/register', {
+    const response = await this.request<{message: string, user_id: string, verification_required: boolean}>('/register', {
       method: 'POST',
       body: JSON.stringify(userData),
     })
 
-    this.token = response.access_token
-    localStorage.setItem('mantrapath_token', response.access_token)
-    localStorage.setItem('mantrapath_refresh_token', response.refresh_token)
-    
-    // Also get and store user data for WebSocket and other services
-    try {
-      const currentUser = await this.getCurrentUser()
-      localStorage.setItem('user_data', JSON.stringify(currentUser))
-    } catch (error) {
-      console.warn('Failed to get user data after registration:', error)
-    }
-    
+    // Don't store tokens since verification is required
     return response
+  }
+
+  async verifyEmail(token: string) {
+    return this.request<{message: string}>('/verify-email', {
+      method: 'POST',
+      body: JSON.stringify({ token }),
+    })
+  }
+
+  async resendVerification(email: string) {
+    return this.request<{message: string}>('/resend-verification', {
+      method: 'POST',
+      body: JSON.stringify({ email }),
+    })
   }
 
   async getCurrentUser() {
@@ -559,14 +575,15 @@ class ApiService {
       email: string
       username: string
       is_active: boolean
+      is_verified: boolean
       role: string
     }>('/me')
   }
 
   logout() {
     this.token = null
-    localStorage.removeItem('mantrapath_token')
-    localStorage.removeItem('mantrapath_refresh_token')
+    localStorage.removeItem('auth_token')
+    localStorage.removeItem('refresh_token')
     localStorage.removeItem('user_data') // Also clear user data
   }
 
@@ -591,11 +608,102 @@ class ApiService {
     sleep_quality?: number
     notes?: string
     context_tags?: string[]
+    emotional_granularity?: number
+    mood_confidence?: number
+    adaptive_responses?: any[]
+    environmental_context?: any
   }) {
     return this.request('/api/v1/mood/', {
       method: 'POST',
       body: JSON.stringify(moodData),
     })
+  }
+
+  async getAdaptiveQuestions() {
+    return this.request<Array<{
+      question_type: string
+      question_text: string
+      options?: Array<{value: string, label: string}>
+      trigger_pattern?: string
+    }>>('/api/v1/mood/adaptive-questions')
+  }
+
+  async getCelebrations(mood_data: any) {
+    // Note: The detect-celebrations endpoint doesn't exist yet in backend
+    // For now, we'll use the existing celebrations endpoint
+    return this.request<Array<{
+      type: string
+      message: string
+      level: string
+      achievement_type?: string
+      streak_count?: number
+      improvement_metric?: string
+    }>>('/api/v1/mood/celebrations')
+  }
+
+  async getPendingCelebrations() {
+    return this.request<Array<{
+      id: string
+      type: string
+      title: string
+      message: string
+      achievement_level: string
+      reward_type?: string
+      reward_data?: any
+      created_at: string
+    }>>('/api/v1/mood/celebrations')
+  }
+
+  async markCelebrationsAsSeen(celebrationIds: string[]) {
+    return this.request<{message: string}>('/api/v1/mood/celebrations/mark-shown', {
+      method: 'POST',
+      body: JSON.stringify(celebrationIds)
+    })
+  }
+
+  async getMoodAnalyticsSummary() {
+    return this.request<{
+      current_streak: number
+      total_entries: number
+      average_mood: number
+      improvement_rate: number
+      consistency_score: number
+    }>('/api/v1/analytics/overview')
+  }
+
+  async getEmotionalWeather() {
+    return this.request<{
+      forecast_date: string
+      predicted_mood_range: {
+        min: number
+        max: number
+      }
+      weather_emoji: string
+      weather_description: string
+      risk_factors: string[]
+      protective_factors: string[]
+      recommendations: Array<{
+        id: string
+        text: string
+        priority: string
+        type: string
+      }>
+      confidence_score: number
+    }>('/api/v1/mood/emotional-weather')
+  }
+
+  async getWeeklyWeather() {
+    return this.request<{
+      user_id: string
+      week_outlook: Array<{
+        date: string
+        day: string
+        emoji: string
+        description: string
+      }>
+      confidence_score: number
+      generated_at: string
+    }>('/api/v1/mood/weekly-weather')
   }
 
   // Journal
@@ -650,6 +758,67 @@ class ApiService {
       }>
       total_weeks: number
     }>('/api/v1/analytics/patterns/weekly')
+  }
+
+  async getPersonalizedInsights() {
+    return this.request<{
+      insights: Array<{
+        id: string
+        type: string
+        title: string
+        description: string
+        actionable: string
+        priority: string
+        category: string
+      }>
+      recommendations: Array<{
+        id: string
+        title: string
+        description: string
+        actions: string[]
+        estimated_time: string
+        expected_benefit: string
+      }>
+      optimal_times: Array<{
+        time_of_day: string
+        average_mood: number
+        recommendation: string
+        effectiveness_score: number
+      }>
+      weekly_summary: {
+        current_week_score: number
+        previous_weeks_score: number
+        trend: string
+        improvement_areas: string[]
+        total_entries: number
+        days_tracked_this_week: number
+      }
+    }>('/api/v1/analytics/personalized-insights')
+  }
+
+  async getOptimalNotificationTimes() {
+    return this.request<{
+      optimal_times: Array<{
+        hour: number
+        day_of_week: number | null
+        effectiveness_score: number
+        notification_type: string
+        reason: string
+        average_mood_at_time?: number
+        sample_size?: number
+      }>
+      user_preferences: {
+        quiet_hours: { start: number; end: number }
+        frequency: string
+        types: string[]
+      }
+      analysis_summary: {
+        data_points: number
+        analysis_period_weeks: number
+        pattern_confidence: number
+        next_update: string
+      }
+    }>('/api/v1/analytics/optimal-notification-times')
   }
 
   // Community
@@ -763,6 +932,172 @@ class ApiService {
         like_count: number
       }>
     }>(`/user/activity?limit=${limit}`)
+  }
+
+  // Events & Challenges
+  async getEvents() {
+    return this.request<Array<{
+      id: string
+      title: string
+      description: string
+      start_time: string
+      end_time: string
+      location?: string
+      is_virtual: boolean
+      participant_count: number
+      is_participating: boolean
+      created_at: string
+    }>>('/forums/events')
+  }
+
+  async createEvent(eventData: {
+    title: string
+    description: string
+    start_time: string
+    end_time: string
+    location?: string
+    is_virtual: boolean
+  }) {
+    return this.request('/forums/events', {
+      method: 'POST',
+      body: JSON.stringify(eventData),
+    })
+  }
+
+  async joinEvent(eventId: string) {
+    return this.request(`/forums/events/${eventId}/join`, {
+      method: 'POST',
+    })
+  }
+
+  async leaveEvent(eventId: string) {
+    return this.request(`/forums/events/${eventId}/leave`, {
+      method: 'DELETE',
+    })
+  }
+
+  async getChallenges() {
+    return this.request<Array<{
+      id: string
+      title: string
+      description: string
+      category: string
+      duration_days: number
+      start_date: string
+      end_date: string
+      participant_count: number
+      is_participating: boolean
+      created_at: string
+    }>>('/forums/challenges')
+  }
+
+  async createChallenge(challengeData: {
+    title: string
+    description: string
+    category: string
+    duration_days: number
+    start_date: string
+    end_date: string
+  }) {
+    return this.request('/forums/challenges', {
+      method: 'POST',
+      body: JSON.stringify(challengeData),
+    })
+  }
+
+  async joinChallenge(challengeId: string) {
+    return this.request(`/forums/challenges/${challengeId}/join`, {
+      method: 'POST',
+    })
+  }
+
+  async leaveChallenge(challengeId: string) {
+    return this.request(`/forums/challenges/${challengeId}/leave`, {
+      method: 'DELETE',
+    })
+  }
+
+  // Profile Service - uses different port
+  private async profileRequest<T>(
+    endpoint: string,
+    options: RequestInit = {}
+  ): Promise<T> {
+    // Refresh token from localStorage in case it was updated
+    this.refreshToken()
+    
+    const profileServiceUrl = 'http://localhost:8002'
+    const url = `${profileServiceUrl}${endpoint}`
+    
+    const config: RequestInit = {
+      ...options,
+      headers: {
+        ...this.getHeaders(),
+        ...options.headers,
+      },
+    }
+
+    try {
+      const response = await fetch(url, config)
+      return this.handleResponse<T>(response)
+    } catch (error) {
+      console.error('Profile service request failed:', error)
+      throw error
+    }
+  }
+
+  async getMyProfile() {
+    return this.profileRequest<{
+      id: string
+      user_id: string
+      bio?: string
+      avatar_url?: string
+      timezone: string
+      date_of_birth?: string
+      location?: string
+      theme: string
+      privacy_level: string
+      created_at: string
+      updated_at: string
+    }>('/api/profiles/me')
+  }
+
+  async updateProfile(profileData: {
+    bio?: string
+    avatar_url?: string
+    timezone?: string
+    notifications_enabled?: boolean
+    daily_reminder_enabled?: boolean
+    daily_reminder_time?: string
+    weekly_report_enabled?: boolean
+    theme_preference?: string
+    privacy_mode?: boolean
+  }) {
+    return this.profileRequest('/api/profiles/', {
+      method: 'PATCH',
+      body: JSON.stringify(profileData)
+    })
+  }
+
+  async getProfileById(profileId: string) {
+    return this.profileRequest(`/api/profiles/${profileId}`)
+  }
+
+  async getMyProfileStats() {
+    // Get mood entries count and average
+    const moodEntries = await this.getMoodEntries(1000) // Get more entries for accurate stats
+    const daysActive = new Set(moodEntries.map((entry: any) => 
+      new Date(entry.created_at).toDateString()
+    )).size
+    
+    const avgMoodScore = moodEntries.length > 0 
+      ? moodEntries.reduce((sum: number, entry: any) => sum + entry.mood_score, 0) / moodEntries.length
+      : 0
+
+    return {
+      daysActive,
+      moodEntries: moodEntries.length,
+      avgMoodScore: Number(avgMoodScore.toFixed(1))
+    }
   }
 
   // Chatbot
@@ -906,6 +1241,8 @@ export const moodApi = {
   createEntry: apiService.createMoodEntry.bind(apiService),
   getAnalytics: apiService.getAnalyticsOverview.bind(apiService),
   getWeeklyPatterns: apiService.getWeeklyPatterns.bind(apiService),
+  getPersonalizedInsights: apiService.getPersonalizedInsights.bind(apiService),
+  getOptimalNotificationTimes: apiService.getOptimalNotificationTimes.bind(apiService),
 }
 
 export const communityApi = {
@@ -920,15 +1257,15 @@ export const communityApi = {
   removeLike: apiService.unlikeContent.bind(apiService),
   getUserStats: apiService.getUserStats.bind(apiService),
   getUserActivity: apiService.getUserActivity.bind(apiService),
-  // Add missing functions for events and challenges
-  getEvents: () => Promise.resolve([]),
-  getChallenges: () => Promise.resolve([]),
-  joinEvent: (eventId: string) => Promise.resolve({ message: 'Joined event' }),
-  leaveEvent: (eventId: string) => Promise.resolve({ message: 'Left event' }),
-  createEvent: (eventData: any) => Promise.resolve({ id: Date.now().toString(), ...eventData }),
-  joinChallenge: (challengeId: string) => Promise.resolve({ message: 'Joined challenge' }),
-  leaveChallenge: (challengeId: string) => Promise.resolve({ message: 'Left challenge' }),
-  createChallenge: (challengeData: any) => Promise.resolve({ id: Date.now().toString(), ...challengeData }),
+  // Events & Challenges - now using real API methods
+  getEvents: apiService.getEvents.bind(apiService),
+  getChallenges: apiService.getChallenges.bind(apiService),
+  joinEvent: apiService.joinEvent.bind(apiService),
+  leaveEvent: apiService.leaveEvent.bind(apiService),
+  createEvent: apiService.createEvent.bind(apiService),
+  joinChallenge: apiService.joinChallenge.bind(apiService),
+  leaveChallenge: apiService.leaveChallenge.bind(apiService),
+  createChallenge: apiService.createChallenge.bind(apiService),
 }
 
 export const notificationApi = {

@@ -15,7 +15,11 @@ sys.path.append('/app')
 sys.path.append('/app/shared')
 
 from shared.database import get_db, engine
-from shared.models import CommunityForum, ForumThread, ThreadReply, ForumMembership, Like, Base, Forum, ForumReply, User, UserProfile
+from shared.models import (
+    CommunityForum, ForumThread, ThreadReply, ForumMembership, Like, Base, 
+    Forum, ForumReply, User, UserProfile, CommunityEvent, Challenge, 
+    EventParticipant, ChallengeParticipant
+)
 from shared.auth import get_current_user
 
 # Create tables
@@ -92,6 +96,48 @@ class ReplyResponse(BaseModel):
 class LikeRequest(BaseModel):
     content_type: str  # 'thread' or 'reply'
     content_id: str
+
+# Event models
+class EventCreate(BaseModel):
+    title: str
+    description: str
+    start_time: datetime
+    end_time: datetime
+    location: Optional[str] = None
+    is_virtual: bool = True
+
+class EventResponse(BaseModel):
+    id: str
+    title: str
+    description: str
+    start_time: datetime
+    end_time: datetime
+    location: Optional[str] = None
+    is_virtual: bool
+    participant_count: int
+    is_participating: bool = False
+    created_at: datetime
+
+# Challenge models
+class ChallengeCreate(BaseModel):
+    title: str
+    description: str
+    category: str
+    duration_days: int
+    start_date: datetime
+    end_date: datetime
+
+class ChallengeResponse(BaseModel):
+    id: str
+    title: str
+    description: str
+    category: str
+    duration_days: int
+    start_date: datetime
+    end_date: datetime
+    participant_count: int
+    is_participating: bool = False
+    created_at: datetime
 
 # Forum endpoints
 @app.get("/forums", response_model=List[ForumResponse])
@@ -829,6 +875,260 @@ async def create_default_forums():
         
         db.commit()
         print(f"Created {len(default_forums)} default forums")
+
+# Events endpoints
+@app.get("/forums/events", response_model=List[EventResponse])
+async def get_events(
+    current_user: dict = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """Get all community events"""
+    events = db.query(CommunityEvent).order_by(desc(CommunityEvent.start_time)).all()
+    
+    # Get user's event participations
+    participations = db.query(EventParticipant).filter(
+        EventParticipant.user_id == current_user["user_id"]
+    ).all()
+    
+    participating_event_ids = {str(p.event_id) for p in participations}
+    
+    event_responses = []
+    for event in events:
+        participant_count = db.query(EventParticipant).filter(
+            EventParticipant.event_id == event.id
+        ).count()
+        
+        event_responses.append(EventResponse(
+            id=str(event.id),
+            title=event.title,
+            description=event.description,
+            start_time=event.start_time,
+            end_time=event.end_time,
+            location=event.location,
+            is_virtual=event.is_virtual,
+            participant_count=participant_count,
+            is_participating=str(event.id) in participating_event_ids,
+            created_at=event.created_at
+        ))
+    
+    return event_responses
+
+@app.post("/forums/events", response_model=EventResponse)
+async def create_event(
+    event_data: EventCreate,
+    current_user: dict = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """Create a new community event"""
+    event = CommunityEvent(
+        title=event_data.title,
+        description=event_data.description,
+        start_time=event_data.start_time,
+        end_time=event_data.end_time,
+        location=event_data.location,
+        is_virtual=event_data.is_virtual,
+        created_by=current_user["user_id"]
+    )
+    
+    db.add(event)
+    db.commit()
+    db.refresh(event)
+    
+    return EventResponse(
+        id=str(event.id),
+        title=event.title,
+        description=event.description,
+        start_time=event.start_time,
+        end_time=event.end_time,
+        location=event.location,
+        is_virtual=event.is_virtual,
+        participant_count=0,
+        is_participating=False,
+        created_at=event.created_at
+    )
+
+@app.post("/forums/events/{event_id}/join")
+async def join_event(
+    event_id: str,
+    current_user: dict = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """Join an event"""
+    # Check if event exists
+    event = db.query(CommunityEvent).filter(CommunityEvent.id == event_id).first()
+    if not event:
+        raise HTTPException(status_code=404, detail="Event not found")
+    
+    # Check if already participating
+    existing = db.query(EventParticipant).filter(
+        and_(
+            EventParticipant.user_id == current_user["user_id"],
+            EventParticipant.event_id == event_id
+        )
+    ).first()
+    
+    if existing:
+        raise HTTPException(status_code=400, detail="Already participating in this event")
+    
+    # Create participation record
+    participation = EventParticipant(
+        user_id=current_user["user_id"],
+        event_id=event_id
+    )
+    
+    db.add(participation)
+    db.commit()
+    
+    return {"message": "Successfully joined event"}
+
+@app.delete("/forums/events/{event_id}/leave")
+async def leave_event(
+    event_id: str,
+    current_user: dict = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """Leave an event"""
+    participation = db.query(EventParticipant).filter(
+        and_(
+            EventParticipant.user_id == current_user["user_id"],
+            EventParticipant.event_id == event_id
+        )
+    ).first()
+    
+    if not participation:
+        raise HTTPException(status_code=404, detail="Not participating in this event")
+    
+    db.delete(participation)
+    db.commit()
+    
+    return {"message": "Successfully left event"}
+
+# Challenges endpoints
+@app.get("/forums/challenges", response_model=List[ChallengeResponse])
+async def get_challenges(
+    current_user: dict = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """Get all wellness challenges"""
+    challenges = db.query(Challenge).order_by(desc(Challenge.start_date)).all()
+    
+    # Get user's challenge participations
+    participations = db.query(ChallengeParticipant).filter(
+        ChallengeParticipant.user_id == current_user["user_id"]
+    ).all()
+    
+    participating_challenge_ids = {str(p.challenge_id) for p in participations}
+    
+    challenge_responses = []
+    for challenge in challenges:
+        participant_count = db.query(ChallengeParticipant).filter(
+            ChallengeParticipant.challenge_id == challenge.id
+        ).count()
+        
+        challenge_responses.append(ChallengeResponse(
+            id=str(challenge.id),
+            title=challenge.title,
+            description=challenge.description,
+            category=challenge.category,
+            duration_days=challenge.duration_days,
+            start_date=challenge.start_date,
+            end_date=challenge.end_date,
+            participant_count=participant_count,
+            is_participating=str(challenge.id) in participating_challenge_ids,
+            created_at=challenge.created_at
+        ))
+    
+    return challenge_responses
+
+@app.post("/forums/challenges", response_model=ChallengeResponse)
+async def create_challenge(
+    challenge_data: ChallengeCreate,
+    current_user: dict = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """Create a new wellness challenge"""
+    challenge = Challenge(
+        title=challenge_data.title,
+        description=challenge_data.description,
+        category=challenge_data.category,
+        duration_days=challenge_data.duration_days,
+        start_date=challenge_data.start_date,
+        end_date=challenge_data.end_date,
+        created_by=current_user["user_id"]
+    )
+    
+    db.add(challenge)
+    db.commit()
+    db.refresh(challenge)
+    
+    return ChallengeResponse(
+        id=str(challenge.id),
+        title=challenge.title,
+        description=challenge.description,
+        category=challenge.category,
+        duration_days=challenge.duration_days,
+        start_date=challenge.start_date,
+        end_date=challenge.end_date,
+        participant_count=0,
+        is_participating=False,
+        created_at=challenge.created_at
+    )
+
+@app.post("/forums/challenges/{challenge_id}/join")
+async def join_challenge(
+    challenge_id: str,
+    current_user: dict = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """Join a challenge"""
+    # Check if challenge exists
+    challenge = db.query(Challenge).filter(Challenge.id == challenge_id).first()
+    if not challenge:
+        raise HTTPException(status_code=404, detail="Challenge not found")
+    
+    # Check if already participating
+    existing = db.query(ChallengeParticipant).filter(
+        and_(
+            ChallengeParticipant.user_id == current_user["user_id"],
+            ChallengeParticipant.challenge_id == challenge_id
+        )
+    ).first()
+    
+    if existing:
+        raise HTTPException(status_code=400, detail="Already participating in this challenge")
+    
+    # Create participation record
+    participation = ChallengeParticipant(
+        user_id=current_user["user_id"],
+        challenge_id=challenge_id
+    )
+    
+    db.add(participation)
+    db.commit()
+    
+    return {"message": "Successfully joined challenge"}
+
+@app.delete("/forums/challenges/{challenge_id}/leave")
+async def leave_challenge(
+    challenge_id: str,
+    current_user: dict = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """Leave a challenge"""
+    participation = db.query(ChallengeParticipant).filter(
+        and_(
+            ChallengeParticipant.user_id == current_user["user_id"],
+            ChallengeParticipant.challenge_id == challenge_id
+        )
+    ).first()
+    
+    if not participation:
+        raise HTTPException(status_code=404, detail="Not participating in this challenge")
+    
+    db.delete(participation)
+    db.commit()
+    
+    return {"message": "Successfully left challenge"}
 
 @app.get("/health")
 async def health_check():

@@ -45,10 +45,12 @@ class ProfileResponse(BaseModel):
     bio: Optional[str]
     avatar_url: Optional[str]
     timezone: str
-    date_of_birth: Optional[date]
-    location: Optional[str]
-    theme: str
-    privacy_level: str
+    notifications_enabled: bool
+    daily_reminder_enabled: bool
+    daily_reminder_time: str
+    weekly_report_enabled: bool
+    theme_preference: str
+    privacy_mode: bool
     created_at: datetime
     updated_at: datetime
 
@@ -56,8 +58,12 @@ class ProfileUpdate(BaseModel):
     bio: Optional[str] = None
     avatar_url: Optional[str] = None
     timezone: Optional[str] = None
-    date_of_birth: Optional[date] = None
-    location: Optional[str] = None
+    notifications_enabled: Optional[bool] = None
+    daily_reminder_enabled: Optional[bool] = None
+    daily_reminder_time: Optional[str] = None
+    weekly_report_enabled: Optional[bool] = None
+    theme_preference: Optional[str] = None
+    privacy_mode: Optional[bool] = None
 
 class PreferencesResponse(BaseModel):
     email_notifications: bool
@@ -130,10 +136,12 @@ async def get_my_profile(
         bio=profile.bio,
         avatar_url=profile.avatar_url,
         timezone=profile.timezone,
-        date_of_birth=profile.date_of_birth,
-        location=profile.location,
-        theme=profile.theme,
-        privacy_level=profile.privacy_level,
+        notifications_enabled=profile.notifications_enabled,
+        daily_reminder_enabled=profile.daily_reminder_enabled,
+        daily_reminder_time=profile.daily_reminder_time,
+        weekly_report_enabled=profile.weekly_report_enabled,
+        theme_preference=profile.theme_preference,
+        privacy_mode=profile.privacy_mode,
         created_at=profile.created_at,
         updated_at=profile.updated_at
     )
@@ -158,18 +166,20 @@ async def get_profile_by_id(
     # For public and friends levels, show limited info unless it's the owner
     is_owner = str(profile.user_id) == current_user["user_id"]
     
-    if not is_owner and profile.privacy_level != "public":
-        # Return limited profile info
+    if not is_owner and profile.privacy_mode:
+        # Return limited profile info for private profiles
         return ProfileResponse(
             id=profile.id,
             user_id=profile.user_id,
-            bio=None,  # Hide bio for non-public profiles
+            bio=None,  # Hide bio for private profiles
             avatar_url=profile.avatar_url,
             timezone=profile.timezone,
-            date_of_birth=None,  # Hide birthday
-            location=None,  # Hide location
-            theme=profile.theme,
-            privacy_level=profile.privacy_level,
+            notifications_enabled=profile.notifications_enabled,
+            daily_reminder_enabled=profile.daily_reminder_enabled,
+            daily_reminder_time=profile.daily_reminder_time,
+            weekly_report_enabled=profile.weekly_report_enabled,
+            theme_preference=profile.theme_preference,
+            privacy_mode=profile.privacy_mode,
             created_at=profile.created_at,
             updated_at=profile.updated_at
         )
@@ -180,10 +190,12 @@ async def get_profile_by_id(
         bio=profile.bio,
         avatar_url=profile.avatar_url,
         timezone=profile.timezone,
-        date_of_birth=profile.date_of_birth,
-        location=profile.location,
-        theme=profile.theme,
-        privacy_level=profile.privacy_level,
+        notifications_enabled=profile.notifications_enabled,
+        daily_reminder_enabled=profile.daily_reminder_enabled,
+        daily_reminder_time=profile.daily_reminder_time,
+        weekly_report_enabled=profile.weekly_report_enabled,
+        theme_preference=profile.theme_preference,
+        privacy_mode=profile.privacy_mode,
         created_at=profile.created_at,
         updated_at=profile.updated_at
     )
@@ -228,10 +240,12 @@ async def create_profile(
         bio=profile.bio,
         avatar_url=profile.avatar_url,
         timezone=profile.timezone,
-        date_of_birth=profile.date_of_birth,
-        location=profile.location,
-        theme=profile.theme,
-        privacy_level=profile.privacy_level,
+        notifications_enabled=profile.notifications_enabled,
+        daily_reminder_enabled=profile.daily_reminder_enabled,
+        daily_reminder_time=profile.daily_reminder_time,
+        weekly_report_enabled=profile.weekly_report_enabled,
+        theme_preference=profile.theme_preference,
+        privacy_mode=profile.privacy_mode,
         created_at=profile.created_at,
         updated_at=profile.updated_at
     )
@@ -261,7 +275,7 @@ async def update_my_profile(
     db.refresh(profile)
     
     # Clear any cached profile data
-    redis_client.delete(f"profile_cache:{current_user['user_id']}")
+    # redis_client.delete(f"profile_cache:{current_user['user_id']}")  # Temporarily disabled
     
     return ProfileResponse(
         id=profile.id,
@@ -269,10 +283,12 @@ async def update_my_profile(
         bio=profile.bio,
         avatar_url=profile.avatar_url,
         timezone=profile.timezone,
-        date_of_birth=profile.date_of_birth,
-        location=profile.location,
-        theme=profile.theme,
-        privacy_level=profile.privacy_level,
+        notifications_enabled=profile.notifications_enabled,
+        daily_reminder_enabled=profile.daily_reminder_enabled,
+        daily_reminder_time=profile.daily_reminder_time,
+        weekly_report_enabled=profile.weekly_report_enabled,
+        theme_preference=profile.theme_preference,
+        privacy_mode=profile.privacy_mode,
         created_at=profile.created_at,
         updated_at=profile.updated_at
     )
@@ -506,10 +522,12 @@ async def search_profiles(
                 bio=profile.bio,
                 avatar_url=profile.avatar_url,
                 timezone=profile.timezone,
-                date_of_birth=None,  # Don't expose birthday in search
-                location=profile.location,
-                theme=profile.theme,
-                privacy_level=profile.privacy_level,
+                notifications_enabled=profile.notifications_enabled,
+                daily_reminder_enabled=profile.daily_reminder_enabled,
+                daily_reminder_time=profile.daily_reminder_time,
+                weekly_report_enabled=profile.weekly_report_enabled,
+                theme_preference=profile.theme_preference,
+                privacy_mode=profile.privacy_mode,
                 created_at=profile.created_at,
                 updated_at=profile.updated_at
             )
