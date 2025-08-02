@@ -2,6 +2,51 @@
 
 A comprehensive mental wellness platform that combines mood tracking, journaling, community features, and AI-powered chatbot support built with modern microservices architecture.
 
+## 🚀 Quick Start
+
+### One Command Setup & Launch
+```bash
+# Initial setup (run once)
+./mantrapath setup
+
+# Start the full development environment
+./mantrapath start
+```
+
+### Available Commands
+```bash
+./mantrapath start      # Start full development environment
+./mantrapath backend    # Start backend services only  
+./mantrapath frontend   # Start frontend only
+./mantrapath stop       # Stop all services
+./mantrapath status     # Check service status
+./mantrapath logs       # View service logs
+./mantrapath clean      # Clean up containers and volumes
+```
+
+## 🏗️ Project Structure
+
+```
+mantrapath/
+├── mantrapath              # 🚀 Unified project manager script
+├── README.md              # 📖 Main documentation
+├── LICENSE                # ⚖️ MIT License
+├── requirements.txt       # 🐍 Python dependencies
+├── backend/               # 🔧 Backend microservices
+│   ├── services/         # Microservice implementations
+│   ├── shared/           # Shared utilities and auth
+│   └── docker-compose.yml # Container orchestration
+├── frontend/             # 🎨 React TypeScript frontend  
+│   ├── src/             # Frontend source code
+│   └── package.json     # Node.js dependencies
+├── config/              # ⚙️ Configuration files
+│   ├── scripts/         # Development scripts
+│   └── environment/     # Environment templates
+├── docs/                # 📚 Project documentation
+├── scripts/             # 🛠️ Build and deployment scripts
+└── tests/               # 🧪 Test suites
+```
+
 ## 🚀 Phase 2 Enhancements - Clean Implementation ✅
 
 **Latest Update**: August 2, 2025
