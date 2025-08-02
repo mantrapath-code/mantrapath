@@ -26,7 +26,7 @@ from unittest.mock import Mock, patch
 TEST_CONFIG = {
     "ml_service_url": "http://localhost:8008",
     "test_timeout": 30,
-    "load_test_users": 100,
+    "load_test_users": 500,  # Increased for more realistic production load testing
     "crisis_threshold_accuracy": 0.85,
     "response_time_threshold": 5.0,  # seconds
     "uptime_requirement": 99.0,  # percent
@@ -258,8 +258,109 @@ class TestCrisisPredictionLoad:
     """Load testing for crisis prediction system"""
     
     @pytest.mark.asyncio
+    async def test_graduated_load_testing(self):
+        """Test system with graduated load increases"""
+        tester = CrisisPredictionTester()
+        
+        # Graduated load test phases
+        load_phases = [
+            {"users": 50, "name": "Light Load"},
+            {"users": 150, "name": "Medium Load"},
+            {"users": 300, "name": "Heavy Load"},
+            {"users": 500, "name": "Peak Load"}
+        ]
+        
+        phase_results = []
+        
+        for phase in load_phases:
+            print(f"\n🏋️ Testing {phase['name']} ({phase['users']} users)...")
+            
+            # Create test data for this phase
+            test_users = []
+            for i in range(phase["users"]):
+                test_users.append({
+                    "user_id": f"load-test-user-{i}",
+                    "mood_entries": [
+                        {
+                            "timestamp": (datetime.utcnow() - timedelta(hours=j)).isoformat(),
+                            "mood_score": np.random.uniform(1, 5),
+                            "energy_level": np.random.uniform(1, 10),
+                            "stress_level": np.random.uniform(1, 10)
+                        }
+                        for j in range(12)  # 12 hours of data for faster processing
+                    ],
+                    "include_interventions": False
+                })
+            
+            try:
+                # Execute concurrent requests for this phase
+                tasks = []
+                for user_data in test_users:
+                    task = tester.make_request(
+                        "/crisis/predict-risk",
+                        method="POST",
+                        data=user_data
+                    )
+                    tasks.append(task)
+                
+                start_time = time.time()
+                results = await asyncio.gather(*tasks, return_exceptions=True)
+                total_time = time.time() - start_time
+                
+                # Analyze phase results
+                successful_requests = [r for r in results if not isinstance(r, Exception) and r["success"]]
+                failed_requests = len(results) - len(successful_requests)
+                success_rate = len(successful_requests) / len(results) * 100
+                avg_response_time = np.mean([r["response_time"] for r in successful_requests]) if successful_requests else float('inf')
+                throughput = len(results) / total_time
+                
+                phase_result = {
+                    "phase": phase["name"],
+                    "users": phase["users"],
+                    "success_rate": success_rate,
+                    "avg_response_time": avg_response_time,
+                    "throughput": throughput,
+                    "failed_requests": failed_requests
+                }
+                phase_results.append(phase_result)
+                
+                print(f"   Success Rate: {success_rate:.1f}%")
+                print(f"   Avg Response Time: {avg_response_time:.2f}s")
+                print(f"   Throughput: {throughput:.1f} req/s")
+                print(f"   Failed Requests: {failed_requests}")
+                
+                # Check if system is degrading
+                if success_rate < 90.0:
+                    print(f"   ⚠️ System degradation detected at {phase['users']} users")
+                    break
+                elif avg_response_time > TEST_CONFIG["response_time_threshold"] * 2:
+                    print(f"   ⚠️ Response time degradation at {phase['users']} users")
+                    break
+                else:
+                    print(f"   ✅ {phase['name']} passed")
+                    
+            except Exception as e:
+                print(f"   ❌ {phase['name']} failed: {str(e)}")
+                break
+        
+        # Summary of graduated load test
+        print(f"\n📊 Graduated Load Test Summary:")
+        for result in phase_results:
+            print(f"   {result['phase']}: {result['success_rate']:.1f}% success, "
+                  f"{result['avg_response_time']:.2f}s avg, {result['throughput']:.1f} req/s")
+        
+        # Determine maximum sustainable load
+        max_sustainable = max([r["users"] for r in phase_results if r["success_rate"] >= 95.0], default=0)
+        print(f"\n🎯 Maximum Sustainable Load: {max_sustainable} concurrent users")
+        
+        assert len(phase_results) > 0, "No load test phases completed successfully"
+        assert max_sustainable >= 150, f"System cannot handle minimum required load of 150 users (max: {max_sustainable})"
+        
+        print(f"✅ Graduated load test completed!")
+    
+    @pytest.mark.asyncio
     async def test_concurrent_predictions(self):
-        """Test system under concurrent load"""
+        """Test system under concurrent load (legacy test)"""
         tester = CrisisPredictionTester()
         
         # Create sample data for multiple users

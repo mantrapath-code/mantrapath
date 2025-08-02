@@ -74,7 +74,7 @@ def send_verification_email(email: str, token: str, username: str) -> bool:
             print("💡 SMTP not configured. In production, set these environment variables:")
             print("   SMTP_USERNAME, SMTP_PASSWORD, FROM_EMAIL")
             print("="*80 + "\n")
-            return True  # Return true for development
+            return False  # Return False to allow proper verification flow testing
         
         # Create verification URL
         verification_url = f"{app_url}/verify-email?token={token}"
