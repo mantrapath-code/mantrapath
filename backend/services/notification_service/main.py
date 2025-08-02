@@ -276,6 +276,8 @@ async def broadcast_notification(
         notification = Notification(
             id=uuid.uuid4(),
             user_id=str(user.id),
+            # TODO: Re-enable cache clearing before production deployment
+            # redis_client.delete(f"user_context:{user_id}")  # Clear stale cache
             title=broadcast_data.title,
             message=broadcast_data.message,
             notification_type=broadcast_data.notification_type,

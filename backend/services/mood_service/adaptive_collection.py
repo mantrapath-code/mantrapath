@@ -251,10 +251,20 @@ class AdaptiveMoodCollector:
                 ).first()
                 if question:
                     question.usage_count += 1
-                    # Simple effectiveness scoring based on whether user provided detailed response
-                    response_quality = 1.0 if len(str(answer)) > 10 else 0.5
+                    # Enhanced effectiveness scoring based on multiple factors
+                    response_quality = self._calculate_response_quality(answer, response)
+                    engagement_score = self._calculate_engagement_score(response)
+                    outcome_correlation = self._calculate_outcome_correlation(user_id, question_type, db)
+                    
+                    # Weighted effectiveness calculation
+                    new_effectiveness = (
+                        response_quality * 0.4 + 
+                        engagement_score * 0.3 + 
+                        outcome_correlation * 0.3
+                    )
+                    
                     question.effectiveness_score = (
-                        question.effectiveness_score * 0.8 + response_quality * 0.2
+                        question.effectiveness_score * 0.7 + new_effectiveness * 0.3
                     )
         
         db.commit()
@@ -350,3 +360,92 @@ class AdaptiveMoodCollector:
         db.refresh(mood_entry)
         
         return mood_entry
+    
+    def _calculate_response_quality(self, answer: Any, response: Dict) -> float:
+        """Calculate response quality based on content and engagement"""
+        if not answer:
+            return 0.0
+        
+        answer_str = str(answer)
+        quality_score = 0.0
+        
+        # Length-based scoring
+        if len(answer_str) > 20:
+            quality_score += 0.4
+        elif len(answer_str) > 5:
+            quality_score += 0.2
+        
+        # Content richness
+        if any(word in answer_str.lower() for word in ['because', 'feel', 'think', 'help', 'better']):
+            quality_score += 0.3
+        
+        # Response completeness
+        if response.get('completion_time', 0) > 5:  # Took time to think
+            quality_score += 0.2
+        
+        # Multiple choice vs open text engagement
+        if response.get('response_type') == 'open_text' and len(answer_str) > 10:
+            quality_score += 0.1
+        
+        return min(quality_score, 1.0)
+    
+    def _calculate_engagement_score(self, response: Dict) -> float:
+        """Calculate user engagement level with the question"""
+        engagement = 0.0
+        
+        # Time spent on question
+        completion_time = response.get('completion_time', 0)
+        if 3 <= completion_time <= 30:  # Sweet spot for thoughtful response
+            engagement += 0.4
+        elif completion_time > 30:
+            engagement += 0.2
+        
+        # Follow-up interactions
+        if response.get('asked_clarification'):
+            engagement += 0.3
+        
+        # Response type preference
+        if response.get('response_type') == 'open_text':
+            engagement += 0.2
+        elif response.get('selected_multiple'):
+            engagement += 0.1
+        
+        return min(engagement, 1.0)
+    
+    def _calculate_outcome_correlation(self, user_id: str, question_type: str, db: Session) -> float:
+        """Calculate correlation between question and subsequent mood improvements"""
+        try:
+            # Get recent mood entries after similar questions
+            recent_questions = db.query(AdaptiveQuestion).filter(
+                AdaptiveQuestion.user_id == user_id,
+                AdaptiveQuestion.question_type == question_type,
+                AdaptiveQuestion.created_at >= datetime.utcnow() - timedelta(days=30)
+            ).all()
+            
+            if not recent_questions:
+                return 0.5  # Neutral score for new questions
+            
+            correlation_scores = []
+            for question in recent_questions:
+                # Find mood entries after this question
+                subsequent_moods = db.query(MoodEntry).filter(
+                    MoodEntry.user_id == user_id,
+                    MoodEntry.created_at >= question.created_at,
+                    MoodEntry.created_at <= question.created_at + timedelta(days=3)
+                ).order_by(MoodEntry.created_at).limit(3).all()
+                
+                if subsequent_moods:
+                    # Calculate mood improvement
+                    baseline_mood = 5  # Neutral baseline
+                    avg_subsequent = sum(m.mood_score for m in subsequent_moods) / len(subsequent_moods)
+                    improvement = (avg_subsequent - baseline_mood) / 5  # Normalize to 0-1
+                    correlation_scores.append(max(0, improvement))
+            
+            if correlation_scores:
+                return sum(correlation_scores) / len(correlation_scores)
+            else:
+                return 0.5
+                
+        except Exception as e:
+            # Fallback to neutral score on error
+            return 0.5
