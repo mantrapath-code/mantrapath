@@ -1,26 +1,43 @@
 #!/bin/bash
 
 # MantraPath Backend Development Startup Script
+# This script first sets up the environment, then starts services
 
 echo "🚀 Starting MantraPath Backend Services..."
 
-# Check if Docker is running
-if ! docker info > /dev/null 2>&1; then
-    echo "❌ Docker is not running. Please start Docker first."
-    exit 1
-fi
+# Get the script directory and project root
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+PROJECT_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
+BACKEND_DIR="$SCRIPT_DIR"
 
-# Stop any existing containers
-echo "🛑 Stopping existing containers..."
-docker-compose down
+# Check if integrated startup script exists
+INTEGRATED_STARTUP="$PROJECT_ROOT/scripts/start-backend-integrated.sh"
 
-# Build and start services
-echo "🔨 Building and starting services..."
-docker-compose up --build -d
+if [ -f "$INTEGRATED_STARTUP" ]; then
+    echo "📦 Using integrated startup script..."
+    chmod +x "$INTEGRATED_STARTUP"
+    exec "$INTEGRATED_STARTUP" --docker
+else
+    echo "⚠️  Integrated startup script not found, falling back to Docker-only mode..."
+    
+    # Check if Docker is running
+    if ! docker info > /dev/null 2>&1; then
+        echo "❌ Docker is not running. Please start Docker first."
+        echo "💡 Or use the integrated script: $PROJECT_ROOT/scripts/start-backend-integrated.sh"
+        exit 1
+    fi
 
-# Wait a moment for services to initialize
-echo "⏳ Waiting for services to initialize..."
-sleep 10
+    # Stop any existing containers
+    echo "🛑 Stopping existing containers..."
+    docker-compose down
+
+    # Build and start services
+    echo "🔨 Building and starting services..."
+    docker-compose up --build -d
+
+    # Wait a moment for services to initialize
+    echo "⏳ Waiting for services to initialize..."
+    sleep 10
 
 echo "✅ All services started successfully!"
 echo ""

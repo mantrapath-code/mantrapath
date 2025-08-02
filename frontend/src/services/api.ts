@@ -582,8 +582,8 @@ class ApiService {
 
   logout() {
     this.token = null
-    localStorage.removeItem('auth_token')
-    localStorage.removeItem('refresh_token')
+    localStorage.removeItem('mantrapath_token')
+    localStorage.removeItem('mantrapath_refresh_token')
     localStorage.removeItem('user_data') // Also clear user data
   }
 
@@ -659,6 +659,19 @@ class ApiService {
       method: 'POST',
       body: JSON.stringify(celebrationIds)
     })
+  }
+
+  async getCelebrationStats() {
+    return this.request<{
+      total_celebrations: number
+      by_type: Record<string, number>
+      by_level: Record<string, number>
+      recent_achievements: Array<{
+        title: string
+        level: string
+        date: string
+      }>
+    }>('/api/v1/mood/celebration-stats')
   }
 
   async getMoodAnalyticsSummary() {
@@ -1017,32 +1030,13 @@ class ApiService {
     })
   }
 
-  // Profile Service - uses different port
+  // Profile Service - now goes through API gateway
   private async profileRequest<T>(
     endpoint: string,
     options: RequestInit = {}
   ): Promise<T> {
-    // Refresh token from localStorage in case it was updated
-    this.refreshToken()
-    
-    const profileServiceUrl = 'http://localhost:8002'
-    const url = `${profileServiceUrl}${endpoint}`
-    
-    const config: RequestInit = {
-      ...options,
-      headers: {
-        ...this.getHeaders(),
-        ...options.headers,
-      },
-    }
-
-    try {
-      const response = await fetch(url, config)
-      return this.handleResponse<T>(response)
-    } catch (error) {
-      console.error('Profile service request failed:', error)
-      throw error
-    }
+    // Use the standard request method which goes through API gateway
+    return this.request<T>(endpoint, options)
   }
 
   async getMyProfile() {

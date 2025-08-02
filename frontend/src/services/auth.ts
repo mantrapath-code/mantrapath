@@ -16,8 +16,8 @@ interface User {
 }
 
 class AuthService {
-  private readonly ACCESS_TOKEN_KEY = 'auth_token'
-  private readonly REFRESH_TOKEN_KEY = 'refresh_token'
+  private readonly ACCESS_TOKEN_KEY = 'mantrapath_token'
+  private readonly REFRESH_TOKEN_KEY = 'mantrapath_refresh_token'
   private readonly USER_KEY = 'user_data'
 
   // Get the current access token
@@ -95,7 +95,7 @@ class AuthService {
       headers: {
         'Content-Type': 'application/json',
       },
-      body: JSON.stringify({ email, password }),
+      body: JSON.stringify({ email_or_username: email, password }),
     })
 
     if (!response.ok) {

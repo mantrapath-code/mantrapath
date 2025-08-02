@@ -101,7 +101,7 @@ services:
       - SMTP_USERNAME=${SMTP_USERNAME}
       - SMTP_PASSWORD=${SMTP_PASSWORD}
       - FROM_EMAIL=${FROM_EMAIL}
-      - APP_URL=${APP_URL:-http://localhost:3000}
+      - APP_URL=${APP_URL:-http://localhost:5173}
     depends_on:
       postgres:
         condition: service_healthy
@@ -118,9 +118,12 @@ services:
       dockerfile: services/profile_service/Dockerfile
     ports:
       - "8002:8002"
+    env_file:
+      - .env
     environment:
       - DATABASE_URL=postgresql://mantrapath:mantrapath123@postgres:5432/mantrapath
       - REDIS_URL=redis://redis:6379
+      - JWT_SECRET_KEY=${JWT_SECRET_KEY:-your-super-secret-jwt-key-change-in-production}
     depends_on:
       postgres:
         condition: service_healthy
@@ -137,9 +140,12 @@ services:
       dockerfile: services/mood_service/Dockerfile
     ports:
       - "8003:8003"
+    env_file:
+      - .env
     environment:
       - DATABASE_URL=postgresql://mantrapath:mantrapath123@postgres:5432/mantrapath
       - REDIS_URL=redis://redis:6379
+      - JWT_SECRET_KEY=${JWT_SECRET_KEY:-your-super-secret-jwt-key-change-in-production}
     depends_on:
       postgres:
         condition: service_healthy
@@ -156,9 +162,12 @@ services:
       dockerfile: services/chatbot_service/Dockerfile
     ports:
       - "8004:8004"
+    env_file:
+      - .env
     environment:
       - DATABASE_URL=postgresql://mantrapath:mantrapath123@postgres:5432/mantrapath
       - REDIS_URL=redis://redis:6379
+      - JWT_SECRET_KEY=${JWT_SECRET_KEY:-your-super-secret-jwt-key-change-in-production}
       - OPENAI_API_KEY=${OPENAI_API_KEY:-your-openai-api-key-here}
     depends_on:
       postgres:
@@ -176,9 +185,12 @@ services:
       dockerfile: services/content_service/Dockerfile
     ports:
       - "8005:8005"
+    env_file:
+      - .env
     environment:
       - DATABASE_URL=postgresql://mantrapath:mantrapath123@postgres:5432/mantrapath
       - REDIS_URL=redis://redis:6379
+      - JWT_SECRET_KEY=${JWT_SECRET_KEY:-your-super-secret-jwt-key-change-in-production}
     depends_on:
       postgres:
         condition: service_healthy
@@ -195,9 +207,12 @@ services:
       dockerfile: services/community_service/Dockerfile
     ports:
       - "8006:8006"
+    env_file:
+      - .env
     environment:
       - DATABASE_URL=postgresql://mantrapath:mantrapath123@postgres:5432/mantrapath
       - REDIS_URL=redis://redis:6379
+      - JWT_SECRET_KEY=${JWT_SECRET_KEY:-your-super-secret-jwt-key-change-in-production}
     depends_on:
       postgres:
         condition: service_healthy
@@ -208,16 +223,18 @@ services:
     restart: unless-stopped
 
   # Notification Service
-  # Notification Service
   notification-service:
     build:
       context: .
       dockerfile: services/notification_service/Dockerfile
     ports:
       - "8007:8007"
+    env_file:
+      - .env
     environment:
       - DATABASE_URL=postgresql://mantrapath:mantrapath123@postgres:5432/mantrapath
       - REDIS_URL=redis://redis:6379
+      - JWT_SECRET_KEY=${JWT_SECRET_KEY:-your-super-secret-jwt-key-change-in-production}
     depends_on:
       postgres:
         condition: service_healthy
@@ -234,9 +251,12 @@ services:
       dockerfile: services/ml_service/Dockerfile
     ports:
       - "8008:8008"
+    env_file:
+      - .env
     environment:
       - DATABASE_URL=postgresql://mantrapath:mantrapath123@postgres:5432/mantrapath
       - REDIS_URL=redis://redis:6379
+      - JWT_SECRET_KEY=${JWT_SECRET_KEY:-your-super-secret-jwt-key-change-in-production}
       - MOOD_SERVICE_URL=http://mood-service:8003
       - NOTIFICATION_SERVICE_URL=http://notification-service:8007
     depends_on:
@@ -257,9 +277,12 @@ services:
       dockerfile: services/media_service/Dockerfile
     ports:
       - "8009:8009"
+    env_file:
+      - .env
     environment:
       - DATABASE_URL=postgresql://mantrapath:mantrapath123@postgres:5432/mantrapath
       - REDIS_URL=redis://redis:6379
+      - JWT_SECRET_KEY=${JWT_SECRET_KEY:-your-super-secret-jwt-key-change-in-production}
     depends_on:
       postgres:
         condition: service_healthy

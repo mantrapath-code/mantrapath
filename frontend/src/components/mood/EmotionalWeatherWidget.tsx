@@ -29,10 +29,13 @@ interface EmotionalWeather {
   risk_factors: string[]
   protective_factors: string[]
   recommendations: Array<{
-    id: string
-    text: string
-    priority: string
     type: string
+    title?: string
+    description?: string
+    // Legacy format support
+    id?: string
+    text?: string
+    priority?: string
   }>
   confidence_score: number
 }
@@ -260,8 +263,11 @@ export function EmotionalWeatherWidget({ compact = false }: { compact?: boolean 
                 💡 Quick Tip
               </div>
               <div className="text-xs text-primary/80">
-                {todaysForecast.recommendations[0].text.slice(0, 80)}
-                {todaysForecast.recommendations[0].text.length > 80 ? '...' : ''}
+                {(() => {
+                  const rec = todaysForecast.recommendations[0]
+                  const text = rec.description || rec.text || 'Check your personalized recommendations'
+                  return text.slice(0, 80) + (text.length > 80 ? '...' : '')
+                })()}
               </div>
             </div>
           )}
@@ -399,11 +405,11 @@ export function EmotionalWeatherWidget({ compact = false }: { compact?: boolean 
                       {todaysForecast.recommendations.map((rec, index) => (
                         <div 
                           key={rec.id || index} 
-                          className={`text-sm p-3 rounded-lg border ${getPriorityColor(rec.priority)}`}
+                          className={`text-sm p-3 rounded-lg border ${getPriorityColor(rec.priority || 'medium')}`}
                         >
                           <div className="flex items-start justify-between gap-2">
-                            <span>{rec.text}</span>
-                            {rec.priority === 'high' || rec.priority === 'urgent' ? (
+                            <span>{rec.description || rec.text || 'Recommendation'}</span>
+                            {(rec.priority === 'high' || rec.priority === 'urgent') ? (
                               <Badge variant="destructive" className="text-xs">
                                 {rec.priority}
                               </Badge>
