@@ -240,6 +240,14 @@ async def register(user_data: UserRegister, db: Session = Depends(get_db)):
                         status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
                         detail="Error removing old account. Please try again."
                     )
+
+    # Check if username already exists
+    existing_username = db.query(User).filter(User.username == user_data.username).first()
+    if existing_username:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Username already taken"
+        )
     
     # Generate verification token
     verification_token = generate_verification_token()
@@ -258,17 +266,36 @@ async def register(user_data: UserRegister, db: Session = Depends(get_db)):
         verification_token_expires=verification_expires
     )
     
-    db.add(db_user)
-    db.commit()
-    db.refresh(db_user)
-    
-    # Create profile
-    profile = UserProfile(
-        user_id=db_user.id
-    )
-    
-    db.add(profile)
-    db.commit()
+    try:
+        db.add(db_user)
+        db.commit()
+        db.refresh(db_user)
+        
+        # Create profile
+        profile = UserProfile(
+            user_id=db_user.id
+        )
+        
+        db.add(profile)
+        db.commit()
+        
+    except Exception as e:
+        db.rollback()
+        if "duplicate key value violates unique constraint" in str(e):
+            if "username" in str(e):
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="Username already taken"
+                )
+            elif "email" in str(e):
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="Email already registered"
+                )
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Registration failed. Please try again."
+        )
     
     # Send verification email
     user_display_name = f"{db_user.first_name} {db_user.last_name}".strip() or db_user.username

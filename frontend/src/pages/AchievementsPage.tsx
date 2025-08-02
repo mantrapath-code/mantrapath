@@ -55,8 +55,85 @@ export function AchievementsPage({ onBack }: AchievementsPageProps) {
   const loadAchievements = async () => {
     try {
       setLoading(true)
-      // Mock achievements for now - in real implementation, this would come from API
-      const mockAchievements: Achievement[] = [
+      
+      // Get real celebration stats from API
+      const celebrationStats = await apiService.getCelebrationStats()
+      
+      // Create achievements based on real user data and celebration stats
+      const dynamicAchievements: Achievement[] = [
+        {
+          id: '1',
+          title: 'First Steps',
+          description: 'Log your first mood entry',
+          category: 'getting-started',
+          level: 'bronze',
+          progress: moods.length > 0 ? 1 : 0,
+          maxProgress: 1,
+          isUnlocked: moods.length > 0,
+          unlockedAt: moods.length > 0 ? new Date(moods[0].timestamp).toISOString() : undefined,
+          icon: '🎯'
+        },
+        {
+          id: '2',
+          title: 'Week Warrior',
+          description: 'Log moods for 7 consecutive days',
+          category: 'consistency',
+          level: 'silver',
+          progress: Math.min(7, moods.length),
+          maxProgress: 7,
+          isUnlocked: moods.length >= 7,
+          unlockedAt: moods.length >= 7 ? new Date(moods[6].timestamp).toISOString() : undefined,
+          icon: '🔥'
+        },
+        {
+          id: '3',
+          title: 'Mood Master',
+          description: 'Reach 30 total mood entries',
+          category: 'milestone',
+          level: 'gold',
+          progress: Math.min(30, moods.length),
+          maxProgress: 30,
+          isUnlocked: moods.length >= 30,
+          unlockedAt: moods.length >= 30 ? new Date(moods[29].timestamp).toISOString() : undefined,
+          icon: '👑'
+        },
+        {
+          id: '4',
+          title: 'Positive Vibes',
+          description: 'Log 5 excellent moods in a row',
+          category: 'streak',
+          level: 'silver',
+          progress: 0, // Would need to calculate streak
+          maxProgress: 5,
+          isUnlocked: false,
+          icon: '✨'
+        }
+      ]
+      
+      // Add real celebration-based achievements
+      if (celebrationStats.total_celebrations > 0) {
+        const celebrationAchievements: Achievement[] = Object.entries(celebrationStats.by_level).map(([level, count], index) => ({
+          id: `celebration-${level}`,
+          title: `${level.charAt(0).toUpperCase() + level.slice(1)} Achiever`,
+          description: `Earn ${count} ${level} level achievements`,
+          category: 'celebration',
+          level: level as Achievement['level'],
+          progress: count,
+          maxProgress: count,
+          isUnlocked: true,
+          unlockedAt: new Date().toISOString(),
+          icon: level === 'gold' ? '🏆' : level === 'silver' ? '🥈' : '🥉'
+        }))
+        
+        dynamicAchievements.push(...celebrationAchievements)
+      }
+      
+      setAchievements(dynamicAchievements)
+    } catch (error) {
+      console.error('Failed to load achievements:', error)
+      
+      // Fallback to mock data if API fails
+      const fallbackAchievements: Achievement[] = [
         {
           id: '1',
           title: 'First Steps',
@@ -97,16 +174,14 @@ export function AchievementsPage({ onBack }: AchievementsPageProps) {
           description: 'Log 5 excellent moods in a row',
           category: 'positivity',
           level: 'silver',
-          progress: 0, // Would need to calculate streak
+          progress: 0,
           maxProgress: 5,
           isUnlocked: false,
           icon: '✨'
         }
       ]
       
-      setAchievements(mockAchievements)
-    } catch (error) {
-      console.error('Failed to load achievements:', error)
+      setAchievements(fallbackAchievements)
     } finally {
       setLoading(false)
     }
