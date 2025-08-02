@@ -6,7 +6,7 @@ import { Badge } from "@/components/ui/badge"
 import { ChatCircle, Robot, User, ArrowsOut, ArrowsIn, Wind } from "@phosphor-icons/react"
 import { useChatbot } from "@/hooks/useChatbot"
 import { useMoods } from "@/hooks/useMoods"
-import { BreathingExercise } from "./BreathingExercise"
+import { BreathingExercise } from "../common/BreathingExercise"
 import { motion, AnimatePresence } from "framer-motion"
 import { cn } from "@/lib/utils"
 

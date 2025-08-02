@@ -8,7 +8,7 @@ import { useMoodAnalytics } from "@/hooks/useWellness"
 import { useJournal } from "@/hooks/useJournal"
 import { motion, AnimatePresence } from "framer-motion"
 import { toast } from "sonner"
-import { EnhancedNotificationContainer } from "./EnhancedNotificationContainer"
+import { EnhancedNotificationContainer } from "../notifications/EnhancedNotificationContainer"
 
 interface SmartNotification {
   id: string

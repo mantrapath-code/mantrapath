@@ -30,7 +30,7 @@ import { communityApi } from "@/services/api"
 import { useCommunityData } from "@/hooks/useCommunityData"
 import { formatRelativeTime as formatTime } from "@/utils/timeFormat"
 import { useAuth } from "@/hooks/useAuth"
-import { MoodPatternSharing } from "./MoodPatternSharing"
+import { MoodPatternSharing } from "../mood/MoodPatternSharing"
 import type { CommunityStats } from "@/hooks/useCommunityData"
 
 // Types for community data structures

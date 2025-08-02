@@ -116,6 +116,10 @@ export function useWellness() {
     sleep?: number
     note?: string
     tags?: string[]
+    emotional_granularity?: number
+    mood_confidence?: number
+    adaptive_responses?: any[]
+    environmental_context?: any
   }) => {
     try {
       setLoading(true)
@@ -127,7 +131,11 @@ export function useWellness() {
         stress_level: moodData.stress,
         sleep_quality: moodData.sleep,
         notes: moodData.note,
-        context_tags: moodData.tags
+        context_tags: moodData.tags,
+        emotional_granularity: moodData.emotional_granularity,
+        mood_confidence: moodData.mood_confidence,
+        adaptive_responses: moodData.adaptive_responses,
+        environmental_context: moodData.environmental_context
       })
 
       // Convert and add to local state

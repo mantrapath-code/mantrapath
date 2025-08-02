@@ -9,11 +9,14 @@ import { useMoods } from "@/hooks/useMoods"
 import { useUserStats } from "@/hooks/useWellness"
 import { useJournal } from "@/hooks/useJournal"
 import { useMoodBasedTheme } from "@/hooks/useMoodTheme"
-import { MoodInsights } from "./MoodInsights"
-import { MoodPatternNotifications } from "./MoodPatternNotifications"
-import { EnhancedMoodChart } from "./EnhancedMoodChart"
-import { WeeklyMoodReport } from "./WeeklyMoodReport"
-import { MoodPatternSharing } from "./MoodPatternSharing"
+import { MoodInsights } from "../mood/MoodInsights"
+import { MoodPatternNotifications } from "../mood/MoodPatternNotifications"
+import { EnhancedMoodChart } from "../mood/EnhancedMoodChart"
+import { EmotionalWeatherWidget } from "../mood/EmotionalWeatherWidget"
+import { QuickMoodEntry } from "../mood/QuickMoodEntry"
+import { WeeklyMoodReport } from "../mood/WeeklyMoodReport"
+import { MoodPatternSharing } from "../mood/MoodPatternSharing"
+import { CelebrationModal } from "../mood/CelebrationModal"
 import { motion, AnimatePresence } from "framer-motion"
 import { toast } from "sonner"
 
@@ -25,8 +28,34 @@ export function WellnessDashboard() {
   
   const [moodTrend, setMoodTrend] = useState<'positive' | 'concerning' | 'stable'>('stable')
   
+  // Celebration state
+  const [celebrations, setCelebrations] = useState<any[]>([])
+  const [showCelebrations, setShowCelebrations] = useState(false)
+  
   const recentMoods = moods.slice(0, 7)
   const userCurrentMood = getCurrentMood()
+  
+  // Get mood trend on component mount and when moods change
+  useEffect(() => {
+    getMoodTrend().then(setMoodTrend).catch(() => setMoodTrend('stable'))
+  }, [getMoodTrend, moods])
+  
+  // Handle celebration triggering
+  const handleCelebrationTriggered = (newCelebrations: any[]) => {
+    setCelebrations(newCelebrations)
+    setShowCelebrations(true)
+  }
+  
+  const handleCelebrationClose = () => {
+    setShowCelebrations(false)
+    setCelebrations([])
+  }
+  
+  const handleCelebrationsSeen = (celebrationIds: string[]) => {
+    // Mark celebrations as seen
+    console.log('Celebrations seen:', celebrationIds)
+    handleCelebrationClose()
+  }
   
   // Get mood trend on component mount and when moods change
   useEffect(() => {
@@ -187,6 +216,7 @@ export function WellnessDashboard() {
         </TabsList>
         
         <TabsContent value="overview" className="space-y-6">
+          {/* Enhanced Stats Grid */}
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
             <motion.div
               initial={{ opacity: 0, y: 20 }}
@@ -244,10 +274,46 @@ export function WellnessDashboard() {
               </Card>
             </motion.div>
           </div>
-          
-          {recentMoods.length > 0 && (
-            <EnhancedMoodChart />
-          )}
+
+          {/* Enhanced Mood Analytics Grid */}
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+            {/* Mood Timeline - Enhanced */}
+            <motion.div 
+              className="lg:col-span-2"
+              initial={{ opacity: 0, x: -20 }}
+              animate={{ opacity: 1, x: 0 }}
+              transition={{ delay: 0.5 }}
+            >
+              {recentMoods.length > 0 && (
+                <EnhancedMoodChart />
+              )}
+            </motion.div>
+
+            {/* Sidebar Widgets */}
+            <motion.div
+              className="space-y-4 h-fit"
+              initial={{ opacity: 0, x: 20 }}
+              animate={{ opacity: 1, x: 0 }}
+              transition={{ delay: 0.6 }}
+            >
+              {/* Quick Mood Entry */}
+              <div className="sticky top-32">
+                <QuickMoodEntry 
+                  compact={true}
+                  onEntryComplete={() => {
+                    // Refresh mood data when new entry is added
+                    window.location.reload()
+                  }}
+                  onCelebrationTriggered={handleCelebrationTriggered}
+                />
+              </div>
+              
+              {/* Emotional Weather Widget */}
+              <div className="sticky top-80">
+                <EmotionalWeatherWidget compact={true} />
+              </div>
+            </motion.div>
+          </div>
           
           {stats?.badges && stats.badges.length > 0 && (
             <Card>
@@ -367,6 +433,15 @@ export function WellnessDashboard() {
           </Card>
         </TabsContent>
       </Tabs>
+
+      {/* Celebration Modal */}
+      {showCelebrations && celebrations.length > 0 && (
+        <CelebrationModal
+          celebrations={celebrations}
+          onClose={handleCelebrationClose}
+          onCelebrationsSeen={handleCelebrationsSeen}
+        />
+      )}
     </div>
   )
 }

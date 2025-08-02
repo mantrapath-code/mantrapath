@@ -29,7 +29,7 @@ interface ChartProps {
 }
 
 export function EnhancedMoodChart({ className }: ChartProps) {
-  const { moods, getRecentMoods, loading } = useMoods()
+  const { moods, getRecentMoods, getMoodInsights, loading } = useMoods()
   const [timeRange, setTimeRange] = useState<'week' | 'month' | 'quarter'>('week')
   const [tooltip, setTooltip] = useState<TooltipData>({ 
     mood: {} as MoodEntry, 
@@ -38,14 +38,24 @@ export function EnhancedMoodChart({ className }: ChartProps) {
     visible: false 
   })
   const [hoveredIndex, setHoveredIndex] = useState<number | null>(null)
+  const [insights, setInsights] = useState<any>(null)
   const svgRef = useRef<SVGSVGElement>(null)
 
-  // Load mood data on mount
+  // Load mood data on mount and when time range changes
   useEffect(() => {
-    getRecentMoods(50).catch(err => {
+    const limit = timeRange === 'week' ? 50 : timeRange === 'month' ? 150 : 500
+    
+    getRecentMoods(limit).then(() => {
+      // Load enhanced insights
+      if (getMoodInsights) {
+        getMoodInsights(timeRange).then(setInsights).catch(err => {
+          console.log('Could not load mood insights:', err)
+        })
+      }
+    }).catch(err => {
       console.log('Could not load mood data, using test data:', err)
     })
-  }, [getRecentMoods])
+  }, [getRecentMoods, getMoodInsights, timeRange])
 
   // Create test data if no moods are available
   const testMoods: MoodEntry[] = moods.length === 0 ? [
@@ -408,13 +418,49 @@ export function EnhancedMoodChart({ className }: ChartProps) {
                         style={{ backgroundColor: getMoodColor(tooltip.mood.mood) }}
                       />
                       <span className="font-medium capitalize">{tooltip.mood.mood}</span>
+                      <Badge variant="outline" className="text-xs">
+                        {getMoodValue(tooltip.mood.mood)}/5
+                      </Badge>
                     </div>
                     
                     <div className="text-xs text-muted-foreground">
                       <div>{formatTimestamp(tooltip.mood.timestamp)}</div>
-                      <div className="mt-1">
-                        ID: {tooltip.mood.id?.slice(-6)}
-                      </div>
+                    </div>
+
+                    {/* Enhanced mood metrics */}
+                    <div className="grid grid-cols-2 gap-2 text-xs">
+                      {tooltip.mood.energy_level && (
+                        <div className="flex items-center justify-between">
+                          <span className="text-muted-foreground">Energy:</span>
+                          <Badge variant="outline" className="text-xs h-4 px-1">
+                            {tooltip.mood.energy_level}/5
+                          </Badge>
+                        </div>
+                      )}
+                      {tooltip.mood.stress_level && (
+                        <div className="flex items-center justify-between">
+                          <span className="text-muted-foreground">Stress:</span>
+                          <Badge variant="outline" className="text-xs h-4 px-1">
+                            {tooltip.mood.stress_level}/5
+                          </Badge>
+                        </div>
+                      )}
+                      {tooltip.mood.sleep_quality && (
+                        <div className="flex items-center justify-between">
+                          <span className="text-muted-foreground">Sleep:</span>
+                          <Badge variant="outline" className="text-xs h-4 px-1">
+                            {tooltip.mood.sleep_quality}/5
+                          </Badge>
+                        </div>
+                      )}
+                      {tooltip.mood.energy && (
+                        <div className="flex items-center justify-between">
+                          <span className="text-muted-foreground">Energy:</span>
+                          <Badge variant="outline" className="text-xs h-4 px-1 capitalize">
+                            {tooltip.mood.energy}
+                          </Badge>
+                        </div>
+                      )}
                     </div>
                     
                     {tooltip.mood.note && (
@@ -460,10 +506,10 @@ export function EnhancedMoodChart({ className }: ChartProps) {
           <span>Today</span>
         </div>
         
-        {/* Chart statistics */}
-        <div className="grid grid-cols-3 gap-4 mt-6 p-4 bg-muted/30 rounded-lg">
+        {/* Enhanced Chart statistics */}
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mt-6 p-4 bg-muted/30 rounded-lg">
           <div className="text-center">
-            <div className="text-sm font-medium">Average</div>
+            <div className="text-sm font-medium">Average Mood</div>
             <div className="text-xs text-muted-foreground">
               {(filteredMoods.reduce((sum, mood) => sum + getMoodValue(mood.mood), 0) / filteredMoods.length).toFixed(1)}/5
             </div>
@@ -487,7 +533,97 @@ export function EnhancedMoodChart({ className }: ChartProps) {
               {trend.direction === 'neutral' ? 'Stable' : `${(trend.change * 20).toFixed(0)}%`}
             </div>
           </div>
+          <div className="text-center">
+            <div className="text-sm font-medium">Avg Energy</div>
+            <div className="text-xs text-muted-foreground">
+              {(() => {
+                const energyEntries = filteredMoods.filter(m => m.energy_level)
+                if (energyEntries.length === 0) return 'N/A'
+                const avg = energyEntries.reduce((sum, mood) => sum + (mood.energy_level || 0), 0) / energyEntries.length
+                return `${avg.toFixed(1)}/5`
+              })()}
+            </div>
+          </div>
         </div>
+
+        {/* Enhanced statistics with comprehensive insights */}
+        {(() => {
+          const energyEntries = filteredMoods.filter(m => m.energy_level)
+          const stressEntries = filteredMoods.filter(m => m.stress_level)
+          const sleepEntries = filteredMoods.filter(m => m.sleep_quality)
+          
+          // Calculate distributions
+          const energyDistribution = energyEntries.reduce((acc, mood) => {
+            const level = mood.energy_level!
+            const key = level >= 4 ? 'high' : level >= 3 ? 'medium' : 'low'
+            acc[key] = (acc[key] || 0) + 1
+            return acc
+          }, {} as Record<string, number>)
+
+          if (energyEntries.length === 0 && stressEntries.length === 0 && sleepEntries.length === 0) {
+            return null
+          }
+
+          return (
+            <div className="mt-4 space-y-3">
+              {/* Energy Distribution */}
+              {energyEntries.length > 0 && (
+                <div className="p-4 bg-muted/20 rounded-lg">
+                  <div className="text-sm font-medium mb-3 flex items-center gap-2">
+                    <span className="text-blue-600">⚡</span>
+                    Energy Levels ({timeRange})
+                  </div>
+                  <div className="grid grid-cols-3 gap-2 text-xs">
+                    {Object.entries(energyDistribution).map(([energy, count]) => (
+                      <div key={energy} className="text-center p-2 bg-background rounded">
+                        <div className="capitalize font-medium">{energy}</div>
+                        <div className="text-muted-foreground">{count} entries</div>
+                        <div className="text-xs text-primary">
+                          {((count / energyEntries.length) * 100).toFixed(0)}%
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Comprehensive Metrics */}
+              {(stressEntries.length > 0 || sleepEntries.length > 0) && (
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  {stressEntries.length > 0 && (
+                    <div className="p-3 bg-orange-50 dark:bg-orange-950/20 rounded-lg">
+                      <div className="text-sm font-medium mb-2 flex items-center gap-2">
+                        <span className="text-orange-600">😰</span>
+                        Stress Levels
+                      </div>
+                      <div className="text-xs text-muted-foreground">
+                        Average: {(stressEntries.reduce((sum, m) => sum + (m.stress_level || 0), 0) / stressEntries.length).toFixed(1)}/5
+                      </div>
+                      <div className="text-xs">
+                        {stressEntries.length} entries tracked
+                      </div>
+                    </div>
+                  )}
+
+                  {sleepEntries.length > 0 && (
+                    <div className="p-3 bg-purple-50 dark:bg-purple-950/20 rounded-lg">
+                      <div className="text-sm font-medium mb-2 flex items-center gap-2">
+                        <span className="text-purple-600">😴</span>
+                        Sleep Quality
+                      </div>
+                      <div className="text-xs text-muted-foreground">
+                        Average: {(sleepEntries.reduce((sum, m) => sum + (m.sleep_quality || 0), 0) / sleepEntries.length).toFixed(1)}/5
+                      </div>
+                      <div className="text-xs">
+                        {sleepEntries.length} entries tracked
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+          )
+        })()}
         
         {/* Legend */}
         <div className="flex items-center justify-center gap-4 mt-4 text-xs">

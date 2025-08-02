@@ -424,10 +424,10 @@ export function PersonalizedInsights() {
                     </div>
                     <div className="flex items-center gap-2">
                       <Badge variant="outline">
-                        {time.effectiveness_score.toFixed(1)}/10 effectiveness
+                        {(time.effectiveness_score || 0).toFixed(1)}/10 effectiveness
                       </Badge>
                       <Badge variant="secondary" className="capitalize">
-                        {time.notification_type.replace('_', ' ')}
+                        {(time.notification_type || 'general').replace('_', ' ')}
                       </Badge>
                     </div>
                   </div>

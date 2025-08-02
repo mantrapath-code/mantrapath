@@ -1,15 +1,17 @@
 """
-Mood Service - Handles mood tracking, journal entries, analytics, and insights
+Enhanced Mood Service - Comprehensive mood tracking, analytics, and insights
+Includes intelligent mood collection, emotional weather forecasting, and celebration detection
 """
 from fastapi import FastAPI, Depends, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.orm import Session
 from sqlalchemy import desc, func, and_
 from pydantic import BaseModel
-from typing import Optional, List
+from typing import Optional, List, Dict, Any
 from datetime import datetime, timedelta
 import sys
 import json
+import random
 
 try:
     from textblob import TextBlob
@@ -23,16 +25,531 @@ sys.path.append(os.path.join(os.path.dirname(__file__), '../../'))
 sys.path.append(os.path.join(os.path.dirname(__file__), '../../shared'))
 
 from shared.database import get_db, engine
-from shared.models import MoodEntry, JournalEntry, User, Base
+from shared.models import (
+    MoodEntry, JournalEntry, User, Base, EmotionalWeatherForecast, 
+    CelebrationMoment, AdaptiveQuestion, EnvironmentalData
+)
 from shared.auth import get_current_user
 
 # Create tables
 Base.metadata.create_all(bind=engine)
 
+# ======================================
+# ENHANCED MOOD COLLECTION FUNCTIONALITY
+# ======================================
+
+class AdaptiveMoodCollector:
+    """Intelligent mood collection with context-aware follow-up questions"""
+    
+    def __init__(self):
+        self.question_templates = {
+            "stress_increasing": [
+                {
+                    "question": "You seem more stressed lately. What's been weighing on your mind?",
+                    "options": [
+                        {"value": "work", "label": "Work pressures"},
+                        {"value": "relationships", "label": "Relationship issues"},
+                        {"value": "health", "label": "Health concerns"},
+                        {"value": "finances", "label": "Financial stress"},
+                        {"value": "family", "label": "Family matters"},
+                        {"value": "other", "label": "Something else"}
+                    ]
+                }
+            ],
+            "energy_low": [
+                {
+                    "question": "Your energy seems lower than usual. What might help boost it?",
+                    "options": [
+                        {"value": "sleep", "label": "Better sleep"},
+                        {"value": "exercise", "label": "Physical activity"},
+                        {"value": "nutrition", "label": "Healthier eating"},
+                        {"value": "social", "label": "Social connection"},
+                        {"value": "nature", "label": "Time outdoors"}
+                    ]
+                }
+            ],
+            "mood_declining": [
+                {
+                    "question": "I noticed your mood has been lower. What's one thing that usually helps you feel better?",
+                    "options": [
+                        {"value": "music", "label": "Listening to music"},
+                        {"value": "creativity", "label": "Creative activities"},
+                        {"value": "friends", "label": "Talking with friends"},
+                        {"value": "movement", "label": "Physical movement"},
+                        {"value": "mindfulness", "label": "Mindfulness practice"}
+                    ]
+                }
+            ]
+        }
+    
+    async def create_enhanced_mood_entry(self, mood_data: dict, user_id: str, db: Session):
+        """Create mood entry with enhanced contextual data"""
+        # Create base mood entry
+        mood_entry = MoodEntry(
+            user_id=user_id,
+            mood_score=mood_data["mood_score"],
+            energy_level=mood_data.get("energy_level", 5),
+            stress_level=mood_data.get("stress_level", 5),
+            sleep_quality=mood_data.get("sleep_quality", 5),
+            notes=mood_data.get("notes", ""),
+            context_tags=mood_data.get("context_tags", []),
+            emotional_granularity=mood_data.get("emotional_granularity", 3),
+            mood_confidence=mood_data.get("mood_confidence", 1.0),
+            collection_method="manual",
+            environmental_context=mood_data.get("environmental_context", {}),
+            follow_up_responses=mood_data.get("adaptive_responses", []),
+            celebration_triggers=[]
+        )
+        
+        db.add(mood_entry)
+        db.commit()
+        db.refresh(mood_entry)
+        return mood_entry
+    
+    async def generate_adaptive_questions(self, user_id: str, db: Session):
+        """Generate personalized follow-up questions based on user patterns"""
+        # Get recent mood entries to identify patterns
+        recent_entries = db.query(MoodEntry).filter(
+            MoodEntry.user_id == user_id,
+            MoodEntry.created_at >= datetime.utcnow() - timedelta(days=7)
+        ).order_by(desc(MoodEntry.created_at)).limit(10).all()
+        
+        if not recent_entries:
+            return []
+        
+        questions = []
+        
+        # Analyze stress pattern
+        recent_stress = [entry.stress_level for entry in recent_entries if entry.stress_level]
+        if recent_stress and len(recent_stress) >= 3:
+            avg_stress = sum(recent_stress) / len(recent_stress)
+            if avg_stress > 7:
+                questions.extend(self.question_templates["stress_increasing"])
+        
+        # Analyze energy pattern
+        recent_energy = [entry.energy_level for entry in recent_entries if entry.energy_level]
+        if recent_energy and len(recent_energy) >= 3:
+            avg_energy = sum(recent_energy) / len(recent_energy)
+            if avg_energy < 4:
+                questions.extend(self.question_templates["energy_low"])
+        
+        # Analyze mood trend
+        recent_moods = [entry.mood_score for entry in recent_entries]
+        if len(recent_moods) >= 3:
+            avg_mood = sum(recent_moods) / len(recent_moods)
+            if avg_mood < 5:
+                questions.extend(self.question_templates["mood_declining"])
+        
+        return questions[:2]  # Return max 2 questions to avoid overwhelming
+
+# ======================================
+# EMOTIONAL WEATHER FORECASTING
+# ======================================
+
+class EmotionalWeatherEngine:
+    """Generate personalized emotional weather forecasts"""
+    
+    def __init__(self):
+        self.weather_patterns = {
+            "sunny": {"emoji": "☀️", "description": "Bright and positive mood expected"},
+            "partly_cloudy": {"emoji": "⛅", "description": "Mixed emotions with overall stability"},
+            "cloudy": {"emoji": "☁️", "description": "Subdued mood, low energy likely"},
+            "rainy": {"emoji": "🌧️", "description": "Challenging day, extra self-care recommended"},
+            "stormy": {"emoji": "⛈️", "description": "High stress period, seek support"}
+        }
+    
+    async def generate_daily_forecast(self, user_id: str, db: Session):
+        """Generate emotional weather forecast for tomorrow"""
+        # Get user's historical data
+        historical_data = db.query(MoodEntry).filter(
+            MoodEntry.user_id == user_id,
+            MoodEntry.created_at >= datetime.utcnow() - timedelta(days=30)
+        ).order_by(desc(MoodEntry.created_at)).all()
+        
+        if not historical_data:
+            return self._create_neutral_forecast()
+        
+        # Simple prediction based on recent trends
+        recent_moods = [entry.mood_score for entry in historical_data[:7]]
+        recent_stress = [entry.stress_level for entry in historical_data[:7] if entry.stress_level]
+        
+        avg_mood = sum(recent_moods) / len(recent_moods)
+        avg_stress = sum(recent_stress) / len(recent_stress) if recent_stress else 5
+        
+        # Determine weather pattern
+        if avg_mood >= 8 and avg_stress <= 3:
+            weather_type = "sunny"
+        elif avg_mood >= 6 and avg_stress <= 5:
+            weather_type = "partly_cloudy"
+        elif avg_mood >= 4 and avg_stress <= 7:
+            weather_type = "cloudy"
+        elif avg_mood >= 3 or avg_stress >= 8:
+            weather_type = "rainy"
+        else:
+            weather_type = "stormy"
+        
+        pattern = self.weather_patterns[weather_type]
+        
+        # Generate recommendations
+        recommendations = self._generate_recommendations(weather_type, avg_mood, avg_stress)
+        
+        # Create forecast entry
+        forecast = EmotionalWeatherForecast(
+            user_id=user_id,
+            forecast_date=datetime.utcnow() + timedelta(days=1),
+            predicted_mood_range={"min": max(1, avg_mood - 2), "max": min(10, avg_mood + 2)},
+            risk_factors=self._identify_risk_factors(avg_mood, avg_stress),
+            protective_factors=self._identify_protective_factors(avg_mood, avg_stress),
+            recommendations=recommendations,
+            confidence_score=0.7  # Base confidence
+        )
+        
+        db.add(forecast)
+        db.commit()
+        
+        return {
+            "forecast_date": (datetime.utcnow() + timedelta(days=1)).isoformat(),
+            "weather_emoji": pattern["emoji"],
+            "weather_description": pattern["description"],
+            "predicted_mood_range": forecast.predicted_mood_range,
+            "risk_factors": forecast.risk_factors,
+            "protective_factors": forecast.protective_factors,
+            "recommendations": forecast.recommendations,
+            "confidence_score": forecast.confidence_score
+        }
+    
+    def _create_neutral_forecast(self):
+        """Create neutral forecast for new users"""
+        return {
+            "forecast_date": (datetime.utcnow() + timedelta(days=1)).isoformat(),
+            "weather_emoji": "⛅",
+            "weather_description": "Getting to know your patterns",
+            "predicted_mood_range": {"min": 4, "max": 7},
+            "risk_factors": [],
+            "protective_factors": ["Fresh start", "Building new habits"],
+            "recommendations": [
+                {"type": "tracking", "title": "Start tracking consistently", "description": "Regular mood check-ins help us learn your patterns"}
+            ],
+            "confidence_score": 0.3
+        }
+    
+    def _generate_recommendations(self, weather_type: str, avg_mood: float, avg_stress: float):
+        """Generate personalized recommendations based on forecast"""
+        recommendations = []
+        
+        if weather_type in ["rainy", "stormy"]:
+            recommendations.extend([
+                {"type": "self_care", "title": "Extra self-care", "description": "Schedule some nurturing activities"},
+                {"type": "support", "title": "Reach out", "description": "Consider connecting with supportive friends or family"}
+            ])
+        elif weather_type == "sunny":
+            recommendations.extend([
+                {"type": "activity", "title": "Embrace the energy", "description": "Great day for new projects or activities"},
+                {"type": "social", "title": "Share the positivity", "description": "Your good mood can brighten others' days too"}
+            ])
+        
+        return recommendations
+    
+    def _identify_risk_factors(self, avg_mood: float, avg_stress: float):
+        """Identify potential risk factors"""
+        factors = []
+        if avg_stress > 7:
+            factors.append("High stress levels")
+        if avg_mood < 4:
+            factors.append("Low mood trend")
+        return factors
+    
+    def _identify_protective_factors(self, avg_mood: float, avg_stress: float):
+        """Identify protective factors"""
+        factors = []
+        if avg_mood >= 6:
+            factors.append("Stable mood baseline")
+        if avg_stress <= 4:
+            factors.append("Manageable stress levels")
+        factors.append("Self-awareness through tracking")
+        return factors
+    
+    async def get_weekly_weather_outlook(self, user_id: str, db: Session):
+        """Get 7-day emotional weather outlook"""
+        forecasts = db.query(EmotionalWeatherForecast).filter(
+            EmotionalWeatherForecast.user_id == user_id,
+            EmotionalWeatherForecast.forecast_date >= datetime.utcnow(),
+            EmotionalWeatherForecast.forecast_date <= datetime.utcnow() + timedelta(days=7)
+        ).order_by(EmotionalWeatherForecast.forecast_date).all()
+        
+        return [
+            {
+                "date": forecast.forecast_date.isoformat(),
+                "predicted_mood_range": forecast.predicted_mood_range,
+                "confidence_score": forecast.confidence_score,
+                "recommendations": forecast.recommendations[:2]  # Top 2 recommendations
+            }
+            for forecast in forecasts
+        ]
+
+# ======================================
+# CELEBRATION DETECTION
+# ======================================
+
+class CelebrationMomentDetector:
+    """Detect and create celebration moments for user achievements"""
+    
+    def __init__(self):
+        self.celebration_types = {
+            "improvement_streak": {
+                "title": "Mood Improvement Streak! 🌟",
+                "message": "You've been on an upward trend for {days} days!",
+                "levels": {"bronze": 3, "silver": 7, "gold": 14, "platinum": 30}
+            },
+            "consistency_badge": {
+                "title": "Consistency Champion! 📈",
+                "message": "You've tracked your mood for {days} consecutive days!",
+                "levels": {"bronze": 7, "silver": 14, "gold": 30, "platinum": 60}
+            },
+            "stress_management": {
+                "title": "Stress Management Success! 💪",
+                "message": "Your stress levels have improved significantly this week!",
+                "levels": {"bronze": 1, "silver": 2, "gold": 3, "platinum": 4}
+            }
+        }
+    
+    async def detect_celebrations(self, user_id: str, db: Session):
+        """Detect new celebration moments for the user"""
+        celebrations = []
+        
+        # Check for improvement streaks
+        improvement_celebration = await self._check_improvement_streak(user_id, db)
+        if improvement_celebration:
+            celebrations.append(improvement_celebration)
+        
+        # Check for consistency badges
+        consistency_celebration = await self._check_consistency_badge(user_id, db)
+        if consistency_celebration:
+            celebrations.append(consistency_celebration)
+        
+        # Check for stress management success
+        stress_celebration = await self._check_stress_management(user_id, db)
+        if stress_celebration:
+            celebrations.append(stress_celebration)
+        
+        # Save new celebrations
+        for celebration_data in celebrations:
+            celebration = CelebrationMoment(**celebration_data)
+            db.add(celebration)
+        
+        db.commit()
+        return celebrations
+    
+    async def _check_improvement_streak(self, user_id: str, db: Session):
+        """Check for mood improvement streaks"""
+        recent_entries = db.query(MoodEntry).filter(
+            MoodEntry.user_id == user_id
+        ).order_by(desc(MoodEntry.created_at)).limit(30).all()
+        
+        if len(recent_entries) < 3:
+            return None
+        
+        # Count consecutive days with mood >= 6
+        streak_days = 0
+        for entry in recent_entries:
+            if entry.mood_score >= 6:
+                streak_days += 1
+            else:
+                break
+        
+        # Check if this is a new achievement
+        celebration_type = self.celebration_types["improvement_streak"]
+        for level, required_days in celebration_type["levels"].items():
+            if streak_days >= required_days:
+                # Check if we already have this achievement
+                existing = db.query(CelebrationMoment).filter(
+                    CelebrationMoment.user_id == user_id,
+                    CelebrationMoment.celebration_type == "improvement_streak",
+                    CelebrationMoment.achievement_level == level
+                ).first()
+                
+                if not existing:
+                    return {
+                        "user_id": user_id,
+                        "celebration_type": "improvement_streak",
+                        "title": celebration_type["title"],
+                        "message": celebration_type["message"].format(days=streak_days),
+                        "achievement_level": level,
+                        "reward_type": "insight_unlock",
+                        "reward_data": {"streak_days": streak_days}
+                    }
+        
+        return None
+    
+    async def _check_consistency_badge(self, user_id: str, db: Session):
+        """Check for mood tracking consistency"""
+        # Count consecutive days with entries
+        start_date = datetime.utcnow() - timedelta(days=60)
+        entries = db.query(MoodEntry).filter(
+            MoodEntry.user_id == user_id,
+            MoodEntry.created_at >= start_date
+        ).order_by(desc(MoodEntry.created_at)).all()
+        
+        if not entries:
+            return None
+        
+        # Group by date and count consecutive days
+        entry_dates = set(entry.created_at.date() for entry in entries)
+        consecutive_days = 0
+        current_date = datetime.utcnow().date()
+        
+        while current_date in entry_dates:
+            consecutive_days += 1
+            current_date -= timedelta(days=1)
+        
+        # Check for new achievement
+        celebration_type = self.celebration_types["consistency_badge"]
+        for level, required_days in celebration_type["levels"].items():
+            if consecutive_days >= required_days:
+                existing = db.query(CelebrationMoment).filter(
+                    CelebrationMoment.user_id == user_id,
+                    CelebrationMoment.celebration_type == "consistency_badge",
+                    CelebrationMoment.achievement_level == level
+                ).first()
+                
+                if not existing:
+                    return {
+                        "user_id": user_id,
+                        "celebration_type": "consistency_badge",
+                        "title": celebration_type["title"],
+                        "message": celebration_type["message"].format(days=consecutive_days),
+                        "achievement_level": level,
+                        "reward_type": "feature_unlock",
+                        "reward_data": {"consecutive_days": consecutive_days}
+                    }
+        
+        return None
+    
+    async def _check_stress_management(self, user_id: str, db: Session):
+        """Check for stress management improvements"""
+        # Compare this week vs last week stress levels
+        this_week_start = datetime.utcnow() - timedelta(days=7)
+        last_week_start = datetime.utcnow() - timedelta(days=14)
+        
+        this_week_entries = db.query(MoodEntry).filter(
+            MoodEntry.user_id == user_id,
+            MoodEntry.created_at >= this_week_start,
+            MoodEntry.stress_level.isnot(None)
+        ).all()
+        
+        last_week_entries = db.query(MoodEntry).filter(
+            MoodEntry.user_id == user_id,
+            MoodEntry.created_at >= last_week_start,
+            MoodEntry.created_at < this_week_start,
+            MoodEntry.stress_level.isnot(None)
+        ).all()
+        
+        if not this_week_entries or not last_week_entries:
+            return None
+        
+        this_week_avg = sum(entry.stress_level for entry in this_week_entries) / len(this_week_entries)
+        last_week_avg = sum(entry.stress_level for entry in last_week_entries) / len(last_week_entries)
+        
+        improvement = last_week_avg - this_week_avg
+        
+        if improvement >= 2:  # Significant improvement
+            existing = db.query(CelebrationMoment).filter(
+                CelebrationMoment.user_id == user_id,
+                CelebrationMoment.celebration_type == "stress_management",
+                CelebrationMoment.created_at >= this_week_start
+            ).first()
+            
+            if not existing:
+                level = "gold" if improvement >= 4 else "silver" if improvement >= 3 else "bronze"
+                celebration_type = self.celebration_types["stress_management"]
+                
+                return {
+                    "user_id": user_id,
+                    "celebration_type": "stress_management",
+                    "title": celebration_type["title"],
+                    "message": celebration_type["message"],
+                    "achievement_level": level,
+                    "reward_type": "badge_earned",
+                    "reward_data": {"improvement": round(improvement, 1)}
+                }
+        
+        return None
+    
+    async def get_pending_celebrations(self, user_id: str, db: Session):
+        """Get celebrations that haven't been shown to the user"""
+        celebrations = db.query(CelebrationMoment).filter(
+            CelebrationMoment.user_id == user_id,
+            CelebrationMoment.is_shown == False
+        ).order_by(desc(CelebrationMoment.created_at)).all()
+        
+        return [
+            {
+                "id": celebration.id,
+                "type": celebration.celebration_type,
+                "title": celebration.title,
+                "message": celebration.message,
+                "achievement_level": celebration.achievement_level,
+                "reward_type": celebration.reward_type,
+                "reward_data": celebration.reward_data,
+                "created_at": celebration.created_at.isoformat()
+            }
+            for celebration in celebrations
+        ]
+    
+    async def mark_celebrations_shown(self, celebration_ids: List[str], db: Session):
+        """Mark celebrations as shown to the user"""
+        db.query(CelebrationMoment).filter(
+            CelebrationMoment.id.in_(celebration_ids)
+        ).update(
+            {"is_shown": True, "shown_at": datetime.utcnow()},
+            synchronize_session=False
+        )
+        db.commit()
+    
+    async def get_celebration_stats(self, user_id: str, db: Session):
+        """Get user's celebration statistics"""
+        celebrations = db.query(CelebrationMoment).filter(
+            CelebrationMoment.user_id == user_id
+        ).all()
+        
+        stats = {
+            "total_celebrations": len(celebrations),
+            "by_type": {},
+            "by_level": {},
+            "latest_achievement": None
+        }
+        
+        for celebration in celebrations:
+            # Count by type
+            if celebration.celebration_type not in stats["by_type"]:
+                stats["by_type"][celebration.celebration_type] = 0
+            stats["by_type"][celebration.celebration_type] += 1
+            
+            # Count by level
+            if celebration.achievement_level not in stats["by_level"]:
+                stats["by_level"][celebration.achievement_level] = 0
+            stats["by_level"][celebration.achievement_level] += 1
+        
+        # Get latest achievement
+        if celebrations:
+            latest = max(celebrations, key=lambda x: x.created_at)
+            stats["latest_achievement"] = {
+                "title": latest.title,
+                "level": latest.achievement_level,
+                "date": latest.created_at.isoformat()
+            }
+        
+        return stats
+
+# Initialize enhancement services
+adaptive_collector = AdaptiveMoodCollector()
+weather_engine = EmotionalWeatherEngine()
+celebration_detector = CelebrationMomentDetector()
+
 app = FastAPI(
-    title="MantraPath Mood Service",
-    description="Mood tracking, journaling, and analytics service",
-    version="1.0.0"
+    title="MantraPath Enhanced Mood Service",
+    description="Comprehensive mood tracking with intelligent insights, emotional weather, and celebration detection",
+    version="2.0.0"
 )
 
 app.add_middleware(
@@ -43,16 +560,26 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Pydantic models
+# ======================================
+# PYDANTIC MODELS
+# ======================================
+
 class MoodEntryCreate(BaseModel):
+    """Enhanced mood entry creation model"""
     mood_score: int
     energy_level: Optional[int] = None
     stress_level: Optional[int] = None
     sleep_quality: Optional[int] = None
     notes: Optional[str] = None
     context_tags: Optional[List[str]] = []
+    # Enhanced tracking fields
+    emotional_granularity: Optional[int] = 3  # 1-5 scale for detail preference
+    mood_confidence: Optional[float] = 1.0  # User's confidence in their rating
+    adaptive_responses: Optional[List[dict]] = []  # Responses to follow-up questions
+    environmental_context: Optional[dict] = {}  # Weather, location, etc.
 
 class MoodEntryResponse(BaseModel):
+    """Enhanced mood entry response model"""
     id: str
     mood_score: int
     energy_level: Optional[int]
@@ -61,6 +588,13 @@ class MoodEntryResponse(BaseModel):
     notes: Optional[str]
     context_tags: List[str]
     created_at: datetime
+    # Enhanced fields
+    emotional_granularity: Optional[int]
+    environmental_context: Optional[dict]
+    mood_confidence: Optional[float]
+    collection_method: Optional[str]
+    follow_up_responses: Optional[List[dict]]
+    celebration_triggers: Optional[List[str]]
 
 class JournalEntryCreate(BaseModel):
     title: Optional[str] = None
@@ -82,12 +616,46 @@ class JournalEntryResponse(BaseModel):
     created_at: datetime
 
 class AnalyticsResponse(BaseModel):
+    """Enhanced analytics with emotional insights"""
     average_mood: float
     mood_trend: str
     total_entries: int
     streak: int
     weekly_pattern: dict
     monthly_summary: dict
+    # Enhanced analytics
+    stress_insights: Optional[dict] = {}
+    energy_insights: Optional[dict] = {}
+    celebration_summary: Optional[dict] = {}
+
+class AdaptiveQuestionResponse(BaseModel):
+    """Adaptive follow-up question model"""
+    question_type: str
+    question_text: str
+    options: Optional[List[dict]] = []
+    trigger_pattern: Optional[str]
+
+class EmotionalWeatherResponse(BaseModel):
+    """Emotional weather forecast model"""
+    forecast_date: str
+    weather_emoji: str
+    weather_description: str
+    predicted_mood_range: dict
+    risk_factors: List[str]
+    protective_factors: List[str]
+    recommendations: List[dict]
+    confidence_score: float
+
+class CelebrationResponse(BaseModel):
+    """Celebration moment model"""
+    id: str
+    type: str
+    title: str
+    message: str
+    achievement_level: str
+    reward_type: Optional[str]
+    reward_data: Optional[dict]
+    created_at: str
 
 # Mood tracking endpoints
 @app.get("/api/v1/mood/", response_model=List[MoodEntryResponse])
@@ -111,7 +679,14 @@ async def get_mood_entries(
             sleep_quality=mood.sleep_quality,
             notes=mood.notes,
             context_tags=mood.context_tags or [],
-            created_at=mood.created_at
+            created_at=mood.created_at,
+            # Phase 1 enhancement fields
+            emotional_granularity=mood.emotional_granularity,
+            environmental_context=mood.environmental_context,
+            mood_confidence=mood.mood_confidence,
+            collection_method=mood.collection_method,
+            follow_up_responses=mood.follow_up_responses or [],
+            celebration_triggers=mood.celebration_triggers or []
         )
         for mood in moods
     ]
@@ -122,21 +697,30 @@ async def create_mood_entry(
     current_user: dict = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
-    """Create new mood entry"""
+    """Create new mood entry with Phase 1 enhancements"""
     
-    mood_entry = MoodEntry(
+    # Use enhanced adaptive mood collection service
+    mood_entry = await adaptive_collector.create_enhanced_mood_entry(
+        mood_data={
+            "mood_score": mood_data.mood_score,
+            "energy_level": mood_data.energy_level,
+            "stress_level": mood_data.stress_level,
+            "sleep_quality": mood_data.sleep_quality,
+            "notes": mood_data.notes,
+            "context_tags": mood_data.context_tags,
+            "emotional_granularity": mood_data.emotional_granularity,
+            "mood_confidence": mood_data.mood_confidence,
+            "adaptive_responses": mood_data.adaptive_responses or []
+        },
         user_id=current_user["user_id"],
-        mood_score=mood_data.mood_score,
-        energy_level=mood_data.energy_level,
-        stress_level=mood_data.stress_level,
-        sleep_quality=mood_data.sleep_quality,
-        notes=mood_data.notes,
-        context_tags=mood_data.context_tags
+        db=db
     )
     
-    db.add(mood_entry)
-    db.commit()
-    db.refresh(mood_entry)
+    # Check for celebration moments after mood entry
+    celebrations = await celebration_detector.detect_celebrations(
+        user_id=current_user["user_id"],
+        db=db
+    )
     
     return MoodEntryResponse(
         id=str(mood_entry.id),
@@ -146,7 +730,14 @@ async def create_mood_entry(
         sleep_quality=mood_entry.sleep_quality,
         notes=mood_entry.notes,
         context_tags=mood_entry.context_tags or [],
-        created_at=mood_entry.created_at
+        created_at=mood_entry.created_at,
+        # Phase 1 enhancement fields
+        emotional_granularity=mood_entry.emotional_granularity,
+        environmental_context=mood_entry.environmental_context,
+        mood_confidence=mood_entry.mood_confidence,
+        collection_method=mood_entry.collection_method,
+        follow_up_responses=mood_entry.follow_up_responses or [],
+        celebration_triggers=mood_entry.celebration_triggers or []
     )
 
 # Journal endpoints
@@ -803,6 +1394,149 @@ async def export_user_data(
         
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to export user data: {str(e)}")
+
+# Phase 1 Enhancement Endpoints
+
+@app.get("/api/v1/mood/adaptive-questions", response_model=List[AdaptiveQuestionResponse])
+async def get_adaptive_questions(
+    current_user: dict = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """Get personalized adaptive questions based on user patterns"""
+    
+    try:
+        questions = await adaptive_collector.generate_adaptive_questions(
+            user_id=current_user["user_id"],
+            db=db
+        )
+        
+        # Convert the question format to match the response model
+        formatted_questions = []
+        for question_dict in questions:
+            formatted_questions.append(AdaptiveQuestionResponse(
+                question_type="adaptive",  # Default type
+                question_text=question_dict.get("question", ""),
+                options=question_dict.get("options", []),
+                trigger_pattern=None  # Not available in current template structure
+            ))
+        
+        return formatted_questions
+        
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to get adaptive questions: {str(e)}")
+
+@app.get("/api/v1/mood/emotional-weather", response_model=EmotionalWeatherResponse)
+async def get_emotional_weather(
+    current_user: dict = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """Get today's emotional weather forecast"""
+    
+    try:
+        forecast = await weather_engine.generate_daily_forecast(
+            user_id=current_user["user_id"],
+            db=db
+        )
+        
+        return EmotionalWeatherResponse(
+            forecast_date=forecast["forecast_date"][:10] if "T" in forecast["forecast_date"] else forecast["forecast_date"],
+            predicted_mood_range=forecast["predicted_mood_range"],
+            weather_emoji=forecast["weather_emoji"],
+            weather_description=forecast["weather_description"],
+            risk_factors=forecast["risk_factors"],
+            protective_factors=forecast["protective_factors"],
+            recommendations=forecast["recommendations"],
+            confidence_score=forecast["confidence_score"]
+        )
+        
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to get emotional weather: {str(e)}")
+
+@app.get("/api/v1/mood/weekly-weather")
+async def get_weekly_weather(
+    current_user: dict = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """Get weekly emotional weather outlook"""
+    
+    try:
+        weekly_outlook = await weather_engine.get_weekly_weather_outlook(
+            user_id=current_user["user_id"],
+            db=db
+        )
+        
+        return weekly_outlook
+        
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to get weekly weather: {str(e)}")
+
+@app.get("/api/v1/mood/celebrations", response_model=List[CelebrationResponse])
+async def get_pending_celebrations(
+    current_user: dict = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """Get pending celebration moments for the user"""
+    
+    try:
+        celebrations = await celebration_detector.get_pending_celebrations(
+            user_id=current_user["user_id"],
+            db=db
+        )
+        
+        return [
+            CelebrationResponse(
+                id=c["id"],
+                type=c["type"],
+                title=c["title"],
+                message=c["message"],
+                achievement_level=c["achievement_level"],
+                reward_type=c["reward_type"],
+                reward_data=c["reward_data"],
+                created_at=c["created_at"]
+            )
+            for c in celebrations
+        ]
+        
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to get celebrations: {str(e)}")
+
+@app.post("/api/v1/mood/celebrations/mark-shown")
+async def mark_celebrations_shown(
+    celebration_ids: List[str],
+    current_user: dict = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """Mark celebrations as shown to the user"""
+    
+    try:
+        await celebration_detector.mark_celebrations_shown(
+            user_id=current_user["user_id"],
+            celebration_ids=celebration_ids,
+            db=db
+        )
+        
+        return {"message": "Celebrations marked as shown", "count": len(celebration_ids)}
+        
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to mark celebrations: {str(e)}")
+
+@app.get("/api/v1/mood/celebration-stats")
+async def get_celebration_stats(
+    current_user: dict = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """Get user's celebration statistics"""
+    
+    try:
+        stats = await celebration_detector.get_celebration_stats(
+            user_id=current_user["user_id"],
+            db=db
+        )
+        
+        return stats
+        
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to get celebration stats: {str(e)}")
 
 if __name__ == "__main__":
     import uvicorn

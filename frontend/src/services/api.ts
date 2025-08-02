@@ -608,11 +608,102 @@ class ApiService {
     sleep_quality?: number
     notes?: string
     context_tags?: string[]
+    emotional_granularity?: number
+    mood_confidence?: number
+    adaptive_responses?: any[]
+    environmental_context?: any
   }) {
     return this.request('/api/v1/mood/', {
       method: 'POST',
       body: JSON.stringify(moodData),
     })
+  }
+
+  async getAdaptiveQuestions() {
+    return this.request<Array<{
+      question_type: string
+      question_text: string
+      options?: Array<{value: string, label: string}>
+      trigger_pattern?: string
+    }>>('/api/v1/mood/adaptive-questions')
+  }
+
+  async getCelebrations(mood_data: any) {
+    // Note: The detect-celebrations endpoint doesn't exist yet in backend
+    // For now, we'll use the existing celebrations endpoint
+    return this.request<Array<{
+      type: string
+      message: string
+      level: string
+      achievement_type?: string
+      streak_count?: number
+      improvement_metric?: string
+    }>>('/api/v1/mood/celebrations')
+  }
+
+  async getPendingCelebrations() {
+    return this.request<Array<{
+      id: string
+      type: string
+      title: string
+      message: string
+      achievement_level: string
+      reward_type?: string
+      reward_data?: any
+      created_at: string
+    }>>('/api/v1/mood/celebrations')
+  }
+
+  async markCelebrationsAsSeen(celebrationIds: string[]) {
+    return this.request<{message: string}>('/api/v1/mood/celebrations/mark-shown', {
+      method: 'POST',
+      body: JSON.stringify(celebrationIds)
+    })
+  }
+
+  async getMoodAnalyticsSummary() {
+    return this.request<{
+      current_streak: number
+      total_entries: number
+      average_mood: number
+      improvement_rate: number
+      consistency_score: number
+    }>('/api/v1/analytics/overview')
+  }
+
+  async getEmotionalWeather() {
+    return this.request<{
+      forecast_date: string
+      predicted_mood_range: {
+        min: number
+        max: number
+      }
+      weather_emoji: string
+      weather_description: string
+      risk_factors: string[]
+      protective_factors: string[]
+      recommendations: Array<{
+        id: string
+        text: string
+        priority: string
+        type: string
+      }>
+      confidence_score: number
+    }>('/api/v1/mood/emotional-weather')
+  }
+
+  async getWeeklyWeather() {
+    return this.request<{
+      user_id: string
+      week_outlook: Array<{
+        date: string
+        day: string
+        emoji: string
+        description: string
+      }>
+      confidence_score: number
+      generated_at: string
+    }>('/api/v1/mood/weekly-weather')
   }
 
   // Journal

@@ -1,6 +1,6 @@
 import { ReactNode } from 'react'
 import { motion } from 'framer-motion'
-import '../styles/notifications.css'
+import '../../styles/notifications.css'
 
 interface EnhancedNotificationContainerProps {
   children: ReactNode

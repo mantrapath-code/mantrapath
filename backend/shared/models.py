@@ -58,17 +58,25 @@ class UserProfile(Base):
     user = relationship("User", back_populates="profile")
 
 class MoodEntry(Base):
-    """Mood tracking entries"""
+    """Mood tracking entries with Phase 1 enhancements"""
     __tablename__ = "mood_entries"
     
     id = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
     user_id = Column(String, ForeignKey("users.id"), nullable=False)
-    mood_score = Column(Integer, nullable=False)  # 1-5 scale
-    energy_level = Column(Integer, default=3)  # 1-5 scale
-    stress_level = Column(Integer, default=3)  # 1-5 scale
-    sleep_quality = Column(Integer, default=3)  # 1-5 scale
+    mood_score = Column(Integer, nullable=False)  # 1-10 scale (expanded from 1-5 for more granularity)
+    energy_level = Column(Integer, default=5)  # 1-10 scale
+    stress_level = Column(Integer, default=5)  # 1-10 scale
+    sleep_quality = Column(Integer, default=5)  # 1-10 scale
     notes = Column(Text)
     context_tags = Column(JSON, default=list)  # ["work", "family", etc.]
+    
+    # Phase 1 Enhancement Fields (with defaults for backward compatibility)
+    emotional_granularity = Column(Integer, default=3)  # 1-5 scale for detail level user prefers
+    environmental_context = Column(JSON, default=dict)  # Weather, location, calendar context
+    mood_confidence = Column(Float, default=1.0)  # User's confidence in their mood rating (0.0-1.0)
+    collection_method = Column(String, default="manual")  # manual, prompted, adaptive
+    follow_up_responses = Column(JSON, default=list)  # Responses to adaptive follow-up questions
+    celebration_triggers = Column(JSON, default=list)  # What triggered celebration moments
     
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
@@ -359,5 +367,70 @@ class MediaFile(Base):
     duration = Column(Float)  # Duration in seconds
     
     is_public = Column(Boolean, default=False)
+    
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+# Phase 1 Enhancement Models
+class EmotionalWeatherForecast(Base):
+    """Daily emotional weather predictions for users"""
+    __tablename__ = "emotional_weather_forecasts"
+    
+    id = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
+    user_id = Column(String, ForeignKey("users.id"), nullable=False)
+    forecast_date = Column(DateTime, nullable=False)
+    predicted_mood_range = Column(JSON)  # {"min": float, "max": float}
+    risk_factors = Column(JSON, default=list)  # List of potential challenges
+    protective_factors = Column(JSON, default=list)  # List of strengths/supports
+    recommendations = Column(JSON, default=list)  # Personalized suggestions
+    confidence_score = Column(Float, default=0.5)  # 0.0-1.0 prediction confidence
+    
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+class CelebrationMoment(Base):
+    """Celebration moments and achievements for user motivation"""
+    __tablename__ = "celebration_moments"
+    
+    id = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
+    user_id = Column(String, ForeignKey("users.id"), nullable=False)
+    celebration_type = Column(String, nullable=False)  # improvement_streak, consistency, breakthrough
+    title = Column(String, nullable=False)
+    message = Column(Text, nullable=False)
+    achievement_level = Column(String, default="bronze")  # bronze, silver, gold, platinum
+    reward_type = Column(String)  # insight_unlock, feature_unlock, badge_earned
+    reward_data = Column(JSON)  # Additional reward information
+    is_shown = Column(Boolean, default=False)
+    shown_at = Column(DateTime)
+    
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+class AdaptiveQuestion(Base):
+    """Adaptive follow-up questions based on user patterns"""
+    __tablename__ = "adaptive_questions"
+    
+    id = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
+    user_id = Column(String, ForeignKey("users.id"), nullable=False)
+    question_type = Column(String, nullable=False)  # stress_exploration, energy_context, etc.
+    question_text = Column(Text, nullable=False)
+    question_options = Column(JSON)  # Multiple choice options or scale info
+    trigger_pattern = Column(String)  # What pattern triggered this question
+    is_active = Column(Boolean, default=True)
+    usage_count = Column(Integer, default=0)
+    effectiveness_score = Column(Float, default=0.5)  # How helpful users find it
+    
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+class EnvironmentalData(Base):
+    """Environmental context data for mood correlation"""
+    __tablename__ = "environmental_data"
+    
+    id = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
+    user_id = Column(String, ForeignKey("users.id"), nullable=False)
+    data_date = Column(DateTime, nullable=False)
+    weather_data = Column(JSON)  # Temperature, conditions, etc.
+    calendar_events = Column(JSON)  # Upcoming events that might affect mood
+    location_data = Column(JSON)  # Location context if available
+    digital_context = Column(JSON)  # Screen time, app usage patterns
     
     created_at = Column(DateTime, default=datetime.utcnow)
