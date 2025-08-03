@@ -12,7 +12,8 @@ import {
   Users, 
   Trophy,
   Clock,
-  Gear
+  Gear,
+  Warning
 } from '@phosphor-icons/react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useWebSocket } from '@/hooks/useWebSocket'
@@ -25,19 +26,74 @@ interface Notification {
   id: string
   title: string
   message: string
-  type: 'info' | 'warning' | 'achievement' | 'reminder' | 'mood_alert'
+  type: 'info' | 'warning' | 'achievement' | 'reminder' | 'mood_alert' | 'pattern_alert'
   timestamp: string
   read: boolean
   actionUrl?: string
+  severity?: 'low' | 'medium' | 'high'
+  category?: 'urgent' | 'preventive' | 'supportive' | 'insight'
 }
 
-export function RealTimeNotifications() {
+interface MoodPatternNotification {
+  id: string
+  type: string
+  category: string
+  message: string
+  recommendation: string
+  severity: 'low' | 'medium' | 'high'
+  timestamp: number
+  confidence: number
+}
+
+interface RealTimeNotificationsProps {
+  onMoodPatternNotifications?: (notifications: MoodPatternNotification[]) => void
+}
+
+export function RealTimeNotifications({ onMoodPatternNotifications }: RealTimeNotificationsProps = {}) {
   const [notifications, setNotifications] = useState<Notification[]>([])
   const [showDropdown, setShowDropdown] = useState(false)
   const [unreadCount, setUnreadCount] = useState(0)
+  const [moodPatternNotifications, setMoodPatternNotifications] = useState<MoodPatternNotification[]>([])
   
   const { isConnected, lastMessage } = useWebSocket()
   const { isAuthenticated } = useAuth()
+
+  // Handle mood pattern notifications from other components
+  const handleMoodPatternNotifications = (moodNotifications: MoodPatternNotification[]) => {
+    // Convert mood pattern notifications to standard notifications for display
+    const convertedNotifications: Notification[] = moodNotifications
+      .filter(n => n.severity !== 'high' || n.category !== 'urgent') // Exclude critical ones (they show in dashboard)
+      .map(n => ({
+        id: `mood-${n.id}`,
+        title: `Mood Pattern: ${n.type.replace('-', ' ').replace(/\b\w/g, l => l.toUpperCase())}`,
+        message: n.message,
+        type: 'pattern_alert' as const,
+        timestamp: new Date(n.timestamp).toISOString(),
+        read: false,
+        severity: n.severity,
+        category: n.category as 'urgent' | 'preventive' | 'supportive' | 'insight'
+      }))
+    
+    if (convertedNotifications.length > 0) {
+      setNotifications(prev => [...convertedNotifications, ...prev].slice(0, 20)) // Keep last 20
+      setUnreadCount(prev => prev + convertedNotifications.length)
+    }
+    
+    setMoodPatternNotifications(moodNotifications)
+    
+    // Notify parent component
+    if (onMoodPatternNotifications) {
+      onMoodPatternNotifications(moodNotifications)
+    }
+  }
+
+  // Expose the handler globally so MoodPatternNotifications can call it
+  useEffect(() => {
+    (window as any).handleMoodPatternNotifications = handleMoodPatternNotifications
+    return () => {
+      delete (window as any).handleMoodPatternNotifications
+    }
+  }, [onMoodPatternNotifications])
 
   // Load initial notifications
   useEffect(() => {
@@ -139,12 +195,14 @@ export function RealTimeNotifications() {
     switch (type) {
       case 'mood_alert':
         return <Heart className="text-red-500" size={16} />
+      case 'pattern_alert':
+        return <Brain className="text-orange-500" size={16} />
       case 'reminder':
         return <Clock className="text-blue-500" size={16} />
       case 'achievement':
         return <Trophy className="text-yellow-500" size={16} />
       case 'warning':
-        return <Brain className="text-orange-500" size={16} />
+        return <Warning className="text-orange-500" size={16} />
       default:
         return <Bell className="text-gray-500" size={16} />
     }
@@ -312,9 +370,20 @@ export function RealTimeNotifications() {
                                     }`}>
                                       {notification.title}
                                     </h4>
-                                    {!notification.read && (
-                                      <div className="w-2 h-2 bg-primary rounded-full flex-shrink-0 ml-2" />
-                                    )}
+                                    <div className="flex items-center gap-1">
+                                      {notification.severity && (
+                                        <Badge 
+                                          variant={notification.severity === 'high' ? 'destructive' : 
+                                                  notification.severity === 'medium' ? 'secondary' : 'outline'}
+                                          className="text-xs"
+                                        >
+                                          {notification.severity}
+                                        </Badge>
+                                      )}
+                                      {!notification.read && (
+                                        <div className="w-2 h-2 bg-primary rounded-full flex-shrink-0" />
+                                      )}
+                                    </div>
                                   </div>
                                   
                                   <p className="text-xs text-muted-foreground mt-1 line-clamp-2">

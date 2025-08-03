@@ -17,23 +17,5 @@ ENV PYTHONPATH=/app
 
 EXPOSE 8004
 
-CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8004"]m
-
-WORKDIR /app
-
-# Copy service-specific requirements first (if available)
-COPY ./requirements.txt /app/requirements.txt
-RUN pip install --no-cache-dir -r requirements.txt
-
-# Copy shared modules to make them importable
-COPY ../../shared /app/shared
-
-# Copy the service files directly to the app directory
-COPY . /app/
-
-# Add the app directory to Python path
-ENV PYTHONPATH=/app
-
-EXPOSE 8004
-
+# Use the production chatbot service with Phi-3 integration
 CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8004"]

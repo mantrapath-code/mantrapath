@@ -1,0 +1,31 @@
+{
+  "test_timestamp": "2025-08-03T23:37:54.110284",
+  "test_user": "ssharma8132@gmail.com",
+  "base_url": "http://localhost:8000",
+  "service_health": {
+    "healthy_services": 9,
+    "total_services": 10,
+    "health_percentage": 90.0
+  },
+  "test_results": {
+    "service_health": {
+      "healthy_services": 9,
+      "total_services": 10,
+      "health_percentage": 90.0
+    },
+    "registration": {
+      "success": false
+    },
+    "login": {
+      "success": false
+    },
+    "phi3_agent": {
+      "success": false
+    }
+  },
+  "summary": {
+    "total_tests": 4,
+    "passed_tests": 0,
+    "failed_tests": 3
+  }
+}

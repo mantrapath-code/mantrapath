@@ -1,7 +1,7 @@
 """
 Database models for MantraPath
 """
-from sqlalchemy import Column, String, Boolean, DateTime, Integer, Text, Float, ForeignKey, JSON
+from sqlalchemy import Column, String, Boolean, DateTime, Integer, Text, Float, ForeignKey, JSON, Date, Time, Index
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import relationship
 from datetime import datetime
@@ -307,7 +307,7 @@ class CommunityEvent(Base):
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
 class Challenge(Base):
-    """Wellness challenges"""
+    """Enhanced wellness challenges with Phase 3A features"""
     __tablename__ = "challenges"
     
     id = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
@@ -319,8 +319,78 @@ class Challenge(Base):
     end_date = Column(DateTime, nullable=False)
     created_by = Column(String, ForeignKey("users.id"), nullable=False)
     
+    # Phase 3A: Privacy and Access Control
+    visibility = Column(String, default="public")  # public, private, invite_only
+    max_participants = Column(Integer, default=10000)  # Support up to 10K users
+    is_active = Column(Boolean, default=True)
+    requires_approval = Column(Boolean, default=False)
+    
+    # Phase 3A: Generic Challenge Structure
+    challenge_type = Column(String, default="custom")  # custom, template, guided
+    goal_type = Column(String, default="daily")  # daily, weekly, milestone, streak - now with default
+    success_criteria = Column(JSON)  # Flexible criteria definition
+    reward_points = Column(Integer, default=0)
+    difficulty_level = Column(String, default="beginner")  # beginner, intermediate, advanced
+    
+    # Phase 3A: Invitation System
+    invitation_code = Column(String, unique=True)  # Unique invitation code
+    invitation_expires_at = Column(DateTime)  # Invitation expiry
+    allow_invite_sharing = Column(Boolean, default=True)
+    
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+class ChallengeInvitation(Base):
+    """Phase 3A: Challenge invitation system for private/invite-only challenges"""
+    __tablename__ = "challenge_invitations"
+    
+    id = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
+    challenge_id = Column(String, ForeignKey("challenges.id"), nullable=False)
+    invited_by = Column(String, ForeignKey("users.id"), nullable=False)
+    invited_user_id = Column(String, ForeignKey("users.id"))  # Null for public invite links
+    invited_email = Column(String)  # For inviting non-users
+    invitation_code = Column(String, nullable=False, unique=True)
+    
+    status = Column(String, default="pending")  # pending, accepted, declined, expired
+    expires_at = Column(DateTime, nullable=False)
+    accepted_at = Column(DateTime)
+    declined_at = Column(DateTime)
+    
+    # Usage tracking
+    uses_count = Column(Integer, default=0)
+    max_uses = Column(Integer, default=1)  # -1 for unlimited
+    
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+class ChallengeLeaderboard(Base):
+    """Phase 3A: Efficient leaderboard for challenges supporting 10K+ users"""
+    __tablename__ = "challenge_leaderboards"
+    
+    id = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
+    challenge_id = Column(String, ForeignKey("challenges.id"), nullable=False, index=True)
+    user_id = Column(String, ForeignKey("users.id"), nullable=False, index=True)
+    
+    # Denormalized data for fast queries
+    total_score = Column(Integer, default=0, index=True)
+    completion_percentage = Column(Float, default=0.0, index=True)
+    completed_days = Column(Integer, default=0)
+    current_streak = Column(Integer, default=0, index=True)
+    max_streak = Column(Integer, default=0)
+    
+    # Ranking data (updated via batch job)
+    global_rank = Column(Integer, index=True)
+    percentile = Column(Float)
+    
+    # Timestamps for accurate tracking
+    last_activity_at = Column(DateTime, index=True)
+    last_updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    
+    # Unique constraint to prevent duplicates
+    __table_args__ = (
+        Index('idx_challenge_leaderboard', 'challenge_id', 'user_id', unique=True),
+        Index('idx_leaderboard_ranking', 'challenge_id', 'total_score', 'completion_percentage'),
+    )
 
 class EventParticipant(Base):
     """Event participation tracking"""
@@ -432,5 +502,136 @@ class EnvironmentalData(Base):
     calendar_events = Column(JSON)  # Upcoming events that might affect mood
     location_data = Column(JSON)  # Location context if available
     digital_context = Column(JSON)  # Screen time, app usage patterns
+    
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+# Enhanced Community Models for Interactive Events & Challenges
+class ChallengeProgress(Base):
+    """Daily progress tracking for challenges"""
+    __tablename__ = "challenge_progress"
+    
+    id = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
+    challenge_participant_id = Column(String, ForeignKey("challenge_participants.id"), nullable=False)
+    user_id = Column(String, ForeignKey("users.id"), nullable=False)  # Denormalized for easier queries
+    challenge_id = Column(String, ForeignKey("challenges.id"), nullable=False)  # Denormalized for easier queries
+    date = Column(Date, nullable=False)
+    completed = Column(Boolean, default=False)
+    notes = Column(Text)
+    mood_rating = Column(Integer)  # 1-5 scale
+    reflection = Column(Text)
+    streak_count = Column(Integer, default=0)
+    completion_time = Column(Time)  # What time they completed it
+    difficulty_rating = Column(Integer)  # How challenging was it today (1-5)
+    
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+class EventComment(Base):
+    """Comments on events"""
+    __tablename__ = "event_comments"
+    
+    id = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
+    event_id = Column(String, ForeignKey("community_events.id"), nullable=False)
+    user_id = Column(String, ForeignKey("users.id"), nullable=False)
+    content = Column(Text, nullable=False)
+    parent_id = Column(String, ForeignKey("event_comments.id"))  # For replies
+    is_moderator_comment = Column(Boolean, default=False)
+    is_pinned = Column(Boolean, default=False)
+    like_count = Column(Integer, default=0)
+    
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+class ChallengeComment(Base):
+    """Comments on challenges"""
+    __tablename__ = "challenge_comments"
+    
+    id = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
+    challenge_id = Column(String, ForeignKey("challenges.id"), nullable=False)
+    user_id = Column(String, ForeignKey("users.id"), nullable=False)
+    content = Column(Text, nullable=False)
+    parent_id = Column(String, ForeignKey("challenge_comments.id"))  # For replies
+    is_progress_share = Column(Boolean, default=False)  # Is this a progress sharing comment?
+    progress_day = Column(Integer)  # Which day of the challenge this relates to
+    mood_tag = Column(String)  # Optional mood tag associated with the comment
+    is_pinned = Column(Boolean, default=False)
+    like_count = Column(Integer, default=0)
+    
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+class EventFeedback(Base):
+    """Post-event feedback and ratings"""
+    __tablename__ = "event_feedback"
+    
+    id = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
+    event_id = Column(String, ForeignKey("community_events.id"), nullable=False)
+    user_id = Column(String, ForeignKey("users.id"), nullable=False)
+    participant_id = Column(String, ForeignKey("event_participants.id"), nullable=False)
+    overall_rating = Column(Integer, nullable=False)  # 1-5 scale
+    content_rating = Column(Integer)  # 1-5 scale for content quality
+    organization_rating = Column(Integer)  # 1-5 scale for organization
+    engagement_rating = Column(Integer)  # 1-5 scale for engagement level
+    feedback_text = Column(Text)
+    would_recommend = Column(Boolean)
+    would_attend_similar = Column(Boolean)
+    improvement_suggestions = Column(Text)
+    favorite_aspects = Column(JSON)  # List of things they liked most
+    tags = Column(JSON)  # ["helpful", "inspiring", "well-organized", "too-long", etc.]
+    is_anonymous = Column(Boolean, default=False)
+    
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+class ChallengeReflection(Base):
+    """End-of-challenge reflections and achievements"""
+    __tablename__ = "challenge_reflections"
+    
+    id = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
+    challenge_id = Column(String, ForeignKey("challenges.id"), nullable=False)
+    user_id = Column(String, ForeignKey("users.id"), nullable=False)
+    participant_id = Column(String, ForeignKey("challenge_participants.id"), nullable=False)
+    completion_percentage = Column(Float, nullable=False)  # 0-100
+    total_days_completed = Column(Integer, nullable=False)
+    longest_streak = Column(Integer, default=0)
+    average_mood_rating = Column(Float)
+    biggest_challenge = Column(Text)
+    biggest_win = Column(Text)
+    key_insights = Column(Text)
+    would_recommend = Column(Boolean)
+    difficulty_rating = Column(Integer)  # 1-5 how challenging overall
+    life_impact_rating = Column(Integer)  # 1-5 how much it impacted their life
+    favorite_days = Column(JSON)  # List of day numbers they enjoyed most
+    challenging_days = Column(JSON)  # List of day numbers that were hardest
+    tags = Column(JSON)  # ["life-changing", "harder-than-expected", "motivating", etc.]
+    
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+class CommentLike(Base):
+    """Likes on comments (both event and challenge comments)"""
+    __tablename__ = "comment_likes"
+    
+    id = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
+    user_id = Column(String, ForeignKey("users.id"), nullable=False)
+    comment_type = Column(String, nullable=False)  # 'event_comment' or 'challenge_comment'
+    comment_id = Column(String, nullable=False)  # ID of the comment
+    
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+class CommunityStats(Base):
+    """Daily community statistics for analytics"""
+    __tablename__ = "community_stats"
+    
+    id = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
+    stat_date = Column(Date, nullable=False)
+    active_events = Column(Integer, default=0)
+    active_challenges = Column(Integer, default=0)
+    total_participants = Column(Integer, default=0)
+    new_participants = Column(Integer, default=0)
+    total_comments = Column(Integer, default=0)
+    total_progress_updates = Column(Integer, default=0)
+    average_event_rating = Column(Float)
+    average_challenge_completion = Column(Float)
+    top_challenge_categories = Column(JSON)  # Most popular categories
+    engagement_metrics = Column(JSON)  # Additional engagement data
     
     created_at = Column(DateTime, default=datetime.utcnow)

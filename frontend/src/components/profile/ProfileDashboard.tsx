@@ -10,6 +10,7 @@ import { ProfileAvatar } from './ProfileAvatar'
 import { User, Gear, Eye, PencilSimple } from '@phosphor-icons/react'
 import { useProfile } from '@/hooks/useProfile'
 import { useAuth } from '@/hooks/useAuth'
+import { getUserDisplayName, getUserInitials } from '@/utils/userDisplay'
 
 interface ProfileDashboardProps {
   onClose?: () => void
@@ -47,17 +48,11 @@ export function ProfileDashboard({ onClose }: ProfileDashboardProps) {
   }
 
   const getDisplayName = () => {
-    if (user.first_name && user.last_name) {
-      return `${user.first_name} ${user.last_name}`
-    }
-    return user.username
+    return getUserDisplayName(user)
   }
 
   const getInitials = () => {
-    if (user.first_name && user.last_name) {
-      return `${user.first_name} ${user.last_name}`
-    }
-    return user.username
+    return getUserInitials(user)
   }
 
   return (
@@ -81,7 +76,7 @@ export function ProfileDashboard({ onClose }: ProfileDashboardProps) {
               />
               <div>
                 <CardTitle className="text-2xl">{getDisplayName()}</CardTitle>
-                <p className="text-muted-foreground">@{user.username}</p>
+                <p className="text-muted-foreground">ID: {getUserDisplayName(user)}</p>
                 {profile.bio && (
                   <p className="text-sm text-foreground mt-2 max-w-md">{profile.bio}</p>
                 )}
@@ -177,8 +172,8 @@ function ProfileOverview({ profile, stats, user }: ProfileOverviewProps) {
             <p className="text-foreground">{user.email || 'Not provided'}</p>
           </div>
           <div>
-            <label className="text-sm font-medium text-muted-foreground">Username</label>
-            <p className="text-foreground">@{user.username}</p>
+            <label className="text-sm font-medium text-muted-foreground">User ID</label>
+            <p className="text-foreground">{getUserDisplayName(user)}</p>
           </div>
           <div>
             <label className="text-sm font-medium text-muted-foreground">Location</label>

@@ -20,6 +20,7 @@ import {
 } from '@phosphor-icons/react'
 import { motion } from 'framer-motion'
 import { PersonalizedInsights } from '@/components/mood/PersonalizedInsights'
+import { MoodInsights } from '@/components/mood/MoodInsights'
 import { MoodCorrelations } from '@/components/mood/MoodCorrelations'
 import { MoodComparisonView } from '@/components/mood/MoodComparisonView'
 import EnhancedInsightsPage from './EnhancedInsightsPage'
@@ -86,10 +87,14 @@ export function InsightsPage({ onBack }: InsightsPageProps) {
         transition={{ delay: 0.1 }}
       >
         <Tabs defaultValue="personalized" className="w-full">
-          <TabsList className="grid w-full grid-cols-3">
+          <TabsList className="grid w-full grid-cols-4">
             <TabsTrigger value="personalized" className="flex items-center gap-2">
               <Lightbulb size={16} />
               Personalized
+            </TabsTrigger>
+            <TabsTrigger value="mood-insights" className="flex items-center gap-2">
+              <Brain size={16} />
+              Mood Insights
             </TabsTrigger>
             <TabsTrigger value="correlations" className="flex items-center gap-2">
               <TrendUp size={16} />
@@ -116,6 +121,10 @@ export function InsightsPage({ onBack }: InsightsPageProps) {
                 <PersonalizedInsights />
               </CardContent>
             </Card>
+          </TabsContent>
+
+          <TabsContent value="mood-insights" className="space-y-6 mt-6">
+            <MoodInsights />
           </TabsContent>
 
           <TabsContent value="correlations" className="space-y-6 mt-6">

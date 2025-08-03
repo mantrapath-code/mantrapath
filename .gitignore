@@ -43,6 +43,19 @@ out/
 .nuxt/
 .output/
 
+# Database files (use Docker PostgreSQL instead)
+*.db
+*.sqlite
+*.sqlite3
+mantrapath.db
+
+# Compiled binaries
+mantrapath
+*.exe
+
+# Docker volumes
+postgres_data/
+
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json

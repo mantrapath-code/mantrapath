@@ -22,15 +22,21 @@ import {
   Share,
   Bookmark,
   DotsThree,
-  Shield
+  Shield,
+  Target,
+  TrendUp,
+  ArrowBendUpLeft
 } from "@phosphor-icons/react"
 import { motion, AnimatePresence } from "framer-motion"
 import { toast } from "sonner"
 import { communityApi } from "@/services/api"
 import { useCommunityData } from "@/hooks/useCommunityData"
+import { EnhancedChallengeCard } from "./EnhancedChallengeCard"
+import { EnhancedEventCard } from "./EnhancedEventCard"
 import { formatRelativeTime as formatTime } from "@/utils/timeFormat"
 import { useAuth } from "@/hooks/useAuth"
 import { MoodPatternSharing } from "../mood/MoodPatternSharing"
+import { getUserDisplayName, getUserInitials } from "@/utils/userDisplay"
 import type { CommunityStats } from "@/hooks/useCommunityData"
 
 // Types for community data structures
@@ -95,6 +101,17 @@ interface CommunityEvent {
   is_virtual: boolean
   participant_count: number
   is_participating: boolean
+  created_at: string
+  // Enhanced fields for better interaction
+  comment_count?: number
+  average_rating?: number
+  feedback_count?: number
+  tags?: string[]
+  organizer?: {
+    id: string
+    name: string
+    avatar_url?: string
+  }
 }
 
 interface Challenge {
@@ -107,6 +124,19 @@ interface Challenge {
   start_date: string
   end_date: string
   category: string
+  created_at: string
+  // Enhanced fields for progress tracking
+  progress_percentage?: number
+  current_streak?: number
+  total_completions?: number
+  leaderboard_position?: number
+  comments_count?: number
+  comment_count?: number
+  // Additional fields for creation
+  goal_type?: string
+  visibility?: string
+  challenge_type?: string
+  difficulty_level?: string
 }
 
 export function EnhancedCommunitySection() {
@@ -147,6 +177,17 @@ export function EnhancedCommunitySection() {
     isForumJoined,
     isThreadLiked
   } = useCommunityData()
+
+  // Refresh all statistics
+  const refreshStats = async () => {
+    if (isAuthenticated) {
+      try {
+        await loadUserStats()
+      } catch (error) {
+        console.error('Failed to refresh stats:', error)
+      }
+    }
+  }
 
   // Load initial data
   useEffect(() => {
@@ -202,46 +243,92 @@ export function EnhancedCommunitySection() {
   }
 
   const handleJoinEvent = async (eventId: string) => {
+    if (!isAuthenticated) {
+      toast.error('Please log in to join events')
+      return
+    }
+    
     try {
       await communityApi.joinEvent(eventId)
-      toast.success('Successfully joined event!')
-      await loadEvents() // Refresh events list
+      toast.success('Great! You\'re now registered for this event.')
+      
+      // Update local state immediately for better UX
+      setEvents(prev => prev.map(event => 
+        event.id === eventId 
+          ? { ...event, is_participating: true, participant_count: event.participant_count + 1 }
+          : event
+      ))
+      
+      // Refresh events list and stats
+      await Promise.all([loadEvents(), refreshStats()])
     } catch (error) {
       console.error('Failed to join event:', error)
-      toast.error('Failed to join event')
+      toast.error('Failed to join event. Please try again.')
     }
   }
 
   const handleLeaveEvent = async (eventId: string) => {
     try {
       await communityApi.leaveEvent(eventId)
-      toast.success('Successfully left event')
-      await loadEvents() // Refresh events list
+      toast.success('You have left the event.')
+      
+      // Update local state immediately for better UX
+      setEvents(prev => prev.map(event => 
+        event.id === eventId 
+          ? { ...event, is_participating: false, participant_count: Math.max(0, event.participant_count - 1) }
+          : event
+      ))
+      
+      // Refresh events list and stats
+      await Promise.all([loadEvents(), refreshStats()])
     } catch (error) {
       console.error('Failed to leave event:', error)
-      toast.error('Failed to leave event')
+      toast.error('Failed to leave event. Please try again.')
     }
   }
 
   const handleJoinChallenge = async (challengeId: string) => {
+    if (!isAuthenticated) {
+      toast.error('Please log in to join challenges')
+      return
+    }
+    
     try {
       await communityApi.joinChallenge(challengeId)
-      toast.success('Successfully joined challenge!')
-      await loadChallenges() // Refresh challenges list
+      toast.success('Welcome to the challenge! Let\'s build healthy habits together.')
+      
+      // Update local state immediately for better UX
+      setChallenges(prev => prev.map(challenge => 
+        challenge.id === challengeId 
+          ? { ...challenge, is_participating: true, participant_count: challenge.participant_count + 1 }
+          : challenge
+      ))
+      
+      // Refresh challenges list and stats
+      await Promise.all([loadChallenges(), refreshStats()])
     } catch (error) {
       console.error('Failed to join challenge:', error)
-      toast.error('Failed to join challenge')
+      toast.error('Failed to join challenge. Please try again.')
     }
   }
 
   const handleLeaveChallenge = async (challengeId: string) => {
     try {
       await communityApi.leaveChallenge(challengeId)
-      toast.success('Successfully left challenge')
-      await loadChallenges() // Refresh challenges list
+      toast.success('You have left the challenge.')
+      
+      // Update local state immediately for better UX
+      setChallenges(prev => prev.map(challenge => 
+        challenge.id === challengeId 
+          ? { ...challenge, is_participating: false, participant_count: Math.max(0, challenge.participant_count - 1) }
+          : challenge
+      ))
+      
+      // Refresh challenges list and stats
+      await Promise.all([loadChallenges(), refreshStats()])
     } catch (error) {
       console.error('Failed to leave challenge:', error)
-      toast.error('Failed to leave challenge')
+      toast.error('Failed to leave challenge. Please try again.')
     }
   }
 
@@ -273,7 +360,11 @@ export function EnhancedCommunitySection() {
         category: challengeData.category!,
         duration_days: challengeData.duration_days!,
         start_date: challengeData.start_date!,
-        end_date: challengeData.end_date!
+        end_date: challengeData.end_date!,
+        goal_type: challengeData.goal_type || 'daily',
+        visibility: challengeData.visibility || 'public',
+        challenge_type: challengeData.challenge_type || 'custom',
+        difficulty_level: challengeData.difficulty_level || 'beginner'
       })
       toast.success('Challenge created successfully!')
       await loadChallenges() // Refresh challenges list
@@ -361,6 +452,9 @@ export function EnhancedCommunitySection() {
     }
   }
 
+  // Add a reply trigger to force reload of replies in thread dialog
+  const [replyTrigger, setReplyTrigger] = useState(0)
+
   const handleReplyToThread = async (threadId: string, content: string, parentId?: string) => {
     if (!isAuthenticated) {
       toast.error('Please log in to reply to discussions')
@@ -368,14 +462,18 @@ export function EnhancedCommunitySection() {
     }
     
     try {
-      await replyToThreadAction(threadId, content, parentId)
+      const result = await replyToThreadAction(threadId, content, parentId)
       
-      toast.success('Reply posted!')
-      setShowThreadDialog(false)
-      
-      // Refresh threads to get latest data
-      if (selectedForum) {
-        loadThreads(selectedForum.id)
+      if (result?.success) {
+        toast.success('Reply posted!')
+        
+        // Trigger reply reload in ThreadDetailView
+        setReplyTrigger(prev => prev + 1)
+        
+        // Refresh threads to get latest data
+        if (selectedForum) {
+          loadThreads(selectedForum.id)
+        }
       }
     } catch (error) {
       console.error('Failed to post reply:', error)
@@ -384,6 +482,8 @@ export function EnhancedCommunitySection() {
   }
 
   const getCategoryColor = (category: string) => {
+    if (!category) return 'bg-gray-100 text-gray-800 dark:bg-gray-800 dark:text-gray-200'
+    
     switch (category.toLowerCase()) {
       case 'achievements': return 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200'
       case 'support': return 'bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200'
@@ -391,6 +491,9 @@ export function EnhancedCommunitySection() {
       case 'depression': return 'bg-purple-100 text-purple-800 dark:bg-purple-900 dark:text-purple-200'
       case 'general': return 'bg-gray-100 text-gray-800 dark:bg-gray-800 dark:text-gray-200'
       case 'wellness': return 'bg-pink-100 text-pink-800 dark:bg-pink-900 dark:text-pink-200'
+      case 'mindfulness': return 'bg-indigo-100 text-indigo-800 dark:bg-indigo-900 dark:text-indigo-200'
+      case 'challenges': return 'bg-orange-100 text-orange-800 dark:bg-orange-900 dark:text-orange-200'
+      case 'mental-health': return 'bg-purple-100 text-purple-800 dark:bg-purple-900 dark:text-purple-200'
       default: return 'bg-gray-100 text-gray-800 dark:bg-gray-800 dark:text-gray-200'
     }
   }
@@ -418,7 +521,7 @@ export function EnhancedCommunitySection() {
             </div>
             {user && (
               <div className="text-sm text-muted-foreground">
-                Welcome, {user.username}!
+                Welcome, {getUserDisplayName(user)}!
               </div>
             )}
           </CardTitle>
@@ -644,20 +747,20 @@ export function EnhancedCommunitySection() {
                             <div className="flex items-start gap-3">
                               <Avatar className="w-10 h-10 bg-primary/10 flex items-center justify-center">
                                 <span className="text-primary font-medium">
-                                  {thread.author.name[0]}
+                                  {getUserInitials({ id: thread.author.id || thread.author.name })}
                                 </span>
                               </Avatar>
                               
                               <div className="flex-1 space-y-2">
                                 <div className="flex items-center gap-2 flex-wrap">
-                                  <span className="font-medium">{thread.author.name}</span>
+                                  <span className="font-medium">{getUserDisplayName({ id: thread.author.id || thread.author.name })}</span>
                                   {thread.author.badges?.map((badge) => (
                                     <Badge key={badge} variant="secondary" className="text-xs">
                                       {getBadgeIcon(badge)} {badge}
                                     </Badge>
                                   ))}
                                   <Badge className={getCategoryColor(thread.category)}>
-                                    {thread.category}
+                                    {thread.category || 'general'}
                                   </Badge>
                                 </div>
                                 
@@ -752,58 +855,37 @@ export function EnhancedCommunitySection() {
               
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 {events.map((event) => (
-                  <EventCard 
+                  <EnhancedEventCard 
                     key={event.id} 
                     event={event}
                     onJoin={() => handleJoinEvent(event.id)}
                     onLeave={() => handleLeaveEvent(event.id)}
+                    onRefresh={loadEvents}
                   />
                 ))}
               </div>
             </TabsContent>
 
-            <TabsContent value="challenges" className="space-y-4">
-              <div className="flex items-center justify-between mb-6">
-                <h3 className="font-semibold text-lg">Wellness Challenges</h3>
-                <Dialog>
-                  <DialogTrigger asChild>
-                    <Button size="sm" className="flex items-center gap-2">
-                      <Plus size={16} />
-                      Create Challenge
-                    </Button>
-                  </DialogTrigger>
-                  <DialogContent className="max-w-2xl">
-                    <DialogHeader>
-                      <DialogTitle>Create Wellness Challenge</DialogTitle>
-                      <DialogDescription>
-                        Start a new wellness challenge to motivate and engage the community.
-                      </DialogDescription>
-                    </DialogHeader>
-                    <CreateChallengeForm onSubmit={handleCreateChallenge} />
-                  </DialogContent>
-                </Dialog>
-              </div>
-              
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                {challenges.map((challenge) => (
-                  <ChallengeCard 
-                    key={challenge.id} 
-                    challenge={challenge}
-                    onJoin={() => handleJoinChallenge(challenge.id)}
-                    onLeave={() => handleLeaveChallenge(challenge.id)}
-                  />
-                ))}
-              </div>
+            <TabsContent value="challenges" className="space-y-6">
+              <ChallengesSection 
+                challenges={challenges}
+                onJoinChallenge={(challengeId) => handleJoinChallenge(challengeId)}
+                onLeaveChallenge={(challengeId) => handleLeaveChallenge(challengeId)}
+                onCreateChallenge={handleCreateChallenge}
+                onRefresh={loadChallenges}
+              />
             </TabsContent>
 
             <TabsContent value="my-activity" className="space-y-4">
-              <MyActivitySection 
+              <EnhancedActivitySection 
                 joinedForums={joinedForums}
                 userReputation={userReputation}
                 communityStats={communityStats}
                 enhancedStats={enhancedStats}
                 forums={forums}
                 threads={threads}
+                events={events}
+                challenges={challenges}
               />
             </TabsContent>
           </Tabs>
@@ -818,6 +900,7 @@ export function EnhancedCommunitySection() {
               thread={selectedThread} 
               onReply={(content, parentId) => handleReplyToThread(selectedThread.id, content, parentId)}
               isAuthenticated={isAuthenticated}
+              replyTrigger={replyTrigger}
             />
           )}
         </DialogContent>
@@ -848,6 +931,326 @@ export function EnhancedCommunitySection() {
         </CardContent>
       </Card>
     </div>
+  )
+}
+
+// Challenges Section Component
+function ChallengesSection({ 
+  challenges, 
+  onJoinChallenge, 
+  onLeaveChallenge, 
+  onCreateChallenge, 
+  onRefresh 
+}: {
+  challenges: Challenge[]
+  onJoinChallenge: (challengeId: string) => void
+  onLeaveChallenge: (challengeId: string) => void
+  onCreateChallenge: (data: any) => Promise<any>
+  onRefresh: () => void
+}) {
+  const [searchTerm, setSearchTerm] = useState("")
+  const [selectedCategory, setSelectedCategory] = useState("all")
+  const [challengeTab, setChallengeTab] = useState("browse")
+
+  // Filter challenges based on search and category
+  const filteredChallenges = challenges.filter(challenge => {
+    const matchesSearch = challenge.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                         challenge.description.toLowerCase().includes(searchTerm.toLowerCase())
+    const matchesCategory = selectedCategory === "all" || challenge.category === selectedCategory
+    
+    if (challengeTab === "browse") {
+      return matchesSearch && matchesCategory
+    } else {
+      return matchesSearch && matchesCategory && challenge.is_participating
+    }
+  })
+
+  // Calculate tab counts
+  const allChallengesCount = challenges.length
+  const joinedChallengesCount = challenges.filter(c => c.is_participating).length
+
+  const categories = ["all", ...Array.from(new Set(challenges.map(c => c.category)))]
+
+  return (
+    <div className="space-y-6">
+      {/* Header */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+        <div>
+          <h3 className="font-semibold text-xl text-foreground">Wellness Challenges</h3>
+          <p className="text-sm text-muted-foreground">Join challenges to build healthy habits together</p>
+        </div>
+        <Dialog>
+          <DialogTrigger asChild>
+            <Button className="bg-primary hover:bg-primary/90 text-primary-foreground">
+              <Plus size={16} className="mr-2" />
+              Create Challenge
+            </Button>
+          </DialogTrigger>
+          <DialogContent className="max-w-2xl">
+            <DialogHeader>
+              <DialogTitle>Create Wellness Challenge</DialogTitle>
+              <DialogDescription>
+                Start a new wellness challenge to motivate and engage the community.
+              </DialogDescription>
+            </DialogHeader>
+            <CreateChallengeForm onSubmit={onCreateChallenge} />
+          </DialogContent>
+        </Dialog>
+      </div>
+
+      {/* Tabs for Browse All vs My Challenges */}
+      <div className="border-b border-border">
+        <div className="flex space-x-1 bg-muted/30 p-1 rounded-lg w-fit">
+          <button
+            onClick={() => setChallengeTab("browse")}
+            className={`py-2 px-4 rounded-md font-medium text-sm transition-all duration-200 flex items-center gap-2 ${
+              challengeTab === "browse"
+                ? "bg-background text-primary shadow-sm border border-primary/20"
+                : "text-muted-foreground hover:text-foreground hover:bg-background/50"
+            }`}
+          >
+            Browse All
+            <span className="bg-primary/10 text-primary px-2 py-0.5 rounded-full text-xs font-bold">
+              {allChallengesCount}
+            </span>
+          </button>
+          <button
+            onClick={() => setChallengeTab("joined")}
+            className={`py-2 px-4 rounded-md font-medium text-sm transition-all duration-200 flex items-center gap-2 ${
+              challengeTab === "joined"
+                ? "bg-background text-primary shadow-sm border border-primary/20"
+                : "text-muted-foreground hover:text-foreground hover:bg-background/50"
+            }`}
+          >
+            My Challenges
+            <span className="bg-primary/10 text-primary px-2 py-0.5 rounded-full text-xs font-bold">
+              {joinedChallengesCount}
+            </span>
+          </button>
+        </div>
+      </div>
+
+      {/* Search and Filters */}
+      <div className="flex flex-col sm:flex-row gap-4 p-4 bg-muted/20 rounded-lg border border-border/50">
+        <div className="relative flex-1">
+          <MagnifyingGlass size={20} className="absolute left-3 top-1/2 transform -translate-y-1/2 text-muted-foreground" />
+          <input
+            type="text"
+            placeholder="Search challenges..."
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+            className="w-full pl-10 pr-4 py-3 border border-border rounded-lg bg-background focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all duration-200 shadow-sm"
+          />
+        </div>
+        <select
+          value={selectedCategory}
+          onChange={(e) => setSelectedCategory(e.target.value)}
+          className="px-4 py-3 border border-border rounded-lg bg-background focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all duration-200 shadow-sm min-w-[160px]"
+        >
+          {categories.map(category => (
+            <option key={category} value={category}>
+              {category === "all" ? "All Categories" : category.charAt(0).toUpperCase() + category.slice(1)}
+            </option>
+          ))}
+        </select>
+      </div>
+
+      {/* Challenge Cards Grid */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 sm:gap-6">
+        <AnimatePresence>
+          {filteredChallenges.map((challenge) => (
+            <motion.div
+              key={challenge.id}
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -20 }}
+              transition={{ duration: 0.3 }}
+              className="h-full"
+            >
+              <CleanChallengeCard 
+                challenge={challenge}
+                onJoin={() => onJoinChallenge(challenge.id)}
+                onLeave={() => onLeaveChallenge(challenge.id)}
+                onRefresh={onRefresh}
+              />
+            </motion.div>
+          ))}
+        </AnimatePresence>
+      </div>
+
+      {/* Empty State */}
+      {filteredChallenges.length === 0 && (
+        <div className="text-center py-12 px-4">
+          <div className="max-w-md mx-auto">
+            <div className="w-16 h-16 mx-auto mb-4 bg-muted/30 rounded-full flex items-center justify-center">
+              <span className="text-2xl">🎯</span>
+            </div>
+            <h4 className="text-lg font-medium text-foreground mb-2">
+              {challengeTab === "joined" ? "No joined challenges yet" : "No challenges found"}
+            </h4>
+            <p className="text-muted-foreground text-sm">
+              {challengeTab === "joined" 
+                ? "Join challenges to start building healthy habits and track your progress"
+                : searchTerm || selectedCategory !== "all"
+                  ? "Try adjusting your search filters or browse all challenges"
+                  : "Be the first to create a wellness challenge for the community"
+              }
+            </p>
+            {challengeTab === "joined" && (
+              <Button 
+                variant="outline" 
+                size="sm" 
+                className="mt-4"
+                onClick={() => setChallengeTab("browse")}
+              >
+                Browse All Challenges
+              </Button>
+            )}
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
+// Clean Challenge Card Component
+function CleanChallengeCard({ 
+  challenge, 
+  onJoin, 
+  onLeave, 
+  onRefresh 
+}: {
+  challenge: Challenge
+  onJoin: () => void
+  onLeave: () => void
+  onRefresh: () => void
+}) {
+  const [isLoading, setIsLoading] = useState(false)
+  
+  const isActive = new Date(challenge.end_date) > new Date()
+  const daysRemaining = Math.ceil((new Date(challenge.end_date).getTime() - new Date().getTime()) / (1000 * 60 * 60 * 24))
+  
+  const handleAction = async () => {
+    setIsLoading(true)
+    try {
+      if (challenge.is_participating) {
+        await onLeave()
+      } else {
+        await onJoin()
+      }
+      onRefresh()
+    } finally {
+      setIsLoading(false)
+    }
+  }
+
+  const getCategoryColor = (category: string) => {
+    switch (category.toLowerCase()) {
+      case 'mindfulness': return 'bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-300'
+      case 'fitness': return 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300'
+      case 'nutrition': return 'bg-orange-100 text-orange-800 dark:bg-orange-900/30 dark:text-orange-300'
+      case 'sleep': return 'bg-purple-100 text-purple-800 dark:bg-purple-900/30 dark:text-purple-300'
+      case 'stress': return 'bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-300'
+      default: return 'bg-gray-100 text-gray-800 dark:bg-gray-800 dark:text-gray-300'
+    }
+  }
+
+  return (
+    <Card className={`h-full flex flex-col relative overflow-hidden hover:shadow-lg transition-all duration-300 border ${
+      challenge.is_participating 
+        ? 'border-primary/40 bg-gradient-to-br from-primary/8 to-primary/12 shadow-md' 
+        : 'border-border hover:border-primary/30'
+    }`}>
+      
+      <CardHeader className="pb-4 flex-shrink-0">
+        <div className="space-y-3">
+          {/* Category and Status */}
+          <div className="flex items-center justify-between">
+            <Badge className={`${getCategoryColor(challenge.category)} text-xs font-medium`}>
+              {challenge.category.charAt(0).toUpperCase() + challenge.category.slice(1)}
+            </Badge>
+            {challenge.is_participating && (
+              <Badge variant="secondary" className="bg-primary/15 text-primary border-primary/30">
+                Joined
+              </Badge>
+            )}
+          </div>
+          
+          {/* Title */}
+          <CardTitle className="text-base sm:text-lg font-semibold text-foreground leading-tight min-h-[2.5rem] flex items-start">
+            <span className="line-clamp-2">
+              {challenge.title}
+            </span>
+          </CardTitle>
+          
+          {/* Description */}
+          <p className="text-sm text-muted-foreground line-clamp-2 leading-relaxed min-h-[2.5rem]">
+            {challenge.description}
+          </p>
+        </div>
+      </CardHeader>
+      
+      <CardContent className="pt-0 flex-1 flex flex-col justify-between">
+        <div className="space-y-4">
+          {/* Challenge Stats - Responsive Grid */}
+          <div className="grid grid-cols-3 gap-2 sm:gap-3">
+            <div className="text-center p-2 sm:p-3 bg-muted/40 rounded-lg border border-border/30">
+              <div className="text-lg sm:text-xl font-bold text-foreground">{challenge.duration_days}</div>
+              <div className="text-xs text-muted-foreground font-medium">Days</div>
+            </div>
+            <div className="text-center p-2 sm:p-3 bg-muted/40 rounded-lg border border-border/30">
+              <div className="text-lg sm:text-xl font-bold text-foreground">{challenge.participant_count}</div>
+              <div className="text-xs text-muted-foreground font-medium">People</div>
+            </div>
+            <div className="text-center p-2 sm:p-3 bg-muted/40 rounded-lg border border-border/30">
+              <div className="text-lg sm:text-xl font-bold text-foreground">{isActive ? Math.max(daysRemaining, 0) : 0}</div>
+              <div className="text-xs text-muted-foreground font-medium">Left</div>
+            </div>
+          </div>
+
+          {/* Action Button */}
+          <Button 
+            onClick={handleAction}
+            disabled={isLoading || !isActive}
+            size="sm"
+            className={`w-full font-medium transition-all duration-200 ${
+              challenge.is_participating 
+                ? 'bg-destructive hover:bg-destructive/90 text-destructive-foreground' 
+                : 'bg-primary hover:bg-primary/90 text-primary-foreground hover:scale-[1.02]'
+            }`}
+          >
+            {isLoading ? (
+              <div className="flex items-center gap-2">
+                <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-current" />
+                Processing...
+              </div>
+            ) : challenge.is_participating ? (
+              <span className="flex items-center gap-2">
+                <span>×</span>
+                Leave Challenge
+              </span>
+            ) : (
+              <span className="flex items-center gap-2">
+                <span>+</span>
+                Join Challenge
+              </span>
+            )}
+          </Button>
+
+          {/* Additional Actions for Joined Challenges - Only on larger screens */}
+          {challenge.is_participating && (
+            <div className="hidden sm:flex gap-2">
+              <Button variant="outline" size="sm" className="flex-1 text-xs">
+                Progress
+              </Button>
+              <Button variant="outline" size="sm" className="flex-1 text-xs">
+                Comments ({challenge.comment_count || 0})
+              </Button>
+            </div>
+          )}
+        </div>
+      </CardContent>
+    </Card>
   )
 }
 
@@ -1126,66 +1529,101 @@ function ChallengeCard({
 function ThreadDetailView({ 
   thread, 
   onReply,
-  isAuthenticated
+  isAuthenticated,
+  replyTrigger
 }: { 
   thread: Thread
   onReply: (content: string, parentId?: string) => void 
   isAuthenticated: boolean
+  replyTrigger: number
 }) {
   const [replyContent, setReplyContent] = useState("")
   const [replies, setReplies] = useState<Reply[]>([])
   const [loadingReplies, setLoadingReplies] = useState(false)
   const [replyingTo, setReplyingTo] = useState<{id: string, name: string} | null>(null)
 
-  // Load replies when component mounts or thread changes
-  useEffect(() => {
+  // Load replies function
+  const loadReplies = async () => {
     if (!isAuthenticated) {
       return // Don't load replies if not authenticated
     }
     
-    const loadReplies = async () => {
-      try {
-        setLoadingReplies(true)
-        const repliesData = await communityApi.getThreadReplies(thread.id)
-        setReplies(repliesData || [])
-      } catch (error: any) {
-        console.error('Failed to load replies:', error)
-        
-        // Handle authentication errors gracefully
-        if (error.status === 401 || error.status === 403) {
-          console.log('Not authenticated for replies - skipping')
-          return
-        }
-        
-        toast.error('Failed to load replies')
-      } finally {
-        setLoadingReplies(false)
+    try {
+      setLoadingReplies(true)
+      const repliesData = await communityApi.getThreadReplies(thread.id)
+      setReplies(repliesData || [])
+    } catch (error: any) {
+      console.error('Failed to load replies:', error)
+      
+      // Handle authentication errors gracefully
+      if (error.status === 401 || error.status === 403) {
+        console.log('Not authenticated for replies - skipping')
+        return
       }
+      
+      toast.error('Failed to load replies')
+    } finally {
+      setLoadingReplies(false)
     }
+  }
 
+  // Load replies when component mounts, thread changes, or reply trigger changes
+  useEffect(() => {
     loadReplies()
-  }, [thread.id, isAuthenticated])
+  }, [thread.id, isAuthenticated, replyTrigger])
 
   // Handle liking a reply
   const handleLikeReply = async (replyId: string) => {
+    if (!isAuthenticated) {
+      toast.error('Please log in to like replies')
+      return
+    }
+    
     try {
-      const response = await communityApi.likeContent('reply', replyId)
-      
-      // Update the reply in local state
+      // Optimistically update the UI first
       setReplies(prevReplies => 
         prevReplies.map(reply => 
           reply.id === replyId 
             ? { 
                 ...reply, 
-                is_liked: response.liked,
-                like_count: response.like_count
+                is_liked: !reply.is_liked,
+                like_count: reply.is_liked 
+                  ? Math.max((reply.like_count || 0) - 1, 0)
+                  : (reply.like_count || 0) + 1
               }
             : reply
         )
       )
+      
+      const response = await communityApi.likeContent('reply', replyId)
+      
+      // Get the updated like count from backend to ensure accuracy
+      const likeInfo = await communityApi.getContentLikes('reply', replyId)
+      
+      // Update with the actual backend state
+      setReplies(prevReplies => 
+        prevReplies.map(reply => 
+          reply.id === replyId 
+            ? { 
+                ...reply, 
+                is_liked: likeInfo.is_liked,
+                like_count: likeInfo.like_count
+              }
+            : reply
+        )
+      )
+      
+      if (response.liked) {
+        toast.success('Reply liked!')
+      } else {
+        toast.success('Reply unliked!')
+      }
     } catch (error) {
       console.error('Failed to like reply:', error)
       toast.error('Failed to update like')
+      
+      // Revert optimistic update on error
+      loadReplies()
     }
   }
 
@@ -1233,12 +1671,12 @@ function ThreadDetailView({
         <div className="flex gap-2 p-2 hover:bg-muted/20 rounded">
           <div className="w-6 h-6 bg-primary/10 rounded-full flex items-center justify-center flex-shrink-0">
             <span className="text-xs font-medium text-primary">
-              {reply.author.name.charAt(0).toUpperCase()}
+              {getUserInitials({ id: reply.author.id || reply.author.name })}
             </span>
           </div>
           <div className="flex-1 min-w-0">
             <div className="flex items-center gap-2 text-xs text-muted-foreground mb-1">
-              <span className="font-medium text-foreground">{reply.author.name}</span>
+              <span className="font-medium text-foreground">{getUserDisplayName({ id: reply.author.id || reply.author.name })}</span>
               <span>{formatRelativeTime(reply.created_at)}</span>
             </div>
             <p className="text-sm mb-1">{reply.content}</p>
@@ -1255,7 +1693,7 @@ function ThreadDetailView({
               {actualDepth < maxDepth && (
                 <button 
                   className="text-muted-foreground hover:text-primary transition-colors"
-                  onClick={() => handleReplyToReply(reply.id, reply.author.name)}
+                  onClick={() => handleReplyToReply(reply.id, getUserDisplayName({ id: reply.author.id || reply.author.name }))}
                 >
                   Reply
                 </button>
@@ -1362,7 +1800,7 @@ function ThreadDetailView({
       {/* Compact Header */}
       <div className="px-4 py-3 border-b">
         <h3 className="font-semibold text-lg">{thread.title}</h3>
-        <p className="text-sm text-muted-foreground">by {thread.author.name} in {thread.forum_name}</p>
+        <p className="text-sm text-muted-foreground">by {getUserDisplayName({ id: thread.author.id || thread.author.name })} in {thread.forum_name}</p>
       </div>
       
       {/* Thread Content */}
@@ -1447,13 +1885,16 @@ function ThreadDetailView({
   )
 }
 
-function MyActivitySection({ 
+// Enhanced Activity Section with sophisticated badge system and insights
+function EnhancedActivitySection({ 
   joinedForums, 
   userReputation,
   communityStats,
   enhancedStats,
   forums,
-  threads
+  threads,
+  events,
+  challenges
 }: {
   joinedForums: string[]
   userReputation: number
@@ -1469,193 +1910,467 @@ function MyActivitySection({
   } | null
   forums: Forum[]
   threads: Thread[]
+  events: CommunityEvent[]
+  challenges: Challenge[]
 }) {
-  // Calculate user's shares (threads they've created)
-  const userShares = threads.filter(thread => thread.author.id === 'current_user') // This would be the actual user ID
+  const { user } = useAuth()
+  const [activeInsightTab, setActiveInsightTab] = useState("overview")
   
-  // Use enhanced stats if available, otherwise calculate locally
-  const stats = enhancedStats || {
-    reputation: userReputation,
-    forums_joined: joinedForums.length,
-    threads_liked: communityStats.threadsLiked,
-    threads_created: userShares.length,
-    replies_posted: communityStats.repliesPosted,
-    likes_received: 0,
-    help_score: Math.min(10, userReputation / 10)
-  }
+  // Calculate comprehensive user activity using REAL data
+  const userShares = threads.filter(thread => 
+    thread.author.id === user?.id || thread.author.name === user?.username
+  )
+  const joinedEvents = events.filter(event => event.is_participating)
+  const joinedChallenges = challenges.filter(challenge => challenge.is_participating)
+  const completedChallenges = challenges.filter(challenge => 
+    challenge.is_participating && new Date(challenge.end_date) < new Date()
+  )
   
-  // Calculate enhanced reputation based on activity
-  const enhancedReputation = {
-    base: stats.reputation,
-    fromLikes: stats.threads_liked * 2,
-    fromShares: stats.threads_created * 5,
-    fromReplies: stats.replies_posted * 3,
-    fromReceived: stats.likes_received * 2,
-    total: stats.reputation
+  // Use REAL backend stats when available, with intelligent fallbacks
+  const stats = {
+    reputation: enhancedStats?.reputation || userReputation || 0,
+    forums_joined: enhancedStats?.forums_joined || joinedForums.length,
+    threads_liked: enhancedStats?.threads_liked || communityStats.threadsLiked || threads.filter(t => t.is_liked).length,
+    threads_created: enhancedStats?.threads_created || userShares.length,
+    replies_posted: enhancedStats?.replies_posted || communityStats.repliesPosted || 0,
+    likes_received: enhancedStats?.likes_received || userShares.reduce((sum, thread) => sum + thread.like_count, 0),
+    help_score: enhancedStats?.help_score || Math.min(10, (userReputation || 0) / 10)
   }
 
-  // Get joined forum details
+  // Intelligent Badge System with Real Activity Logic
+  const calculateBadges = () => {
+    const badges: Array<{ name: string; icon: string; description: string; tier: string }> = []
+    const now = new Date()
+    
+    // Starter Badges - Easy to achieve
+    if (stats.forums_joined >= 1) badges.push({ name: "First Steps", icon: "👶", description: "Joined your first forum", tier: "bronze" })
+    if (stats.threads_liked >= 1) badges.push({ name: "Kind Heart", icon: "💝", description: "Liked your first post", tier: "bronze" })
+    if (stats.threads_created >= 1) badges.push({ name: "Voice Found", icon: "🗣️", description: "Shared your first story", tier: "bronze" })
+    if (stats.replies_posted >= 1) badges.push({ name: "Conversation Starter", icon: "💭", description: "Posted your first reply", tier: "bronze" })
+    
+    // Community Engagement Badges - Progressive
+    if (stats.forums_joined >= 3) badges.push({ name: "Community Explorer", icon: "🗺️", description: "Joined 3+ forums", tier: "bronze" })
+    if (stats.forums_joined >= 7) badges.push({ name: "Forum Navigator", icon: "🧭", description: "Joined 7+ forums", tier: "silver" })
+    if (stats.forums_joined >= 15) badges.push({ name: "Community Ambassador", icon: "🌟", description: "Joined 15+ forums", tier: "gold" })
+    
+    // Support & Kindness Badges - Based on real likes given
+    if (stats.threads_liked >= 5) badges.push({ name: "Supportive Soul", icon: "💙", description: "Liked 5+ posts", tier: "bronze" })
+    if (stats.threads_liked >= 25) badges.push({ name: "Heart of Gold", icon: "💛", description: "Liked 25+ posts", tier: "silver" })
+    if (stats.threads_liked >= 75) badges.push({ name: "Beacon of Support", icon: "✨", description: "Liked 75+ posts", tier: "gold" })
+    if (stats.threads_liked >= 150) badges.push({ name: "Love Spreader", icon: "💖", description: "Liked 150+ posts", tier: "platinum" })
+    
+    // Content Creation Badges - Based on actual posts
+    if (stats.threads_created >= 2) badges.push({ name: "Story Teller", icon: "📖", description: "Shared 2+ stories", tier: "bronze" })
+    if (stats.threads_created >= 5) badges.push({ name: "Wisdom Sharer", icon: "🎭", description: "Shared 5+ stories", tier: "silver" })
+    if (stats.threads_created >= 15) badges.push({ name: "Community Voice", icon: "📢", description: "Shared 15+ stories", tier: "gold" })
+    if (stats.threads_created >= 30) badges.push({ name: "Thought Leader", icon: "🧠", description: "Shared 30+ stories", tier: "platinum" })
+    
+    // Conversation Badges - Based on real replies
+    if (stats.replies_posted >= 3) badges.push({ name: "Conversationalist", icon: "💬", description: "Posted 3+ replies", tier: "bronze" })
+    if (stats.replies_posted >= 10) badges.push({ name: "Discussion Leader", icon: "🎤", description: "Posted 10+ replies", tier: "silver" })
+    if (stats.replies_posted >= 25) badges.push({ name: "Community Catalyst", icon: "⚡", description: "Posted 25+ replies", tier: "gold" })
+    if (stats.replies_posted >= 50) badges.push({ name: "Master Communicator", icon: "🗨️", description: "Posted 50+ replies", tier: "platinum" })
+    
+    // Challenge & Event Badges - Real participation
+    if (joinedChallenges.length >= 1) badges.push({ name: "Challenge Seeker", icon: "🎯", description: "Joined first challenge", tier: "bronze" })
+    if (joinedChallenges.length >= 3) badges.push({ name: "Growth Minded", icon: "🌱", description: "Joined 3+ challenges", tier: "silver" })
+    if (completedChallenges.length >= 1) badges.push({ name: "Challenge Conqueror", icon: "🏆", description: "Completed first challenge", tier: "gold" })
+    if (completedChallenges.length >= 3) badges.push({ name: "Habit Master", icon: "👑", description: "Completed 3+ challenges", tier: "platinum" })
+    
+    if (joinedEvents.length >= 1) badges.push({ name: "Event Enthusiast", icon: "🎪", description: "Joined first event", tier: "bronze" })
+    if (joinedEvents.length >= 3) badges.push({ name: "Community Connector", icon: "🤝", description: "Joined 3+ events", tier: "silver" })
+    
+    // Impact Badges - Based on likes received (real engagement)
+    if (stats.likes_received >= 5) badges.push({ name: "Inspiring Voice", icon: "🌟", description: "Received 5+ likes", tier: "silver" })
+    if (stats.likes_received >= 20) badges.push({ name: "Community Inspiration", icon: "💫", description: "Received 20+ likes", tier: "gold" })
+    if (stats.likes_received >= 50) badges.push({ name: "Beacon of Hope", icon: "🕯️", description: "Received 50+ likes", tier: "platinum" })
+    
+    // Activity Level Badges - Combined real activity
+    const totalActivity = stats.threads_created + stats.replies_posted + Math.floor(stats.threads_liked / 3)
+    if (totalActivity >= 10) badges.push({ name: "Active Member", icon: "🔥", description: "High community activity", tier: "silver" })
+    if (totalActivity >= 25) badges.push({ name: "Super Active", icon: "⚡", description: "Very high activity", tier: "gold" })
+    if (totalActivity >= 50) badges.push({ name: "Community Powerhouse", icon: "💪", description: "Exceptional activity", tier: "platinum" })
+    
+    // Reputation-based Badges - Real reputation points
+    if (stats.reputation >= 50) badges.push({ name: "Trusted Member", icon: "🛡️", description: "50+ reputation", tier: "silver" })
+    if (stats.reputation >= 150) badges.push({ name: "Community Pillar", icon: "🏛️", description: "150+ reputation", tier: "gold" })
+    if (stats.reputation >= 300) badges.push({ name: "Legend", icon: "👑", description: "300+ reputation", tier: "platinum" })
+    
+    // Help Score Badges - Calculated from real activity
+    if (stats.help_score >= 3) badges.push({ name: "Helper", icon: "🤲", description: "Help score 3+", tier: "bronze" })
+    if (stats.help_score >= 6) badges.push({ name: "Guardian Angel", icon: "😇", description: "Help score 6+", tier: "silver" })
+    if (stats.help_score >= 8) badges.push({ name: "Community Saint", icon: "🕊️", description: "Help score 8+", tier: "gold" })
+    if (stats.help_score >= 10) badges.push({ name: "Divine Helper", icon: "✨", description: "Perfect help score", tier: "platinum" })
+    
+    // Special Combination Badges - Require multiple activities
+    if (stats.threads_created >= 3 && stats.replies_posted >= 5 && stats.threads_liked >= 10) {
+      badges.push({ name: "Well Rounded", icon: "🎨", description: "Active in all areas", tier: "gold" })
+    }
+    if (stats.forums_joined >= 5 && totalActivity >= 20) {
+      badges.push({ name: "Community Champion", icon: "🏅", description: "Broad engagement", tier: "platinum" })
+    }
+    
+    return badges.sort((a, b) => {
+      const tierOrder = { "platinum": 4, "gold": 3, "silver": 2, "bronze": 1 }
+      return tierOrder[b.tier] - tierOrder[a.tier]
+    })
+  }
+
+  const userBadges = calculateBadges()
   const joinedForumDetails = forums.filter(forum => joinedForums.includes(forum.id))
+  
+  // Calculate progress towards next badges with real targets
+  const getNextBadgeProgress = () => {
+    const progress: Array<{ badge: string; current: number; target: number; percentage: number }> = []
+    
+    // Support badges progress
+    if (stats.threads_liked < 150) {
+      const targets = [1, 5, 25, 75, 150]
+      const nextTarget = targets.find(t => t > stats.threads_liked) || 150
+      progress.push({
+        badge: "Support Badge",
+        current: stats.threads_liked,
+        target: nextTarget,
+        percentage: (stats.threads_liked / nextTarget) * 100
+      })
+    }
+    
+    // Content creation progress
+    if (stats.threads_created < 30) {
+      const targets = [1, 2, 5, 15, 30]
+      const nextTarget = targets.find(t => t > stats.threads_created) || 30
+      progress.push({
+        badge: "Creator Badge",
+        current: stats.threads_created,
+        target: nextTarget,
+        percentage: (stats.threads_created / nextTarget) * 100
+      })
+    }
+    
+    // Challenge completion progress
+    if (completedChallenges.length < 3) {
+      const nextTarget = completedChallenges.length < 1 ? 1 : 3
+      progress.push({
+        badge: "Challenge Badge",
+        current: completedChallenges.length,
+        target: nextTarget,
+        percentage: (completedChallenges.length / nextTarget) * 100
+      })
+    }
+    
+    // Reputation progress
+    if (stats.reputation < 300) {
+      const targets = [50, 150, 300]
+      const nextTarget = targets.find(t => t > stats.reputation) || 300
+      progress.push({
+        badge: "Reputation Badge",
+        current: stats.reputation,
+        target: nextTarget,
+        percentage: (stats.reputation / nextTarget) * 100
+      })
+    }
+    
+    return progress.slice(0, 3)
+  }
+
+  const nextBadgeProgress = getNextBadgeProgress()
 
   return (
     <div className="space-y-6">
-      {/* Enhanced Stats Cards */}
+      {/* Activity Overview Cards */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-        <Card>
+        <Card className="hover:shadow-md transition-shadow">
           <CardContent className="p-4 text-center">
-            <Users size={24} className="mx-auto mb-2 text-primary" />
-            <h4 className="font-medium">Forums Joined</h4>
+            <div className="w-12 h-12 mx-auto mb-2 bg-gradient-to-br from-blue-500 to-purple-600 rounded-full flex items-center justify-center">
+              <Users size={20} className="text-white" />
+            </div>
+            <h4 className="font-medium text-sm">Community Reach</h4>
             <p className="text-2xl font-bold">{stats.forums_joined}</p>
-            <p className="text-xs text-muted-foreground">
-              {joinedForumDetails.length > 0 ? 'Active member' : 'Join forums to connect'}
-            </p>
+            <p className="text-xs text-muted-foreground">Forums joined</p>
           </CardContent>
         </Card>
         
-        <Card>
+        <Card className="hover:shadow-md transition-shadow">
           <CardContent className="p-4 text-center">
-            <Heart size={24} className="mx-auto mb-2 text-red-500" />
-            <h4 className="font-medium">Posts Liked</h4>
+            <div className="w-12 h-12 mx-auto mb-2 bg-gradient-to-br from-red-500 to-pink-600 rounded-full flex items-center justify-center">
+              <Heart size={20} className="text-white" />
+            </div>
+            <h4 className="font-medium text-sm">Support Given</h4>
             <p className="text-2xl font-bold">{stats.threads_liked}</p>
-            <p className="text-xs text-muted-foreground">
-              +{stats.threads_liked * 2} reputation
-            </p>
+            <p className="text-xs text-muted-foreground">Posts liked</p>
           </CardContent>
         </Card>
         
-        <Card>
+        <Card className="hover:shadow-md transition-shadow">
           <CardContent className="p-4 text-center">
-            <Share size={24} className="mx-auto mb-2 text-blue-500" />
-            <h4 className="font-medium">My Shares</h4>
-            <p className="text-2xl font-bold">{stats.threads_created}</p>
-            <p className="text-xs text-muted-foreground">
-              {stats.threads_created > 0 ? 'Helping others' : 'Share your journey'}
-            </p>
+            <div className="w-12 h-12 mx-auto mb-2 bg-gradient-to-br from-green-500 to-emerald-600 rounded-full flex items-center justify-center">
+              <Target size={20} className="text-white" />
+            </div>
+            <h4 className="font-medium text-sm">Challenges</h4>
+            <p className="text-2xl font-bold">{completedChallenges.length}/{joinedChallenges.length}</p>
+            <p className="text-xs text-muted-foreground">Completed</p>
           </CardContent>
         </Card>
         
-        <Card>
+        <Card className="hover:shadow-md transition-shadow">
           <CardContent className="p-4 text-center">
-            <Star size={24} className="mx-auto mb-2 text-yellow-500" />
-            <h4 className="font-medium">Reputation</h4>
-            <p className="text-2xl font-bold">{enhancedReputation.total}</p>
-            <p className="text-xs text-muted-foreground">
-              Community helper
-            </p>
+            <div className="w-12 h-12 mx-auto mb-2 bg-gradient-to-br from-yellow-500 to-orange-600 rounded-full flex items-center justify-center">
+              <Trophy size={20} className="text-white" />
+            </div>
+            <h4 className="font-medium text-sm">Badges Earned</h4>
+            <p className="text-2xl font-bold">{userBadges.length}</p>
+            <p className="text-xs text-muted-foreground">Achievements</p>
           </CardContent>
         </Card>
       </div>
 
-      {/* My Impact Section */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <Trophy className="text-yellow-500" size={20} />
-              My Impact
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="space-y-3">
-              <div className="flex justify-between items-center">
-                <span className="text-sm">Support Given</span>
-                <Badge variant="secondary">{stats.threads_liked} likes</Badge>
-              </div>
-              <div className="flex justify-between items-center">
-                <span className="text-sm">Stories Shared</span>
-                <Badge variant={stats.threads_created > 0 ? "default" : "secondary"}>
-                  {stats.threads_created} posts
-                </Badge>
-              </div>
-              <div className="flex justify-between items-center">
-                <span className="text-sm">Community Replies</span>
-                <Badge variant={stats.replies_posted > 0 ? "default" : "secondary"}>
-                  {stats.replies_posted} replies
-                </Badge>
-              </div>
-              <div className="flex justify-between items-center">
-                <span className="text-sm">Likes Received</span>
-                <Badge variant={stats.likes_received > 0 ? "default" : "secondary"}>
-                  {stats.likes_received} hearts
-                </Badge>
-              </div>
-              <div className="flex justify-between items-center">
-                <span className="text-sm">Help Score</span>
-                <Badge variant="outline" className="font-bold">
-                  {stats.help_score}/10
-                </Badge>
-              </div>
-            </div>
-            
-            {enhancedReputation.total > 50 && (
-              <div className="bg-gradient-to-r from-yellow-50 to-orange-50 dark:from-yellow-900/20 dark:to-orange-900/20 p-3 rounded-lg border">
-                <div className="flex items-center gap-2">
-                  <Star className="text-yellow-500" size={16} />
-                  <span className="text-sm font-medium">
-                    {stats.help_score >= 7 ? 'Community Champion' : 
-                     stats.help_score >= 5 ? 'Community Helper' : 
-                     'Community Member'}
-                  </span>
-                </div>
-                <p className="text-xs text-muted-foreground mt-1">
-                  You're making a positive impact in the community! 🌟
-                </p>
-              </div>
-            )}
-          </CardContent>
-        </Card>
+      {/* Insights Tabs */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <TrendUp className="text-primary" size={20} />
+            Community Insights
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          <Tabs value={activeInsightTab} onValueChange={setActiveInsightTab}>
+            <TabsList className="grid grid-cols-4 w-full mb-6">
+              <TabsTrigger value="overview">Overview</TabsTrigger>
+              <TabsTrigger value="badges">Badges</TabsTrigger>
+              <TabsTrigger value="progress">Progress</TabsTrigger>
+              <TabsTrigger value="impact">Impact</TabsTrigger>
+            </TabsList>
 
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <ChatCircle className="text-blue-500" size={20} />
-              Joined Forums
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            {joinedForumDetails.length > 0 ? (
-              <div className="space-y-3">
-                {joinedForumDetails.slice(0, 5).map((forum) => (
-                  <div key={forum.id} className="flex items-center justify-between p-3 rounded-lg border">
-                    <div>
-                      <h4 className="font-medium text-sm">{forum.name}</h4>
-                      <p className="text-xs text-muted-foreground">{forum.member_count} members</p>
+            <TabsContent value="overview" className="space-y-4">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                {/* Activity Summary */}
+                <div className="space-y-4">
+                  <h4 className="font-semibold flex items-center gap-2">
+                    <Star className="text-yellow-500" size={16} />
+                    Activity Summary
+                  </h4>
+                  <div className="space-y-3">
+                    <div className="flex justify-between items-center p-3 bg-muted/30 rounded-lg">
+                      <span className="text-sm font-medium">Stories Shared</span>
+                      <Badge variant={stats.threads_created > 0 ? "default" : "secondary"}>
+                        {stats.threads_created}
+                      </Badge>
                     </div>
-                    <Badge variant="outline" className="text-xs">
-                      {forum.category}
-                    </Badge>
+                    <div className="flex justify-between items-center p-3 bg-muted/30 rounded-lg">
+                      <span className="text-sm font-medium">Replies Posted</span>
+                      <Badge variant={stats.replies_posted > 0 ? "default" : "secondary"}>
+                        {stats.replies_posted}
+                      </Badge>
+                    </div>
+                    <div className="flex justify-between items-center p-3 bg-muted/30 rounded-lg">
+                      <span className="text-sm font-medium">Events Joined</span>
+                      <Badge variant={joinedEvents.length > 0 ? "default" : "secondary"}>
+                        {joinedEvents.length}
+                      </Badge>
+                    </div>
+                    <div className="flex justify-between items-center p-3 bg-muted/30 rounded-lg">
+                      <span className="text-sm font-medium">Active Challenges</span>
+                      <Badge variant={joinedChallenges.length > 0 ? "default" : "secondary"}>
+                        {joinedChallenges.length}
+                      </Badge>
+                    </div>
                   </div>
+                </div>
+
+                {/* Community Standing */}
+                <div className="space-y-4">
+                  <h4 className="font-semibold flex items-center gap-2">
+                    <Shield className="text-blue-500" size={16} />
+                    Community Standing
+                  </h4>
+                  <div className="p-4 bg-gradient-to-br from-primary/10 to-primary/5 rounded-lg border">
+                    <div className="text-center mb-4">
+                      <div className="text-3xl font-bold text-primary">{stats.reputation}</div>
+                      <div className="text-sm text-muted-foreground">Reputation Points</div>
+                    </div>
+                    <div className="space-y-2">
+                      <div className="flex justify-between text-xs">
+                        <span>Help Score</span>
+                        <span className="font-medium">{stats.help_score}/10</span>
+                      </div>
+                      <div className="w-full bg-muted rounded-full h-2">
+                        <div 
+                          className="bg-gradient-to-r from-green-500 to-emerald-600 h-2 rounded-full transition-all duration-500"
+                          style={{ width: `${(stats.help_score / 10) * 100}%` }}
+                        />
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </TabsContent>
+
+            <TabsContent value="badges" className="space-y-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                {userBadges.map((badge, index) => (
+                  <motion.div
+                    key={badge.name}
+                    initial={{ opacity: 0, y: 20 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ delay: index * 0.1 }}
+                  >
+                    <Card className={`hover:shadow-lg transition-all duration-300 border-2 ${
+                      badge.tier === 'platinum' ? 'border-purple-300 bg-gradient-to-br from-purple-50 to-indigo-50 dark:from-purple-900/20 dark:to-indigo-900/20' :
+                      badge.tier === 'gold' ? 'border-yellow-300 bg-gradient-to-br from-yellow-50 to-orange-50 dark:from-yellow-900/20 dark:to-orange-900/20' :
+                      badge.tier === 'silver' ? 'border-gray-300 bg-gradient-to-br from-gray-50 to-slate-50 dark:from-gray-900/20 dark:to-slate-900/20' :
+                      'border-amber-300 bg-gradient-to-br from-amber-50 to-yellow-50 dark:from-amber-900/20 dark:to-yellow-900/20'
+                    }`}>
+                      <CardContent className="p-4 text-center">
+                        <div className="text-3xl mb-2">{badge.icon}</div>
+                        <h4 className="font-semibold text-sm mb-1">{badge.name}</h4>
+                        <p className="text-xs text-muted-foreground mb-2">{badge.description}</p>
+                        <Badge 
+                          variant="outline" 
+                          className={`text-xs ${
+                            badge.tier === 'platinum' ? 'border-purple-400 text-purple-700 dark:text-purple-300' :
+                            badge.tier === 'gold' ? 'border-yellow-400 text-yellow-700 dark:text-yellow-300' :
+                            badge.tier === 'silver' ? 'border-gray-400 text-gray-700 dark:text-gray-300' :
+                            'border-amber-400 text-amber-700 dark:text-amber-300'
+                          }`}
+                        >
+                          {badge.tier.toUpperCase()}
+                        </Badge>
+                      </CardContent>
+                    </Card>
+                  </motion.div>
                 ))}
-                {joinedForumDetails.length > 5 && (
-                  <p className="text-xs text-muted-foreground text-center">
-                    +{joinedForumDetails.length - 5} more forums
-                  </p>
+                
+                {userBadges.length === 0 && (
+                  <div className="col-span-full text-center py-8">
+                    <Trophy size={48} className="mx-auto mb-4 opacity-50 text-muted-foreground" />
+                    <p className="text-muted-foreground mb-2">No badges earned yet</p>
+                    <p className="text-sm text-muted-foreground">Start participating to earn your first badge!</p>
+                  </div>
                 )}
               </div>
-            ) : (
-              <div className="text-center text-muted-foreground py-6">
-                <Users size={32} className="mx-auto mb-3 opacity-50" />
-                <p className="text-sm">Join forums to connect with others</p>
-                <p className="text-xs">Share experiences and get support</p>
-              </div>
-            )}
-          </CardContent>
-        </Card>
-      </div>
+            </TabsContent>
 
-      {/* Recent Activity / My Shares */}
+            <TabsContent value="progress" className="space-y-4">
+              <div className="space-y-6">
+                <h4 className="font-semibold">Next Badge Progress</h4>
+                {nextBadgeProgress.map((progress, index) => (
+                  <div key={index} className="p-4 bg-muted/30 rounded-lg">
+                    <div className="flex justify-between items-center mb-2">
+                      <span className="font-medium text-sm">{progress.badge}</span>
+                      <span className="text-sm text-muted-foreground">
+                        {progress.current}/{progress.target}
+                      </span>
+                    </div>
+                    <div className="w-full bg-muted rounded-full h-3">
+                      <div 
+                        className="bg-gradient-to-r from-primary to-primary/80 h-3 rounded-full transition-all duration-500"
+                        style={{ width: `${Math.min(progress.percentage, 100)}%` }}
+                      />
+                    </div>
+                    <p className="text-xs text-muted-foreground mt-1">
+                      {Math.round(progress.percentage)}% complete
+                    </p>
+                  </div>
+                ))}
+                
+                {nextBadgeProgress.length === 0 && (
+                  <div className="text-center py-8">
+                    <Star size={48} className="mx-auto mb-4 opacity-50 text-muted-foreground" />
+                    <p className="text-muted-foreground mb-2">All available badges earned!</p>
+                    <p className="text-sm text-muted-foreground">You're a true community champion! 🏆</p>
+                  </div>
+                )}
+              </div>
+            </TabsContent>
+
+            <TabsContent value="impact" className="space-y-4">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                {/* Community Impact - Real Data */}
+                <Card>
+                  <CardHeader>
+                    <CardTitle className="text-base">Community Impact</CardTitle>
+                  </CardHeader>
+                  <CardContent className="space-y-4">
+                    <div className="text-center p-4 bg-gradient-to-br from-green-50 to-emerald-50 dark:from-green-900/20 dark:to-emerald-900/20 rounded-lg">
+                      <div className="text-2xl font-bold text-green-600 dark:text-green-400">
+                        {Math.max(stats.likes_received + stats.threads_created * 2 + stats.replies_posted, 0)}
+                      </div>
+                      <div className="text-sm text-muted-foreground">Estimated Reach</div>
+                      <p className="text-xs text-muted-foreground mt-1">
+                        Based on your real activity
+                      </p>
+                    </div>
+                    
+                    <div className="space-y-3">
+                      <div className="flex justify-between">
+                        <span className="text-sm">Likes on Your Posts</span>
+                        <span className="font-medium">{stats.likes_received}</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-sm">Stories Shared</span>
+                        <span className="font-medium">{stats.threads_created}</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-sm">Support Given</span>
+                        <span className="font-medium">{stats.threads_liked}</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-sm">Replies Posted</span>
+                        <span className="font-medium">{stats.replies_posted}</span>
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
+
+                {/* Personal Growth */}
+                <Card>
+                  <CardHeader>
+                    <CardTitle className="text-base">Personal Growth</CardTitle>
+                  </CardHeader>
+                  <CardContent className="space-y-4">
+                    <div className="text-center p-4 bg-gradient-to-br from-blue-50 to-indigo-50 dark:from-blue-900/20 dark:to-indigo-900/20 rounded-lg">
+                      <div className="text-2xl font-bold text-blue-600 dark:text-blue-400">
+                        {Math.round((completedChallenges.length / Math.max(joinedChallenges.length, 1)) * 100)}%
+                      </div>
+                      <div className="text-sm text-muted-foreground">Challenge Success Rate</div>
+                    </div>
+                    
+                    <div className="space-y-3">
+                      <div className="flex justify-between">
+                        <span className="text-sm">Challenges Completed</span>
+                        <span className="font-medium">{completedChallenges.length}</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-sm">Active Challenges</span>
+                        <span className="font-medium">{joinedChallenges.length - completedChallenges.length}</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-sm">Events Attended</span>
+                        <span className="font-medium">{joinedEvents.length}</span>
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
+              </div>
+            </TabsContent>
+          </Tabs>
+        </CardContent>
+      </Card>
+
+      {/* Recent Activity Feed */}
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
             <Share className="text-green-500" size={20} />
-            My Recent Shares
+            Recent Activity
           </CardTitle>
         </CardHeader>
         <CardContent>
-          {userShares.length > 0 ? (
+          {userShares.length > 0 || joinedEvents.length > 0 || joinedChallenges.length > 0 ? (
             <div className="space-y-4">
-              {userShares.slice(0, 3).map((share) => (
-                <div key={share.id} className="p-4 rounded-lg border">
+              {/* Recent shares */}
+              {userShares.slice(0, 2).map((share) => (
+                <div key={share.id} className="p-4 rounded-lg border hover:shadow-sm transition-shadow">
                   <div className="flex items-start justify-between mb-2">
                     <h4 className="font-medium text-sm">{share.title}</h4>
                     <span className="text-xs text-muted-foreground">{formatRelativeTime(share.created_at)}</span>
@@ -1674,21 +2389,40 @@ function MyActivitySection({
                   </div>
                 </div>
               ))}
-              {userShares.length > 3 && (
-                <p className="text-xs text-muted-foreground text-center">
-                  +{userShares.length - 3} more shares
-                </p>
-              )}
+              
+              {/* Recent events */}
+              {joinedEvents.slice(0, 1).map((event) => (
+                <div key={event.id} className="p-4 rounded-lg border bg-blue-50/50 dark:bg-blue-900/10">
+                  <div className="flex items-center gap-2 mb-2">
+                    <Calendar size={16} className="text-blue-500" />
+                    <span className="font-medium text-sm">Joined Event</span>
+                  </div>
+                  <h4 className="font-medium text-sm mb-1">{event.title}</h4>
+                  <p className="text-xs text-muted-foreground">
+                    {new Date(event.start_time).toLocaleDateString()}
+                  </p>
+                </div>
+              ))}
+              
+              {/* Recent challenges */}
+              {joinedChallenges.slice(0, 1).map((challenge) => (
+                <div key={challenge.id} className="p-4 rounded-lg border bg-green-50/50 dark:bg-green-900/10">
+                  <div className="flex items-center gap-2 mb-2">
+                    <Target size={16} className="text-green-500" />
+                    <span className="font-medium text-sm">Joined Challenge</span>
+                  </div>
+                  <h4 className="font-medium text-sm mb-1">{challenge.title}</h4>
+                  <p className="text-xs text-muted-foreground">
+                    {challenge.duration_days} days • {challenge.category}
+                  </p>
+                </div>
+              ))}
             </div>
           ) : (
             <div className="text-center text-muted-foreground py-8">
               <Share size={48} className="mx-auto mb-4 opacity-50" />
-              <p className="mb-2">No shared stories yet</p>
-              <p className="text-sm">Share your wellness journey to inspire others</p>
-              <Button variant="outline" size="sm" className="mt-4">
-                <Plus size={16} className="mr-2" />
-                Share Your Story
-              </Button>
+              <p className="mb-2">No recent activity</p>
+              <p className="text-sm">Start participating to see your activity here</p>
             </div>
           )}
         </CardContent>
@@ -1696,7 +2430,7 @@ function MyActivitySection({
     </div>
   )
 
-  // Helper function for relative time (should be moved to utils)
+  // Helper function for relative time
   function formatRelativeTime(dateString: string): string {
     const now = new Date()
     const date = new Date(dateString)
@@ -1999,39 +2733,4 @@ function CreateChallengeForm({
   )
 }
 
-// Mock data for fallback
-const mockForums: Forum[] = [
-  {
-    id: 'forum_1',
-    name: 'General Support',
-    description: 'Share experiences and support each other through daily challenges',
-    category: 'support',
-    member_count: 1247,
-    thread_count: 89,
-    is_member: false,  // Changed from false to ensure consistency
-    created_at: new Date().toISOString(),
-    tags: ['support', 'general', 'community']
-  },
-  {
-    id: 'forum_2',
-    name: 'Anxiety & Stress',
-    description: 'Discussing anxiety management and stress relief techniques',
-    category: 'anxiety',
-    member_count: 823,
-    thread_count: 156,
-    is_member: false,  // Changed from true to false for new users
-    created_at: new Date().toISOString(),
-    tags: ['anxiety', 'stress', 'coping']
-  },
-  {
-    id: 'forum_3',
-    name: 'Achievements & Milestones',
-    description: 'Celebrate your progress and inspire others with your journey',
-    category: 'achievements',
-    member_count: 567,
-    thread_count: 234,
-    is_member: false,
-    created_at: new Date().toISOString(),
-    tags: ['achievements', 'progress', 'celebration']
-  }
-]
+export default EnhancedCommunitySection

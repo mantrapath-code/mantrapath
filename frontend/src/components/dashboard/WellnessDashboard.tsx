@@ -9,7 +9,6 @@ import { useMoods } from "@/hooks/useMoods"
 import { useUserStats } from "@/hooks/useWellness"
 import { useJournal } from "@/hooks/useJournal"
 import { useMoodBasedTheme } from "@/hooks/useMoodTheme"
-import { MoodInsights } from "../mood/MoodInsights"
 import { MoodPatternNotifications } from "../mood/MoodPatternNotifications"
 import { EnhancedMoodChart } from "../mood/EnhancedMoodChart"
 import { EmotionalWeatherWidget } from "../mood/EmotionalWeatherWidget"
@@ -191,16 +190,11 @@ export function WellnessDashboard() {
         </Card>
       </motion.div>
 
-      {/* Mood Pattern Notifications - Enhanced positioning */}
-      <MoodPatternNotifications />
+      {/* Critical mood alerts only - other notifications go to header dropdown */}
 
       <Tabs defaultValue="overview" className="w-full">
-        <TabsList className="grid w-full grid-cols-5">
+        <TabsList className="grid w-full grid-cols-4">
           <TabsTrigger value="overview">Overview</TabsTrigger>
-          <TabsTrigger value="insights" className="flex items-center gap-2">
-            <Brain size={16} />
-            Insights
-          </TabsTrigger>
           <TabsTrigger value="reports" className="flex items-center gap-2">
             <ChartLine size={16} />
             Reports
@@ -333,10 +327,6 @@ export function WellnessDashboard() {
           )}
         </TabsContent>
         
-        <TabsContent value="insights" className="space-y-6">
-          <MoodInsights />
-        </TabsContent>
-
         <TabsContent value="reports" className="space-y-6">
           <WeeklyMoodReport />
         </TabsContent>

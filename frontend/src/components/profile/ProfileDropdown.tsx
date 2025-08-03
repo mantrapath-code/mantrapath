@@ -4,6 +4,7 @@ import { User, Gear, SignOut, Eye } from '@phosphor-icons/react'
 import { ProfileAvatar } from './ProfileAvatar'
 import { cn } from '@/lib/utils'
 import { useProfile } from '@/hooks/useProfile'
+import { getUserDisplayName, getUserInitials } from '@/utils/userDisplay'
 
 interface User {
   id: string
@@ -90,17 +91,11 @@ export function ProfileDropdown({
   }
 
   const getDisplayName = () => {
-    if (user.first_name && user.last_name) {
-      return `${user.first_name} ${user.last_name}`
-    }
-    return user.username
+    return getUserDisplayName(user)
   }
 
   const getInitials = () => {
-    if (user.first_name && user.last_name) {
-      return `${user.first_name} ${user.last_name}`
-    }
-    return user.username
+    return getUserInitials(user)
   }
 
   return (
@@ -139,7 +134,7 @@ export function ProfileDropdown({
                     {getDisplayName()}
                   </p>
                   <p className="text-sm text-muted-foreground truncate">
-                    @{user.username}
+                    ID: {getUserDisplayName(user)}
                   </p>
                 </div>
               </div>

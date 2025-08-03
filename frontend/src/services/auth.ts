@@ -163,7 +163,7 @@ class AuthService {
       // If registration fails (user exists), try to login
       if (error.message.includes('already registered')) {
         try {
-          await this.login('testuser@mantrapath.com', 'testpassword123')
+          await this.login('ssharma8132@gmail.com', 'Dev@#123')
           return true
         } catch (loginError) {
           console.error('Auto-login failed:', loginError)

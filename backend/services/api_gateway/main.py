@@ -58,6 +58,7 @@ def get_service_url(path: str) -> tuple[str, str]:
     
     # Chatbot service routes
     if path.startswith("/api/chatbot/"):
+        # Keep the full path for the chatbot service
         return SERVICES["chatbot"], path
     
     # Content service routes
@@ -69,7 +70,7 @@ def get_service_url(path: str) -> tuple[str, str]:
         return SERVICES["community"], path
     
     # Notification service routes
-    if path.startswith("/notify/"):
+    if path.startswith("/notify/") or path.startswith("/notifications"):
         return SERVICES["notification"], path
     
     # ML service routes

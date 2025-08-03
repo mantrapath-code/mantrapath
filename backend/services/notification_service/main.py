@@ -304,6 +304,47 @@ async def broadcast_notification(
         "message": f"Broadcast notification queued for {len(notification_ids)} users"
     }
 
+@app.get("/notifications", response_model=List[NotificationResponse])
+async def get_notifications(
+    skip: int = 0,
+    limit: int = 20,
+    unread_only: bool = False,
+    notification_type: Optional[str] = None,
+    db: Session = Depends(get_db),
+    current_user: Dict[str, Any] = Depends(get_current_user)
+):
+    """Get user's notifications (alias for /notify/recent)"""
+    
+    query = db.query(Notification).filter(
+        Notification.user_id == current_user["user_id"]
+    )
+    
+    if unread_only:
+        query = query.filter(Notification.is_read == False)
+    
+    if notification_type:
+        query = query.filter(Notification.notification_type == notification_type)
+    
+    notifications = query.order_by(
+        desc(Notification.created_at)
+    ).offset(skip).limit(limit).all()
+    
+    return [
+        NotificationResponse(
+            id=notification.id,
+            title=notification.title,
+            message=notification.message,
+            notification_type=notification.notification_type,
+            action_url=notification.action_url,
+            priority=notification.priority,
+            is_read=notification.is_read,
+            is_sent=notification.is_sent,
+            sent_at=notification.sent_at,
+            created_at=notification.created_at
+        )
+        for notification in notifications
+    ]
+
 @app.get("/notify/recent", response_model=List[NotificationResponse])
 async def get_recent_notifications(
     skip: int = 0,

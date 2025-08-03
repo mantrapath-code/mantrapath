@@ -341,8 +341,8 @@ function AppContent() {
         </div>
       </footer>
       
-      {/* Mood Pattern Notifications - Global component */}
-      <MoodPatternNotifications />
+      {/* Mood Pattern Notifications - Global component for critical alerts only */}
+      <MoodPatternNotifications onlyCritical={true} />
       
       <Toaster 
         position="top-right"

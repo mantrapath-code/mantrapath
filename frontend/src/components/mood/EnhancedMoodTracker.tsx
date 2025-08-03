@@ -55,14 +55,29 @@ export function EnhancedMoodTracker({ onMoodSubmitted, className }: EnhancedMood
   const loadMoodStats = async () => {
     try {
       setIsLoadingStats(true)
-      const data = await apiService.getMoodAnalyticsSummary()
-      setMoodStats({
-        current_streak: data.current_streak || 0,
-        total_entries: data.total_entries || 0,
-        average_mood: data.average_mood || 0,
-        improvement_rate: data.improvement_rate || 0,
-        consistency_score: data.consistency_score || 0
-      })
+      
+      // Try enhanced ML analysis first, fallback to basic analytics
+      try {
+        const mlData = await apiService.getMoodAnalysis()
+        setMoodStats({
+          current_streak: 0, // Will need to be calculated from patterns
+          total_entries: mlData.data_points || 0,
+          average_mood: mlData.mood_statistics?.average_mood || 0,
+          improvement_rate: 0, // Can be derived from trend data
+          consistency_score: 0 // Can be calculated from data points
+        })
+      } catch (mlError) {
+        console.log('ML service unavailable, using basic analytics')
+        // Fallback to basic analytics
+        const data = await apiService.getMoodAnalyticsSummary()
+        setMoodStats({
+          current_streak: data.current_streak || 0,
+          total_entries: data.total_entries || 0,
+          average_mood: data.average_mood || 0,
+          improvement_rate: data.improvement_rate || 0,
+          consistency_score: data.consistency_score || 0
+        })
+      }
     } catch (error) {
       console.error('Failed to load mood stats:', error)
     } finally {

@@ -1,22 +1,31 @@
 /**
- * API service for connecting to MantraPath backend
+ * Enhanced API service for MantraPath
+ * Removes all mock data dependencies and focuses on real backend integration
+ * with comprehensive error handling and user-friendly messaging
  */
 
+import { processApiError } from '../utils/errorHandling'
+import { notificationService } from './notifications'
+
 const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000'
+const ML_SERVICE_URL = import.meta.env.VITE_ML_SERVICE_URL || 'http://localhost:8008'
 
 interface ApiError {
   message: string
   status: number
+  details?: any
 }
 
 class ApiService {
   private baseUrl: string
+  private mlServiceUrl: string
   private token: string | null = null
   private isBackendAvailable: boolean = true
   private backendCheckPromise: Promise<boolean> | null = null
 
-  constructor(baseUrl: string = API_BASE_URL) {
+  constructor(baseUrl: string = API_BASE_URL, mlServiceUrl: string = ML_SERVICE_URL) {
     this.baseUrl = baseUrl
+    this.mlServiceUrl = mlServiceUrl
     this.token = localStorage.getItem('mantrapath_token')
     this.checkBackendAvailability()
   }
@@ -54,10 +63,10 @@ class ApiService {
       } catch (error) {
         console.warn('🔧 Backend not available at', this.baseUrl)
         console.warn('To start the backend services:')
-        console.warn('   cd backend')
-        console.warn('   python3 simple_start.py')
+        console.warn('   ./start.sh')
+        console.warn('   # Select option 2: Backend Services Only')
         console.warn('   # OR')
-        console.warn('   ./start_backend.sh')
+        console.warn('   ./start.sh backend')
         console.warn('')
         console.warn('Using mock data mode until backend is available...')
         this.isBackendAvailable = false
@@ -82,16 +91,55 @@ class ApiService {
 
   private async handleResponse<T>(response: Response): Promise<T> {
     if (!response.ok) {
-      const error: ApiError = {
-        message: response.statusText || 'An error occurred',
-        status: response.status
+      let errorMessage = response.statusText || 'An error occurred'
+      let errorDetails: any = null
+      
+      // Try to get detailed error information from response body
+      try {
+        const contentType = response.headers.get('content-type')
+        if (contentType && contentType.includes('application/json')) {
+          const errorData = await response.json()
+          
+          // Handle FastAPI validation errors (422)
+          if (response.status === 422 && errorData.detail) {
+            if (Array.isArray(errorData.detail)) {
+              // Multiple validation errors - create user-friendly message
+              const fieldErrors = errorData.detail.map((err: any) => {
+                const field = err.loc ? err.loc.join('.') : 'field'
+                return `${field}: ${err.msg}`
+              })
+              errorMessage = fieldErrors.join(', ')
+            } else if (typeof errorData.detail === 'string') {
+              errorMessage = errorData.detail
+            } else {
+              errorMessage = JSON.stringify(errorData.detail)
+            }
+            errorDetails = errorData.detail
+          } else if (errorData.message) {
+            errorMessage = errorData.message
+          } else if (errorData.detail) {
+            errorMessage = typeof errorData.detail === 'string' ? errorData.detail : JSON.stringify(errorData.detail)
+          }
+        }
+      } catch (parseError) {
+        console.warn('Could not parse error response:', parseError)
       }
+      
+      const apiError = {
+        message: errorMessage,
+        status: response.status,
+        details: errorDetails
+      }
+      
+      // Backend may be unavailable, log the error
+      console.warn('🔧 API error detected, backend may be unavailable:', apiError)
       
       if (response.status === 401) {
         this.logout()
       }
       
-      throw error
+      console.error(`API Error (${response.status}):`, errorMessage, errorDetails)
+      throw apiError
     }
 
     const contentType = response.headers.get('content-type')
@@ -109,7 +157,12 @@ class ApiService {
     const backendAvailable = await this.checkBackendAvailability()
     
     if (!backendAvailable) {
-      return this.handleMockRequest<T>(endpoint, options)
+      const error: ApiError = {
+        message: 'Backend services are not available. Please ensure the backend is running.',
+        status: 0,
+        details: 'Use ./start.sh to start backend services'
+      }
+      throw error
     }
 
     const url = `${this.baseUrl}${endpoint}`
@@ -126,403 +179,23 @@ class ApiService {
       const response = await fetch(url, config)
       return this.handleResponse<T>(response)
     } catch (error) {
-      // Only fall back to mock data for network/connection errors
-      // Don't use mock data for authentication or other API errors
       console.error('API request failed:', error)
       
       if (error instanceof TypeError && error.message.includes('Failed to fetch')) {
         // Network error - backend might be down
         console.warn('Network error detected, backend may be unavailable')
         this.isBackendAvailable = false
-        return this.handleMockRequest<T>(endpoint, options)
+        const networkError: ApiError = {
+          message: 'Unable to connect to MantraPath services',
+          status: 0,
+          details: 'Check your internet connection and ensure backend services are running'
+        }
+        throw networkError
       }
       
       // For other errors (auth, validation, etc.), throw the error
       throw error
     }
-  }
-
-  private handleMockRequest<T>(endpoint: string, options: RequestInit = {}): Promise<T> {
-    console.log('🔧 Using mock data for:', endpoint)
-    
-    // Mock authentication responses
-    if (endpoint === '/login' && options.method === 'POST') {
-      return Promise.resolve({
-        access_token: 'mock_access_token_' + Date.now(),
-        refresh_token: 'mock_refresh_token_' + Date.now(),
-        token_type: 'bearer'
-      } as T)
-    }
-
-    if (endpoint === '/register' && options.method === 'POST') {
-      return Promise.resolve({
-        access_token: 'mock_access_token_' + Date.now(),
-        refresh_token: 'mock_refresh_token_' + Date.now(),
-        token_type: 'bearer'
-      } as T)
-    }
-
-    if (endpoint === '/me') {
-      return Promise.resolve({
-        id: 'mock_user_' + Date.now(),
-        email: 'user@example.com',
-        username: 'demo_user',
-        is_active: true,
-        role: 'user'
-      } as T)
-    }
-
-    // Mock mood data with realistic patterns
-    if (endpoint.startsWith('/api/v1/mood/') && options.method !== 'POST') {
-      const moods = ['very-low', 'low', 'neutral', 'good', 'excellent']
-      const mockMoods = Array.from({ length: 30 }, (_, i) => {
-        // Create realistic mood patterns
-        const dayOffset = i * 24 * 60 * 60 * 1000
-        const baseScore = 5 + Math.sin(i * 0.3) * 2 + Math.random() * 2 // Creates wave pattern with randomness
-        const moodScore = Math.max(1, Math.min(10, Math.floor(baseScore)))
-        
-        return {
-          id: `mood_${i}`,
-          mood_score: moodScore,
-          energy_level: Math.floor(Math.random() * 5) + 3, // 3-7 range
-          stress_level: Math.floor(Math.random() * 5) + 3,
-          sleep_quality: Math.floor(Math.random() * 5) + 3,
-          notes: `Mood entry from ${Math.floor(i/7)} weeks ago`,
-          context_tags: [
-            ['work', 'stress'], 
-            ['exercise', 'health'], 
-            ['social', 'friends'], 
-            ['relaxation'], 
-            ['creative']
-          ][Math.floor(Math.random() * 5)],
-          created_at: new Date(Date.now() - dayOffset).toISOString()
-        }
-      }).reverse() // Show newest first
-      
-      console.log('🔧 Generated mock mood data:', mockMoods.length, 'entries')
-      return Promise.resolve(mockMoods as T)
-    }
-
-    if (endpoint.startsWith('/api/v1/mood/') && options.method === 'POST') {
-      return Promise.resolve({
-        id: 'mood_' + Date.now(),
-        message: 'Mood entry created successfully'
-      } as T)
-    }
-
-    // Mock journal data
-    if (endpoint.startsWith('/api/v1/journal/') && options.method !== 'POST') {
-      const mockJournals = Array.from({ length: 10 }, (_, i) => ({
-        id: `journal_${i}`,
-        title: `Journal Entry ${i + 1}`,
-        content: `This is a mock journal entry content for entry ${i + 1}. It contains reflective thoughts and daily experiences.`,
-        mood_before: Math.floor(Math.random() * 10) + 1,
-        mood_after: Math.floor(Math.random() * 10) + 1,
-        sentiment_score: Math.random() * 2 - 1,
-        sentiment_label: ['positive', 'neutral', 'negative'][Math.floor(Math.random() * 3)],
-        themes: ['gratitude', 'work', 'family', 'health'][Math.floor(Math.random() * 4)] ? ['gratitude'] : [],
-        is_private: false,
-        created_at: new Date(Date.now() - i * 24 * 60 * 60 * 1000).toISOString()
-      }))
-      return Promise.resolve(mockJournals as T)
-    }
-
-    if (endpoint.startsWith('/api/v1/journal/') && options.method === 'POST') {
-      return Promise.resolve({
-        id: 'journal_' + Date.now(),
-        message: 'Journal entry created successfully'
-      } as T)
-    }
-
-    // Mock analytics data
-    if (endpoint.startsWith('/api/v1/analytics/')) {
-      if (endpoint.includes('overview')) {
-        return Promise.resolve({
-          average_mood: 7.2,
-          mood_trend: 'improving',
-          total_entries: 45,
-          streak: 7,
-          weekly_pattern: {
-            'monday': 6.5,
-            'tuesday': 7.0,
-            'wednesday': 7.5,
-            'thursday': 7.2,
-            'friday': 8.0,
-            'saturday': 8.5,
-            'sunday': 7.8
-          },
-          monthly_summary: {
-            average_mood: 7.2,
-            best_day: 'Friday',
-            worst_day: 'Monday'
-          }
-        } as T)
-      }
-
-      if (endpoint.includes('patterns/weekly')) {
-        return Promise.resolve({
-          weekly_averages: {
-            'monday': 6.5,
-            'tuesday': 7.0,
-            'wednesday': 7.5,
-            'thursday': 7.2,
-            'friday': 8.0,
-            'saturday': 8.5,
-            'sunday': 7.8
-          },
-          patterns: [
-            {
-              type: 'improvement',
-              severity: 'mild',
-              message: 'Your mood tends to improve throughout the week',
-              recommendation: 'Keep up your weekend self-care routine'
-            }
-          ],
-          total_weeks: 6
-        } as T)
-      }
-    }
-
-    // Mock community data - More comprehensive
-    if (endpoint.startsWith('/forums') && options.method !== 'POST') {
-      if (endpoint.includes('/replies')) {
-        // Mock replies for thread
-        const mockReplies = [
-          {
-            id: 'reply_1',
-            thread_id: 'thread_1',
-            content: 'That\'s amazing! Small steps really do add up. Keep going! 💪',
-            author: {
-              id: 'user_2',
-              name: 'Emma Johnson',
-              avatar_url: null,
-              badges: []
-            },
-            created_at: new Date(Date.now() - 1800000).toISOString(),
-            like_count: 5,
-            is_liked: false,
-            parent_id: null
-          },
-          {
-            id: 'reply_2',
-            thread_id: 'thread_1',
-            content: 'I totally understand this feeling. Even a 5-minute walk is better than staying inside all day. Proud of you!',
-            author: {
-              id: 'user_3',
-              name: 'Mike Chen',
-              avatar_url: null,
-              badges: []
-            },
-            created_at: new Date(Date.now() - 3000000).toISOString(),
-            like_count: 3,
-            is_liked: true,
-            parent_id: null
-          },
-          {
-            id: 'reply_3',
-            thread_id: 'thread_1',
-            content: '@Emma Johnson Thank you so much for the encouragement! It really means a lot 🙏',
-            author: {
-              id: 'user_4',
-              name: 'Sarah Williams',
-              avatar_url: null,
-              badges: []
-            },
-            created_at: new Date(Date.now() - 1200000).toISOString(),
-            like_count: 2,
-            is_liked: false,
-            parent_id: 'reply_1'
-          },
-          {
-            id: 'reply_4',
-            thread_id: 'thread_1',
-            content: '@Mike Chen Exactly! Every step counts. Thank you for understanding ❤️',
-            author: {
-              id: 'user_5',
-              name: 'Alex Thompson',
-              avatar_url: null,
-              badges: []
-            },
-            created_at: new Date(Date.now() - 900000).toISOString(),
-            like_count: 1,
-            is_liked: false,
-            parent_id: 'reply_2'
-          }
-        ]
-        return Promise.resolve(mockReplies as T)
-      }
-      if (endpoint.includes('/threads')) {
-        // Mock threads for specific forum
-        const mockThreads = [
-          {
-            id: 'thread_1',
-            forum_id: 'forum_1',
-            title: 'Small wins today! 🌟',
-            content: 'I managed to go for a 10-minute walk even though I was feeling anxious. Sometimes the smallest steps matter most.',
-            author: 'Sarah',
-            reply_count: 8,
-            view_count: 156,
-            like_count: 23,
-            is_liked: false,
-            created_at: new Date(Date.now() - 3600000).toISOString(),
-            is_pinned: false
-          },
-          {
-            id: 'thread_2',
-            forum_id: 'forum_1',
-            title: 'Tips for managing morning anxiety?',
-            content: 'Does anyone have good strategies for dealing with anxiety first thing in the morning? I\'ve been struggling with this lately.',
-            author: 'Alex',
-            reply_count: 12,
-            view_count: 234,
-            like_count: 18,
-            is_liked: false,
-            created_at: new Date(Date.now() - 7200000).toISOString(),
-            is_pinned: false
-          },
-          {
-            id: 'thread_3',
-            forum_id: 'forum_2',
-            title: 'Breathing techniques that work',
-            content: 'Sharing some breathing exercises that have been really helpful for my anxiety. The 4-7-8 technique has been a game changer.',
-            author: 'Jordan',
-            reply_count: 5,
-            view_count: 89,
-            like_count: 31,
-            is_liked: true,
-            created_at: new Date(Date.now() - 10800000).toISOString(),
-            is_pinned: true
-          }
-        ]
-        return Promise.resolve(mockThreads as T)
-      }
-      
-      const mockForums = [
-        {
-          id: 'forum_1',
-          name: 'General Support',
-          description: 'Share experiences and support each other through daily challenges',
-          category: 'support',
-          member_count: 1247,
-          is_joined: false  // Changed from true to false for new users
-        },
-        {
-          id: 'forum_2',
-          name: 'Anxiety & Stress',
-          description: 'Discussing anxiety management and stress relief techniques',
-          category: 'anxiety',
-          member_count: 823,
-          is_joined: false
-        },
-        {
-          id: 'forum_3',
-          name: 'Achievements & Milestones',
-          description: 'Celebrate your progress and inspire others with your journey',
-          category: 'achievements',
-          member_count: 567,
-          is_joined: false
-        }
-      ]
-      return Promise.resolve(mockForums as T)
-    }
-
-    // Enhanced community mock data for reputation and stats
-    if (endpoint === '/user/stats') {
-      const mockStats = {
-        reputation: 127,
-        forums_joined: 3,
-        threads_liked: 24,
-        threads_created: 8,
-        replies_posted: 15,
-        likes_received: 31,
-        help_score: 7.2
-      }
-      return Promise.resolve(mockStats as T)
-    }
-
-    if (endpoint.startsWith('/user/activity')) {
-      const mockActivity = {
-        activity: [
-          {
-            type: 'thread_created',
-            id: 'thread_1',
-            title: 'Finding balance through mindfulness',
-            content: 'I wanted to share my journey with mindfulness meditation and how it has helped me find better balance in daily life...',
-            forum_name: 'Mindfulness & Meditation',
-            created_at: new Date(Date.now() - 2 * 24 * 60 * 60 * 1000).toISOString(),
-            like_count: 12
-          },
-          {
-            type: 'reply_posted',
-            id: 'reply_1', 
-            content: 'Thank you for sharing this! I have been struggling with similar challenges and your insights are very helpful.',
-            thread_title: 'Managing work stress during busy periods',
-            created_at: new Date(Date.now() - 5 * 24 * 60 * 60 * 1000).toISOString(),
-            like_count: 8
-          }
-        ]
-      }
-      return Promise.resolve(mockActivity as T)
-    }
-
-    // Mock community actions
-    if (endpoint.startsWith('/forums') && options.method === 'POST') {
-      if (endpoint.includes('/join')) {
-        return Promise.resolve({ message: 'Successfully joined forum' } as T)
-      }
-      if (endpoint.includes('/reply')) {
-        return Promise.resolve({
-          id: 'reply_' + Date.now(),
-          message: 'Reply posted successfully'
-        } as T)
-      }
-      if (endpoint.includes('/like')) {
-        return Promise.resolve({
-          message: 'Content liked successfully',
-          liked: Math.random() > 0.5, // Random like/unlike for testing
-          like_count: Math.floor(Math.random() * 50) + 1
-        } as T)
-      }
-      return Promise.resolve({
-        id: 'thread_' + Date.now(),
-        message: 'Thread created successfully'
-      } as T)
-    }
-
-    if (endpoint.startsWith('/forums') && options.method === 'DELETE') {
-      if (endpoint.includes('/leave')) {
-        return Promise.resolve({ message: 'Successfully left forum' } as T)
-      }
-      if (endpoint.includes('/like')) {
-        return Promise.resolve({
-          message: 'Like removed successfully',
-          liked: false,
-          like_count: Math.floor(Math.random() * 50)
-        } as T)
-      }
-    }
-
-    // Mock chatbot data
-    if (endpoint.startsWith('/api/chatbot/chat') && options.method === 'POST') {
-      const mockResponses = [
-        "Thank you for sharing that with me. How are you feeling right now?",
-        "I understand this might be challenging. Would you like to try a breathing exercise?",
-        "It sounds like you're going through a lot. Remember, it's okay to take things one step at a time.",
-        "Your feelings are valid. Have you tried any mindfulness practices before?"
-      ]
-      
-      return Promise.resolve({
-        response: mockResponses[Math.floor(Math.random() * mockResponses.length)],
-        session_id: 'mock_session_' + Date.now(),
-        message_type: 'text'
-      } as T)
-    }
-
-    // Default mock response
-    return Promise.resolve({
-      message: 'Mock response for ' + endpoint,
-      success: true
-    } as T)
   }
 
   // Auth methods
@@ -672,6 +345,66 @@ class ApiService {
         date: string
       }>
     }>('/api/v1/mood/celebration-stats')
+  }
+
+  // Generic request method for ML service
+  async requestML<T>(endpoint: string, options: RequestInit = {}): Promise<T> {
+    const url = `${this.mlServiceUrl}${endpoint}`
+    
+    const response = await fetch(url, {
+      ...options,
+      headers: {
+        ...this.getHeaders(),
+        ...options.headers,
+      },
+    })
+
+    return this.handleResponse<T>(response)
+  }
+
+  // Enhanced ML Service endpoints
+  async getMoodAnalysis() {
+    return this.requestML<{
+      user_id: string
+      analysis_date: string
+      data_points: number
+      mood_statistics: {
+        average_mood: number
+        mood_trend: string
+        mood_variance: number
+        best_mood: number
+        lowest_mood: number
+      }
+      energy_statistics: {
+        average_energy: number
+        energy_trend: string
+      }
+      stress_statistics: {
+        average_stress: number
+        stress_trend: string
+      }
+      insights: string[]
+      recommendations: string[]
+    }>('/ml/mood-analysis')
+  }
+
+  async getUserInsights(userId: string) {
+    return this.requestML<{
+      user_id: string
+      generated_at: string
+      mood_patterns: {
+        total_entries: number
+        tracking_consistency: number
+        average_mood: number
+      }
+      behavioral_insights: string[]
+      personalized_recommendations: string[]
+      risk_assessment: {
+        level: string
+        factors: string[]
+        last_updated: string
+      }
+    }>(`/ml/user-insights/${userId}`)
   }
 
   async getMoodAnalyticsSummary() {
@@ -864,12 +597,18 @@ class ApiService {
       forum_id: string
       title: string
       content: string
-      author: string
+      category: string
+      author: {
+        id: string
+        name: string
+        full_name: string
+      }
       reply_count: number
-      view_count: number
+      like_count: number
+      is_liked: boolean
       created_at: string
-      is_pinned: boolean
-    }>>(`/forums/${forumId}/threads?limit=${limit}`)
+      is_pinned?: boolean
+    }>>(`/forums/${forumId}/threads?format=array&limit=${limit}`)
   }
 
   async createThread(threadData: {
@@ -895,11 +634,43 @@ class ApiService {
   }
 
   async getThreadReplies(threadId: string) {
-    return this.request(`/forums/thread/${threadId}/replies`)
+    // Get the full thread details which includes replies
+    const threadDetails = await this.request<{
+      id: string
+      forum_id: string
+      title: string
+      content: string
+      author: {
+        id: string
+        name: string
+        full_name: string
+      }
+      created_at: string
+      like_count: number
+      is_liked: boolean
+      replies: Array<{
+        id: string
+        content: string
+        author: {
+          id: string
+          name: string
+          full_name: string
+        }
+        created_at: string
+        like_count: number
+        is_liked: boolean
+      }>
+      reply_count: number
+    }>(`/forums/thread/${threadId}`)
+    return threadDetails.replies || []
   }
 
   async likeContent(contentType: string, contentId: string) {
-    return this.request('/forums/like', {
+    return this.request<{
+      success: boolean
+      liked: boolean
+      message: string
+    }>('/forums/like', {
       method: 'POST',
       body: JSON.stringify({
         content_type: contentType,
@@ -910,13 +681,24 @@ class ApiService {
 
   async unlikeContent(contentType: string, contentId: string) {
     // Use the same toggle endpoint - backend will handle unlike if already liked
-    return this.request('/forums/like', {
+    return this.request<{
+      success: boolean
+      liked: boolean
+      message: string
+    }>('/forums/like', {
       method: 'POST',
       body: JSON.stringify({
         content_type: contentType,
         content_id: contentId,
       }),
     })
+  }
+
+  async getContentLikes(contentType: string, contentId: string) {
+    return this.request<{
+      like_count: number
+      is_liked: boolean
+    }>(`/forums/content/${contentType}/${contentId}/likes`)
   }
 
   // User Stats and Reputation
@@ -1011,10 +793,23 @@ class ApiService {
     duration_days: number
     start_date: string
     end_date: string
+    goal_type?: string
+    visibility?: string
+    challenge_type?: string
+    difficulty_level?: string
   }) {
+    // Ensure required fields have defaults
+    const completeData = {
+      ...challengeData,
+      goal_type: challengeData.goal_type || 'daily',
+      visibility: challengeData.visibility || 'public',
+      challenge_type: challengeData.challenge_type || 'custom',
+      difficulty_level: challengeData.difficulty_level || 'beginner'
+    }
+    
     return this.request('/forums/challenges', {
       method: 'POST',
-      body: JSON.stringify(challengeData),
+      body: JSON.stringify(completeData),
     })
   }
 
@@ -1026,7 +821,182 @@ class ApiService {
 
   async leaveChallenge(challengeId: string) {
     return this.request(`/forums/challenges/${challengeId}/leave`, {
-      method: 'DELETE',
+      method: 'POST',
+    })
+  }
+
+  // Enhanced Challenge Progress Tracking
+  async updateChallengeProgress(challengeId: string, progressData: {
+    completed: boolean
+    notes?: string
+    mood_rating?: number  // 1-5 scale
+    reflection?: string
+    difficulty_rating?: number  // 1-5 scale
+  }) {
+    return this.request<{
+      id: string
+      date: string
+      completed: boolean
+      notes?: string
+      mood_rating?: number
+      reflection?: string
+      streak_count: number
+      difficulty_rating?: number
+      created_at: string
+    }>(`/forums/challenges/${challengeId}/progress`, {
+      method: 'POST',
+      body: JSON.stringify(progressData),
+    })
+  }
+
+  async getChallengeProgress(challengeId: string, days: number = 30) {
+    return this.request<Array<{
+      id: string
+      date: string
+      completed: boolean
+      notes?: string
+      mood_rating?: number
+      reflection?: string
+      streak_count: number
+      difficulty_rating?: number
+      created_at: string
+    }>>(`/forums/challenges/${challengeId}/progress?days=${days}`)
+  }
+
+  async getChallengeLeaderboard(challengeId: string, limit: number = 10) {
+    return this.request<Array<{
+      user_id: string
+      name: string
+      completion_percentage: number
+      completed_days: number
+      current_streak: number
+      joined_at: string
+    }>>(`/forums/challenges/${challengeId}/leaderboard?limit=${limit}`)
+  }
+
+  // Event Comments
+  async addEventComment(eventId: string, commentData: {
+    content: string
+    parent_id?: string
+  }) {
+    return this.request<{
+      id: string
+      content: string
+      author: {
+        id: string
+        name: string
+        avatar_url?: string
+        badges: string[]
+      }
+      created_at: string
+      like_count: number
+      is_liked: boolean
+      parent_id?: string
+      replies: any[]
+    }>(`/forums/events/${eventId}/comments`, {
+      method: 'POST',
+      body: JSON.stringify(commentData),
+    })
+  }
+
+  async getEventComments(eventId: string) {
+    return this.request<Array<{
+      id: string
+      content: string
+      author: {
+        id: string
+        name: string
+        avatar_url?: string
+        badges: string[]
+      }
+      created_at: string
+      like_count: number
+      is_liked: boolean
+      parent_id?: string
+      replies: any[]
+    }>>(`/forums/events/${eventId}/comments`)
+  }
+
+  // Challenge Comments
+  async addChallengeComment(challengeId: string, commentData: {
+    content: string
+    parent_id?: string
+  }) {
+    return this.request<{
+      id: string
+      content: string
+      author: {
+        id: string
+        name: string
+        avatar_url?: string
+        badges: string[]
+      }
+      created_at: string
+      like_count: number
+      is_liked: boolean
+      parent_id?: string
+      replies: any[]
+    }>(`/forums/challenges/${challengeId}/comments`, {
+      method: 'POST',
+      body: JSON.stringify(commentData),
+    })
+  }
+
+  async getChallengeComments(challengeId: string) {
+    return this.request<Array<{
+      id: string
+      content: string
+      author: {
+        id: string
+        name: string
+        avatar_url?: string
+        badges: string[]
+      }
+      created_at: string
+      like_count: number
+      is_liked: boolean
+      parent_id?: string
+      replies: any[]
+    }>>(`/forums/challenges/${challengeId}/comments`)
+  }
+
+  async getPersonalizedFeed(userId: string, preferences?: {
+    mood?: string
+    calming_score?: number
+    psychological_preferences?: any
+  }) {
+    return this.request<{
+      user_id: string
+      feed_items: Array<{
+        id: string
+        content_type: string
+        title: string
+        preview: string
+        author: { name: string; id: string }
+        created_at: string
+        psychological_relevance_score: number
+        calming_effect_rating: number
+        interaction_count: number
+        urgency_level: string
+        wellness_tags: string[]
+      }>
+      psychological_wellness_tips: string[]
+      calming_suggestions: string[]
+      community_recommendations: Array<{
+        community_hub_id: string
+        name: string
+        psychological_match_score: number
+        description: string
+        member_count: number
+        recommended_reason: string
+        calming_score: number
+        support_quality_rating: number
+      }>
+      crisis_resources: any[]
+      mood_check_prompt: string
+    }>(`/community/feed/personalized`, {
+      method: 'POST',
+      body: JSON.stringify({ user_id: userId, preferences })
     })
   }
 
@@ -1078,7 +1048,7 @@ class ApiService {
 
   async getMyProfileStats() {
     // Get mood entries count and average
-    const moodEntries = await this.getMoodEntries(1000) // Get more entries for accurate stats
+    const moodEntries = await this.getMoodEntries(100) // Use max allowed limit for stats
     const daysActive = new Set(moodEntries.map((entry: any) => 
       new Date(entry.created_at).toDateString()
     )).size
@@ -1110,11 +1080,12 @@ class ApiService {
         }>
         cycles: number
       }
-    }>('/api/chatbot/chat', {
+    }>('/api/chatbot/chat/intelligent', {
       method: 'POST',
       body: JSON.stringify({
         message,
         session_id: sessionId,
+        user_context_refresh: false
       }),
     })
   }
@@ -1249,6 +1220,7 @@ export const communityApi = {
   getThreadReplies: apiService.getThreadReplies.bind(apiService),
   likeContent: apiService.likeContent.bind(apiService),
   removeLike: apiService.unlikeContent.bind(apiService),
+  getContentLikes: apiService.getContentLikes.bind(apiService),
   getUserStats: apiService.getUserStats.bind(apiService),
   getUserActivity: apiService.getUserActivity.bind(apiService),
   // Events & Challenges - now using real API methods
@@ -1260,6 +1232,15 @@ export const communityApi = {
   joinChallenge: apiService.joinChallenge.bind(apiService),
   leaveChallenge: apiService.leaveChallenge.bind(apiService),
   createChallenge: apiService.createChallenge.bind(apiService),
+  // Enhanced progress tracking and interactions
+  updateChallengeProgress: apiService.updateChallengeProgress.bind(apiService),
+  getChallengeProgress: apiService.getChallengeProgress.bind(apiService),
+  getChallengeLeaderboard: apiService.getChallengeLeaderboard.bind(apiService),
+  addEventComment: apiService.addEventComment.bind(apiService),
+  getEventComments: apiService.getEventComments.bind(apiService),
+  addChallengeComment: apiService.addChallengeComment.bind(apiService),
+  getChallengeComments: apiService.getChallengeComments.bind(apiService),
+  getPersonalizedFeed: apiService.getPersonalizedFeed.bind(apiService),
 }
 
 export const notificationApi = {

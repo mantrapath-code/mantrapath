@@ -70,3 +70,6 @@ echo "   # Register a user:"
 echo "   curl -X POST http://localhost:8000/register -H 'Content-Type: application/json' -d '{\"email\":\"test@example.com\",\"username\":\"testuser\",\"password\":\"password123\"}'"
 echo "   # Get forums:"
 echo "   curl -H 'Authorization: Bearer YOUR_TOKEN' http://localhost:8000/forums"
+echo ""
+echo "✨ Ready to develop! All services are running."
+fi

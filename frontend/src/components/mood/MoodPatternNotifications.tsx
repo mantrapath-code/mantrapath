@@ -2,7 +2,7 @@ import { useState, useEffect } from "react"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
-import { Bell, TrendDown, TrendUp, X, Warning, Target, Calendar, Clock, Activity, Brain } from "@phosphor-icons/react"
+import { Bell, TrendDown, TrendUp, X, Warning, Target, Calendar, Clock, Heart, Brain } from "@phosphor-icons/react"
 import { useMoods } from "@/hooks/useMoods"
 import { useMoodAnalytics } from "@/hooks/useWellness"
 import { useJournal } from "@/hooks/useJournal"
@@ -28,7 +28,15 @@ interface SmartNotification {
   }
 }
 
-export function MoodPatternNotifications() {
+interface MoodPatternNotificationsProps {
+  onlyCritical?: boolean
+  onNotificationEvent?: (notifications: SmartNotification[]) => void
+}
+
+export function MoodPatternNotifications({ 
+  onlyCritical = false, 
+  onNotificationEvent 
+}: MoodPatternNotificationsProps = {}) {
   const { moods } = useMoods()
   const { getWeeklyInsights } = useMoodAnalytics()
   const { entries } = useJournal()
@@ -208,7 +216,27 @@ export function MoodPatternNotifications() {
       }
     }
 
-    setActiveNotifications(notifications)
+    // Send all notifications to notification dropdown (via global handler)
+    if (notifications.length > 0 && (window as any).handleMoodPatternNotifications) {
+      (window as any).handleMoodPatternNotifications(notifications)
+    }
+    
+    // Filter notifications based on settings
+    let filteredNotifications = notifications
+    
+    if (onlyCritical) {
+      // Only show high severity (red flag) notifications in dashboard
+      filteredNotifications = notifications.filter(n => 
+        n.severity === 'high' && n.category === 'urgent'
+      )
+    }
+    
+    // Send filtered notifications to parent component (for custom handling)
+    if (onNotificationEvent && filteredNotifications.length > 0) {
+      onNotificationEvent(filteredNotifications)
+    }
+    
+    setActiveNotifications(filteredNotifications)
   }
 
   const analyzeWeeklyTrends = () => {

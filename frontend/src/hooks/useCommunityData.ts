@@ -141,7 +141,20 @@ export function useCommunityData() {
   // Join forum
   const joinForum = useCallback(async (forumId: string) => {
     try {
-      await communityApi.joinForum(forumId)
+      const response = await communityApi.joinForum(forumId)
+      
+      // Update local state with response data
+      if (response.is_joined !== undefined) {
+        // Update the forums list with new membership status
+        setForums(prevForums => 
+          prevForums.map(forum => 
+            forum.id === forumId 
+              ? { ...forum, is_member: response.is_joined }
+              : forum
+          )
+        )
+      }
+      
       const updatedJoined = [...joinedForums, forumId]
       setJoinedForums(updatedJoined)
       
@@ -153,6 +166,9 @@ export function useCommunityData() {
       setCommunityStats(updatedStats)
       
       toast.success('Successfully joined forum!')
+      
+      // Reload forums to get updated membership data from backend
+      loadForums()
     } catch (err: any) {
       console.error('Failed to join forum:', err)
       
@@ -163,12 +179,25 @@ export function useCommunityData() {
         toast.error('Failed to join forum')
       }
     }
-  }, [joinedForums, communityStats, setJoinedForums, setCommunityStats])
+  }, [joinedForums, communityStats, setJoinedForums, setCommunityStats, loadForums])
 
   // Leave forum
   const leaveForum = useCallback(async (forumId: string) => {
     try {
-      await communityApi.leaveForum(forumId)
+      const response = await communityApi.leaveForum(forumId)
+      
+      // Update local state with response data
+      if (response.is_joined !== undefined) {
+        // Update the forums list with new membership status
+        setForums(prevForums => 
+          prevForums.map(forum => 
+            forum.id === forumId 
+              ? { ...forum, is_member: response.is_joined }
+              : forum
+          )
+        )
+      }
+      
       const updatedJoined = joinedForums.filter(id => id !== forumId)
       setJoinedForums(updatedJoined)
       
@@ -180,6 +209,9 @@ export function useCommunityData() {
       setCommunityStats(updatedStats)
       
       toast.success('Successfully left forum')
+      
+      // Reload forums to get updated membership data from backend
+      loadForums()
     } catch (err: any) {
       console.error('Failed to leave forum:', err)
       
@@ -190,12 +222,15 @@ export function useCommunityData() {
         toast.error('Failed to leave forum')
       }
     }
-  }, [joinedForums, communityStats, setJoinedForums, setCommunityStats])
+  }, [joinedForums, communityStats, setJoinedForums, setCommunityStats, loadForums])
 
   // Like/Unlike content (using toggle endpoint)
   const toggleLike = useCallback(async (contentType: string, contentId: string) => {
     try {
       const response = await communityApi.likeContent(contentType, contentId)
+      
+      // Get updated like count from backend
+      const likeInfo = await communityApi.getContentLikes(contentType, contentId)
       
       // Update the thread in our local state with the new like status
       setThreads(prevThreads => 
@@ -204,7 +239,7 @@ export function useCommunityData() {
             ? { 
                 ...thread, 
                 is_liked: response.liked,
-                like_count: response.like_count
+                like_count: likeInfo.like_count
               }
             : thread
         )
@@ -236,7 +271,27 @@ export function useCommunityData() {
   // Reply to thread
   const replyToThread = useCallback(async (threadId: string, content: string, parentId?: string) => {
     try {
-      await communityApi.replyToThread(threadId, content, parentId)
+      const response = await communityApi.replyToThread(threadId, content, parentId)
+      
+      // Update the thread's reply count in local state with actual count from backend
+      if (response && response.thread_reply_count !== undefined) {
+        setThreads(prevThreads => 
+          prevThreads.map(thread => 
+            thread.id === threadId 
+              ? { ...thread, reply_count: response.thread_reply_count }
+              : thread
+          )
+        )
+      } else {
+        // Fallback: increment by 1 if backend doesn't return count
+        setThreads(prevThreads => 
+          prevThreads.map(thread => 
+            thread.id === threadId 
+              ? { ...thread, reply_count: thread.reply_count + 1 }
+              : thread
+          )
+        )
+      }
       
       // Update stats and reputation
       const updatedStats = {
@@ -247,9 +302,13 @@ export function useCommunityData() {
       setUserReputation(userReputation + 2) // More points for replies
       
       toast.success('Reply posted successfully!')
+      
+      // Return success indicator for component to reload replies
+      return { success: true }
     } catch (err) {
       console.error('Failed to post reply:', err)
       toast.error('Failed to post reply')
+      return { success: false }
     }
   }, [communityStats, userReputation, setCommunityStats, setUserReputation])
 
@@ -317,17 +376,16 @@ export function useCommunityData() {
     
     // Utilities
     isForumJoined: (forumId: string) => {
-      // First check localStorage for immediate response
-      const isInLocalStorage = joinedForums.includes(forumId)
-      
-      // Then check backend data if available (more authoritative)
+      // First check backend data if available (more authoritative)
       const forumFromBackend = forums.find(f => f.id === forumId)
-      if (forumFromBackend && 'is_joined' in forumFromBackend) {
+      if (forumFromBackend && 'is_member' in forumFromBackend) {
+        return (forumFromBackend as any).is_member
+      } else if (forumFromBackend && 'is_joined' in forumFromBackend) {
         return (forumFromBackend as any).is_joined
       }
       
-      // Fallback to localStorage
-      return isInLocalStorage
+      // Fallback to localStorage for immediate response
+      return joinedForums.includes(forumId)
     },
     isThreadLiked: (threadId: string) => {
       // Check the thread data from backend for like status

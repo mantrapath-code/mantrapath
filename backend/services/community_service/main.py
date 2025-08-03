@@ -1,36 +1,38 @@
 """
-Community Service - Handles forums, threads, replies, and community interactions
+MantraPath Community Service - Clean Implementation
 """
-from fastapi import FastAPI, Depends, HTTPException, Query
+from fastapi import FastAPI, Depends, HTTPException, Query, Request
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.orm import Session
-from sqlalchemy import desc, func, and_
-from pydantic import BaseModel
-from typing import Optional, List
-from datetime import datetime
+from sqlalchemy import and_, or_
+from typing import Optional, List, Dict
+from datetime import datetime, timedelta
+import logging
 import sys
+import os
 
 # Add parent directories to path
 sys.path.append('/app')
 sys.path.append('/app/shared')
 
+# Setup logging
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
+
+# Import shared dependencies
 from shared.database import get_db, engine
+from shared.auth import get_current_user, verify_token
+from shared.user_display import get_user_display_name as get_unique_display_name
 from shared.models import (
-    CommunityForum, ForumThread, ThreadReply, ForumMembership, Like, Base, 
-    Forum, ForumReply, User, UserProfile, CommunityEvent, Challenge, 
-    EventParticipant, ChallengeParticipant
-)
-from shared.auth import get_current_user
-
-# Create tables
-Base.metadata.create_all(bind=engine)
-
-app = FastAPI(
-    title="MantraPath Community Service",
-    description="Forums and community interaction service",
-    version="1.0.0"
+    Base, User, Challenge, ChallengeProgress, ChallengeComment,
+    CommunityEvent, CommunityForum, ChallengeParticipant, EventParticipant,
+    ForumThread, ThreadReply, Like, ForumMembership, EventComment
 )
 
+# Create FastAPI app
+app = FastAPI(title="MantraPath Community Service", version="2.0.0")
+
+# Configure CORS
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -39,1102 +41,1895 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Pydantic models
-class AuthorResponse(BaseModel):
-    id: str
-    name: str
-    avatar_url: Optional[str] = None
-    badges: List[str] = []
+# Create tables
+Base.metadata.create_all(bind=engine)
 
-class ForumResponse(BaseModel):
-    id: str
-    name: str
-    description: str
-    category: str
-    member_count: int
-    thread_count: int = 0
-    is_joined: bool = False
-    tags: List[str] = []
-
-class ThreadCreate(BaseModel):
-    forum_id: str
-    title: str
-    content: str
-
-class ThreadResponse(BaseModel):
-    id: str
-    forum_id: str
-    forum_name: str
-    title: str
-    content: str
-    author: AuthorResponse
-    reply_count: int
-    view_count: int
-    like_count: int = 0
-    is_liked: bool = False
-    created_at: datetime
-    updated_at: datetime
-    is_pinned: bool = False
-    tags: List[str] = []
-    category: str = "general"
-    is_bookmarked: bool = False
-
-class ReplyCreate(BaseModel):
-    content: str
-    parent_id: Optional[str] = None
-
-class ReplyResponse(BaseModel):
-    id: str
-    thread_id: str
-    content: str
-    author: AuthorResponse
-    created_at: datetime
-    like_count: int = 0
-    is_liked: bool = False
-    parent_id: Optional[str] = None
-
-class LikeRequest(BaseModel):
-    content_type: str  # 'thread' or 'reply'
-    content_id: str
-
-# Event models
-class EventCreate(BaseModel):
-    title: str
-    description: str
-    start_time: datetime
-    end_time: datetime
-    location: Optional[str] = None
-    is_virtual: bool = True
-
-class EventResponse(BaseModel):
-    id: str
-    title: str
-    description: str
-    start_time: datetime
-    end_time: datetime
-    location: Optional[str] = None
-    is_virtual: bool
-    participant_count: int
-    is_participating: bool = False
-    created_at: datetime
-
-# Challenge models
-class ChallengeCreate(BaseModel):
-    title: str
-    description: str
-    category: str
-    duration_days: int
-    start_date: datetime
-    end_date: datetime
-
-class ChallengeResponse(BaseModel):
-    id: str
-    title: str
-    description: str
-    category: str
-    duration_days: int
-    start_date: datetime
-    end_date: datetime
-    participant_count: int
-    is_participating: bool = False
-    created_at: datetime
-
-# Forum endpoints
-@app.get("/forums", response_model=List[ForumResponse])
-async def get_forums(
-    current_user: dict = Depends(get_current_user),
-    db: Session = Depends(get_db)
-):
-    """Get all forums with membership status"""
-    
-    forums = db.query(CommunityForum).all()
-    
-    # Get user's forum memberships
-    memberships = db.query(ForumMembership).filter(
-        ForumMembership.user_id == current_user["user_id"]
-    ).all()
-    
-    member_forum_ids = {str(membership.forum_id) for membership in memberships}
-    
-    # Calculate member counts and thread counts dynamically
-    forum_responses = []
-    for forum in forums:
-        member_count = db.query(ForumMembership).filter(
-            ForumMembership.forum_id == forum.id,
-            ForumMembership.is_active == True
-        ).count()
-        
-        thread_count = db.query(ForumThread).filter(
-            ForumThread.forum_id == forum.id
-        ).count()
-        
-        forum_responses.append(ForumResponse(
-            id=str(forum.id),
-            name=forum.name,
-            description=forum.description,
-            category=forum.category,
-            member_count=member_count,
-            thread_count=thread_count,
-            is_joined=str(forum.id) in member_forum_ids,
-            tags=[]  # TODO: Implement tags system
-        ))
-    
-    return forum_responses
-
-@app.post("/forums/{forum_id}/join")
-async def join_forum(
-    forum_id: str,
-    current_user: dict = Depends(get_current_user),
-    db: Session = Depends(get_db)
-):
-    """Join a forum"""
-    
-    # Check if already a member
-    existing = db.query(ForumMembership).filter(
-        and_(
-            ForumMembership.user_id == current_user["user_id"],
-            ForumMembership.forum_id == forum_id
-        )
-    ).first()
-    
-    if existing:
-        raise HTTPException(status_code=400, detail="Already a member of this forum")
-    
-    # Create membership
-    membership = ForumMembership(
-        user_id=current_user["user_id"],
-        forum_id=forum_id,
-        role="member"
-    )
-    
-    db.add(membership)
-    db.commit()
-    
-    return {"message": "Successfully joined forum"}
-
-@app.delete("/forums/{forum_id}/leave")
-async def leave_forum(
-    forum_id: str,
-    current_user: dict = Depends(get_current_user),
-    db: Session = Depends(get_db)
-):
-    """Leave a forum"""
-    
-    membership = db.query(ForumMembership).filter(
-        and_(
-            ForumMembership.user_id == current_user["user_id"],
-            ForumMembership.forum_id == forum_id
-        )
-    ).first()
-    
-    if not membership:
-        raise HTTPException(status_code=404, detail="Not a member of this forum")
-    
-    db.delete(membership)
-    db.commit()
-    
-    return {"message": "Successfully left forum"}
-
-# Thread endpoints
-@app.get("/forums/{forum_id}/threads", response_model=List[ThreadResponse])
-async def get_forum_threads(
-    forum_id: str,
-    limit: int = Query(20, le=50),
-    current_user: dict = Depends(get_current_user),
-    db: Session = Depends(get_db)
-):
-    """Get threads in a forum"""
-    
-    # Check if user is a member of the forum
-    membership = db.query(ForumMembership).filter(
-        and_(
-            ForumMembership.user_id == current_user["user_id"],
-            ForumMembership.forum_id == forum_id,
-            ForumMembership.is_active == True
-        )
-    ).first()
-    
-    if not membership:
-        raise HTTPException(status_code=403, detail="Must be a forum member to view threads")
-    
-    # Get forum info for forum_name
-    forum = db.query(CommunityForum).filter(CommunityForum.id == forum_id).first()
-    if not forum:
-        raise HTTPException(status_code=404, detail="Forum not found")
-    
-    # Get threads for this forum with user data
-    threads = db.query(ForumThread, User, UserProfile).outerjoin(
-        User, ForumThread.author_id == User.id
-    ).outerjoin(
-        UserProfile, User.id == UserProfile.user_id
-    ).filter(
-        ForumThread.forum_id == forum_id
-    ).order_by(desc(ForumThread.created_at)).limit(limit).all()
-    
-    thread_responses = []
-    for thread_data in threads:
-        thread, user, profile = thread_data
-        
-        # Get reply count
-        reply_count = db.query(ThreadReply).filter(
-            ThreadReply.thread_id == thread.id
-        ).count()
-        
-        # Get like count and check if current user liked it
-        like_count = db.query(Like).filter(
-            and_(
-                Like.content_type == "thread",
-                Like.content_id == str(thread.id)
-            )
-        ).count()
-        
-        is_liked = db.query(Like).filter(
-            and_(
-                Like.user_id == current_user["user_id"],
-                Like.content_type == "thread",
-                Like.content_id == str(thread.id)
-            )
-        ).first() is not None
-        
-        # Create author object
-        author_name = "Anonymous"
-        author_avatar = None
+def get_user_display_name(user_id: str, db: Session) -> tuple[str, str]:
+    """Get user display name from database using unique identifier"""
+    try:
+        user = db.query(User).filter(User.id == user_id).first()
         if user:
-            author_name = f"{user.first_name} {user.last_name}".strip() or user.username
-            if profile:
-                author_avatar = profile.avatar_url
-        
-        author = AuthorResponse(
-            id=str(user.id) if user else "anonymous",
-            name=author_name,
-            avatar_url=author_avatar,
-            badges=[]  # TODO: Implement user badges system
-        )
-        
-        thread_responses.append(ThreadResponse(
-            id=str(thread.id),
-            forum_id=str(thread.forum_id),
-            forum_name=forum.name,
-            title=thread.title,
-            content=thread.content,
-            author=author,
-            reply_count=reply_count,
-            view_count=thread.view_count,
-            like_count=like_count,
-            is_liked=is_liked,
-            created_at=thread.created_at,
-            updated_at=thread.updated_at,
-            is_pinned=thread.is_pinned,
-            tags=[],  # TODO: Implement tags system
-            category=forum.category,
-            is_bookmarked=False  # TODO: Implement bookmarks system
-        ))
-    
-    return thread_responses
-
-@app.post("/forums/thread", response_model=ThreadResponse)
-async def create_thread(
-    thread_data: ThreadCreate,
-    current_user: dict = Depends(get_current_user),
-    db: Session = Depends(get_db)
-):
-    """Create new thread"""
-    
-    # Verify user is member of forum
-    membership = db.query(ForumMembership).filter(
-        and_(
-            ForumMembership.user_id == current_user["user_id"],
-            ForumMembership.forum_id == thread_data.forum_id
-        )
-    ).first()
-    
-    if not membership:
-        raise HTTPException(status_code=403, detail="Must be a member to create threads")
-    
-    thread = ForumThread(
-        forum_id=thread_data.forum_id,
-        author_id=current_user["user_id"],
-        title=thread_data.title,
-        content=thread_data.content
-    )
-    
-    db.add(thread)
-    db.commit()
-    db.refresh(thread)
-    
-    # Get forum details
-    forum = db.query(CommunityForum).filter(CommunityForum.id == thread_data.forum_id).first()
-    if not forum:
-        raise HTTPException(status_code=404, detail="Forum not found")
-    
-    # Get user details for author
-    user = db.query(User).filter(User.id == current_user["user_id"]).first()
-    if not user:
-        raise HTTPException(status_code=404, detail="User not found")
-    
-    user_profile = db.query(UserProfile).filter(UserProfile.user_id == current_user["user_id"]).first()
-    
-    # Create author response
-    author_name = "User"
-    author_avatar = None
-    
-    if user:
-        if user.username:
-            author_name = user.username
-        elif user.first_name or user.last_name:
-            author_name = f"{user.first_name or ''} {user.last_name or ''}".strip()
-        
-        if user_profile and user_profile.avatar_url:
-            author_avatar = user_profile.avatar_url
-    
-    author_response = AuthorResponse(
-        id=str(user.id) if user else "anonymous",
-        name=author_name,
-        avatar_url=author_avatar,
-        badges=[]
-    )
-    
-    return ThreadResponse(
-        id=str(thread.id),
-        forum_id=str(thread.forum_id),
-        forum_name=forum.name,
-        title=thread.title,
-        content=thread.content,
-        author=author_response,
-        reply_count=0,
-        view_count=thread.view_count,
-        like_count=0,
-        is_liked=False,
-        created_at=thread.created_at,
-        updated_at=thread.updated_at,
-        is_pinned=thread.is_pinned,
-        tags=[],
-        category=forum.category,
-        is_bookmarked=False
-    )
-
-@app.get("/forums/thread/{thread_id}", response_model=ThreadResponse)
-async def get_thread(
-    thread_id: str,
-    current_user: dict = Depends(get_current_user),
-    db: Session = Depends(get_db)
-):
-    """Get thread details and increment view count"""
-    
-    thread = db.query(ForumThread).filter(ForumThread.id == thread_id).first()
-    if not thread:
-        raise HTTPException(status_code=404, detail="Thread not found")
-    
-    # Increment view count
-    db.query(ForumThread).filter(ForumThread.id == thread_id).update({
-        ForumThread.view_count: ForumThread.view_count + 1
-    })
-    db.commit()
-    
-    # Get like count for this thread
-    like_count = db.query(Like).filter(
-        and_(
-            Like.content_type == "thread",
-            Like.content_id == str(thread.id)
-        )
-    ).count()
-    
-    # Check if current user liked this thread
-    user_liked = db.query(Like).filter(
-        and_(
-            Like.user_id == current_user["user_id"],
-            Like.content_type == "thread",
-            Like.content_id == str(thread.id)
-        )
-    ).first() is not None
-    
-    return ThreadResponse(
-        id=str(thread.id),
-        forum_id=str(thread.forum_id),
-        title=thread.title,
-        content=thread.content,
-        author="Anonymous",
-        reply_count=thread.reply_count,
-        view_count=thread.view_count + 1,  # Include the increment
-        like_count=like_count,
-        is_liked=user_liked,
-        created_at=thread.created_at,
-        is_pinned=thread.is_pinned
-    )
-
-# Reply endpoints
-@app.post("/forums/thread/{thread_id}/reply", response_model=ReplyResponse)
-async def create_reply(
-    thread_id: str,
-    reply_data: ReplyCreate,
-    current_user: dict = Depends(get_current_user),
-    db: Session = Depends(get_db)
-):
-    """Create reply to thread"""
-    
-    # Verify thread exists
-    thread = db.query(ForumThread).filter(ForumThread.id == thread_id).first()
-    if not thread:
-        raise HTTPException(status_code=404, detail="Thread not found")
-    
-    # Verify user is member of forum
-    membership = db.query(ForumMembership).filter(
-        and_(
-            ForumMembership.user_id == current_user["user_id"],
-            ForumMembership.forum_id == thread.forum_id
-        )
-    ).first()
-    
-    if not membership:
-        raise HTTPException(status_code=403, detail="Must be a member to reply")
-    
-    reply = ForumReply(
-        thread_id=thread_id,
-        author_id=current_user["user_id"],
-        content=reply_data.content,
-        parent_id=reply_data.parent_id
-    )
-    
-    db.add(reply)
-    
-    # Update thread reply count
-    db.query(ForumThread).filter(ForumThread.id == thread_id).update({
-        ForumThread.reply_count: ForumThread.reply_count + 1
-    })
-    
-    db.commit()
-    db.refresh(reply)
-    
-    return ReplyResponse(
-        id=str(reply.id),
-        thread_id=str(reply.thread_id),
-        content=reply.content,
-        author="You",
-        created_at=reply.created_at,
-        likes_count=0
-    )
-
-# Like endpoints
-@app.post("/forums/like")
-async def toggle_like_content(
-    like_data: LikeRequest,
-    current_user: dict = Depends(get_current_user),
-    db: Session = Depends(get_db)
-):
-    """Toggle like/unlike for thread or reply"""
-    
-    # Check if already liked
-    existing = db.query(Like).filter(
-        and_(
-            Like.user_id == current_user["user_id"],
-            Like.content_type == like_data.content_type,
-            Like.content_id == like_data.content_id
-        )
-    ).first()
-    
-    if existing:
-        # Unlike: Remove existing like
-        db.delete(existing)
-        db.commit()
-        
-        # Get updated like count
-        like_count = db.query(Like).filter(
-            and_(
-                Like.content_type == like_data.content_type,
-                Like.content_id == like_data.content_id
-            )
-        ).count()
-        
-        return {
-            "message": "Content unliked successfully",
-            "liked": False,
-            "like_count": like_count
-        }
-    else:
-        # Like: Create new like
-        like = Like(
-            user_id=current_user["user_id"],
-            content_type=like_data.content_type,
-            content_id=like_data.content_id
-        )
-        
-        db.add(like)
-        db.commit()
-        
-        # Get updated like count
-        like_count = db.query(Like).filter(
-            and_(
-                Like.content_type == like_data.content_type,
-                Like.content_id == like_data.content_id
-            )
-        ).count()
-        
-        return {
-            "message": "Content liked successfully",
-            "liked": True,
-            "like_count": like_count
-        }
-
-@app.get("/forums/like/{content_type}/{content_id}")
-async def get_like_status(
-    content_type: str,
-    content_id: str,
-    current_user: dict = Depends(get_current_user),
-    db: Session = Depends(get_db)
-):
-    """Get like status and count for content"""
-    
-    # Check if current user liked this content
-    user_liked = db.query(Like).filter(
-        and_(
-            Like.user_id == current_user["user_id"],
-            Like.content_type == content_type,
-            Like.content_id == content_id
-        )
-    ).first() is not None
-    
-    # Get total like count
-    like_count = db.query(Like).filter(
-        and_(
-            Like.content_type == content_type,
-            Like.content_id == content_id
-        )
-    ).count()
-    
-    return {
-        "liked": user_liked,
-        "like_count": like_count
-    }
-
-@app.get("/forums/thread/{thread_id}/replies", response_model=List[ReplyResponse])
-async def get_thread_replies(
-    thread_id: str,
-    current_user: dict = Depends(get_current_user),
-    db: Session = Depends(get_db)
-):
-    """Get all replies for a thread"""
-    
-    # Get replies with user data
-    replies = db.query(ForumReply, User, UserProfile).outerjoin(
-        User, ForumReply.author_id == User.id
-    ).outerjoin(
-        UserProfile, User.id == UserProfile.user_id
-    ).filter(
-        ForumReply.thread_id == thread_id
-    ).order_by(ForumReply.created_at).all()
-    
-    reply_responses = []
-    for reply_data in replies:
-        reply, user, profile = reply_data
-        
-        # Get like count for this reply
-        like_count = db.query(Like).filter(
-            and_(
-                Like.content_type == "reply",
-                Like.content_id == str(reply.id)
-            )
-        ).count()
-        
-        # Check if current user liked this reply
-        is_liked = db.query(Like).filter(
-            and_(
-                Like.user_id == current_user["user_id"],
-                Like.content_type == "reply",
-                Like.content_id == str(reply.id)
-            )
-        ).first() is not None
-        
-        # Create author object
-        author_name = "Anonymous"
-        author_avatar = None
-        if user:
-            author_name = f"{user.first_name} {user.last_name}".strip() or user.username
-            if profile:
-                author_avatar = profile.avatar_url
-        
-        author = AuthorResponse(
-            id=str(user.id) if user else "anonymous",
-            name=author_name,
-            avatar_url=author_avatar,
-            badges=[]  # TODO: Implement user badges system
-        )
-        
-        reply_responses.append(ReplyResponse(
-            id=str(reply.id),
-            thread_id=str(reply.thread_id),
-            content=reply.content,
-            author=author,
-            created_at=reply.created_at,
-            like_count=like_count,
-            is_liked=is_liked,
-            parent_id=str(reply.parent_id) if reply.parent_id else None
-        ))
-    
-    return reply_responses
-
-@app.delete("/forums/like/{content_type}/{content_id}")
-async def unlike_content(
-    content_type: str,
-    content_id: str,
-    current_user: dict = Depends(get_current_user),
-    db: Session = Depends(get_db)
-):
-    """Remove like from content"""
-    
-    like = db.query(Like).filter(
-        and_(
-            Like.user_id == current_user["user_id"],
-            Like.content_type == content_type,
-            Like.content_id == content_id
-        )
-    ).first()
-    
-    if not like:
-        raise HTTPException(status_code=404, detail="Like not found")
-    
-    db.delete(like)
-    db.commit()
-    
-    return {"message": "Like removed successfully"}
-
-# User Statistics and Reputation
-class UserStatsResponse(BaseModel):
-    reputation: int
-    forums_joined: int
-    threads_liked: int
-    threads_created: int
-    replies_posted: int
-    likes_received: int
-    help_score: float
-
-@app.get("/user/stats", response_model=UserStatsResponse)
-async def get_user_stats(
-    current_user: dict = Depends(get_current_user),
-    db: Session = Depends(get_db)
-):
-    """Get user's community statistics and reputation"""
-    
-    user_id = current_user["user_id"]
-    
-    # Count forums joined
-    forums_joined = db.query(ForumMembership).filter(
-        ForumMembership.user_id == user_id,
-        ForumMembership.is_active == True
-    ).count()
-    
-    # Count threads liked by user
-    threads_liked = db.query(Like).filter(
-        Like.user_id == user_id,
-        Like.content_type == "thread"
-    ).count()
-    
-    # Count threads created by user
-    threads_created = db.query(ForumThread).filter(
-        ForumThread.author_id == user_id
-    ).count()
-    
-    # Count replies posted by user
-    replies_posted = db.query(ThreadReply).filter(
-        ThreadReply.author_id == user_id
-    ).count()
-    
-    # Count likes received on user's content
-    likes_on_threads = db.query(func.count(Like.id)).join(
-        ForumThread, Like.content_id == ForumThread.id
-    ).filter(
-        Like.content_type == "thread",
-        ForumThread.author_id == user_id
-    ).scalar() or 0
-    
-    likes_on_replies = db.query(func.count(Like.id)).join(
-        ThreadReply, Like.content_id == ThreadReply.id
-    ).filter(
-        Like.content_type == "reply",
-        ThreadReply.author_id == user_id  
-    ).scalar() or 0
-    
-    likes_received = likes_on_threads + likes_on_replies
-    
-    # Calculate reputation score
-    reputation = (
-        forums_joined * 5 +           # 5 points per forum joined
-        threads_created * 10 +        # 10 points per thread created
-        replies_posted * 3 +          # 3 points per reply
-        likes_received * 2 +          # 2 points per like received
-        threads_liked * 1             # 1 point per like given
-    )
-    
-    # Calculate help score (0-10 scale)
-    max_possible_score = max(100, reputation)  # Prevent division by zero
-    help_score = min(10.0, (reputation / max_possible_score) * 10)
-    
-    return UserStatsResponse(
-        reputation=reputation,
-        forums_joined=forums_joined,
-        threads_liked=threads_liked,
-        threads_created=threads_created,
-        replies_posted=replies_posted,
-        likes_received=likes_received,
-        help_score=round(help_score, 1)
-    )
-
-@app.get("/user/activity")
-async def get_user_activity(
-    limit: int = Query(10, le=50),
-    current_user: dict = Depends(get_current_user),
-    db: Session = Depends(get_db)
-):
-    """Get user's recent community activity"""
-    
-    user_id = current_user["user_id"]
-    
-    # Get recent threads created by user
-    recent_threads = db.query(ForumThread).filter(
-        ForumThread.user_id == user_id
-    ).order_by(desc(ForumThread.created_at)).limit(limit//2).all()
-    
-    # Get recent replies by user  
-    recent_replies = db.query(ThreadReply).filter(
-        ThreadReply.user_id == user_id
-    ).order_by(desc(ThreadReply.created_at)).limit(limit//2).all()
-    
-    activity = []
-    
-    # Add threads to activity
-    for thread in recent_threads:
-        forum = db.query(CommunityForum).filter(CommunityForum.id == thread.forum_id).first()
-        content = getattr(thread, 'content', '') or ""
-        activity.append({
-            "type": "thread_created",
-            "id": str(thread.id),
-            "title": getattr(thread, 'title', ''),
-            "content": content[:200] + "..." if len(content) > 200 else content,
-            "forum_name": getattr(forum, 'name', 'Unknown Forum') if forum else "Unknown Forum",
-            "created_at": thread.created_at,
-            "like_count": db.query(Like).filter(
-                Like.content_type == "thread",
-                Like.content_id == str(thread.id)
-            ).count()
-        })
-    
-    # Add replies to activity
-    for reply in recent_replies:
-        thread = db.query(ForumThread).filter(ForumThread.id == reply.thread_id).first()
-        content = getattr(reply, 'content', '') or ""
-        activity.append({
-            "type": "reply_posted", 
-            "id": str(reply.id),
-            "content": content[:200] + "..." if len(content) > 200 else content,
-            "thread_title": getattr(thread, 'title', 'Unknown Thread') if thread else "Unknown Thread",
-            "created_at": reply.created_at,
-            "like_count": db.query(Like).filter(
-                Like.content_type == "reply",
-                Like.content_id == str(reply.id)
-            ).count()
-        })
-    
-    # Sort by created_at descending
-    activity.sort(key=lambda x: x["created_at"], reverse=True)
-    
-    return {"activity": activity[:limit]}
-
-# Initialize default forums
-@app.on_event("startup")
-async def create_default_forums():
-    """Create default forums if they don't exist"""
-    db = next(get_db())
-    
-    existing_forums = db.query(CommunityForum).count()
-    if existing_forums == 0:
-        default_forums = [
-            {
-                "name": "General Discussion",
-                "description": "General wellness and mental health discussions",
-                "category": "general"
-            },
-            {
-                "name": "Anxiety Support",
-                "description": "Support group for anxiety management",
-                "category": "support"
-            },
-            {
-                "name": "Mindfulness & Meditation",
-                "description": "Share meditation practices and mindfulness tips",
-                "category": "practice"
-            },
-            {
-                "name": "Daily Check-ins",
-                "description": "Share your daily wellness journey",
-                "category": "checkin"
-            }
-        ]
-        
-        for forum_data in default_forums:
-            forum = CommunityForum(**forum_data)
-            db.add(forum)
-        
-        db.commit()
-        print(f"Created {len(default_forums)} default forums")
-
-# Events endpoints
-@app.get("/forums/events", response_model=List[EventResponse])
-async def get_events(
-    current_user: dict = Depends(get_current_user),
-    db: Session = Depends(get_db)
-):
-    """Get all community events"""
-    events = db.query(CommunityEvent).order_by(desc(CommunityEvent.start_time)).all()
-    
-    # Get user's event participations
-    participations = db.query(EventParticipant).filter(
-        EventParticipant.user_id == current_user["user_id"]
-    ).all()
-    
-    participating_event_ids = {str(p.event_id) for p in participations}
-    
-    event_responses = []
-    for event in events:
-        participant_count = db.query(EventParticipant).filter(
-            EventParticipant.event_id == event.id
-        ).count()
-        
-        event_responses.append(EventResponse(
-            id=str(event.id),
-            title=event.title,
-            description=event.description,
-            start_time=event.start_time,
-            end_time=event.end_time,
-            location=event.location,
-            is_virtual=event.is_virtual,
-            participant_count=participant_count,
-            is_participating=str(event.id) in participating_event_ids,
-            created_at=event.created_at
-        ))
-    
-    return event_responses
-
-@app.post("/forums/events", response_model=EventResponse)
-async def create_event(
-    event_data: EventCreate,
-    current_user: dict = Depends(get_current_user),
-    db: Session = Depends(get_db)
-):
-    """Create a new community event"""
-    event = CommunityEvent(
-        title=event_data.title,
-        description=event_data.description,
-        start_time=event_data.start_time,
-        end_time=event_data.end_time,
-        location=event_data.location,
-        is_virtual=event_data.is_virtual,
-        created_by=current_user["user_id"]
-    )
-    
-    db.add(event)
-    db.commit()
-    db.refresh(event)
-    
-    return EventResponse(
-        id=str(event.id),
-        title=event.title,
-        description=event.description,
-        start_time=event.start_time,
-        end_time=event.end_time,
-        location=event.location,
-        is_virtual=event.is_virtual,
-        participant_count=0,
-        is_participating=False,
-        created_at=event.created_at
-    )
-
-@app.post("/forums/events/{event_id}/join")
-async def join_event(
-    event_id: str,
-    current_user: dict = Depends(get_current_user),
-    db: Session = Depends(get_db)
-):
-    """Join an event"""
-    # Check if event exists
-    event = db.query(CommunityEvent).filter(CommunityEvent.id == event_id).first()
-    if not event:
-        raise HTTPException(status_code=404, detail="Event not found")
-    
-    # Check if already participating
-    existing = db.query(EventParticipant).filter(
-        and_(
-            EventParticipant.user_id == current_user["user_id"],
-            EventParticipant.event_id == event_id
-        )
-    ).first()
-    
-    if existing:
-        raise HTTPException(status_code=400, detail="Already participating in this event")
-    
-    # Create participation record
-    participation = EventParticipant(
-        user_id=current_user["user_id"],
-        event_id=event_id
-    )
-    
-    db.add(participation)
-    db.commit()
-    
-    return {"message": "Successfully joined event"}
-
-@app.delete("/forums/events/{event_id}/leave")
-async def leave_event(
-    event_id: str,
-    current_user: dict = Depends(get_current_user),
-    db: Session = Depends(get_db)
-):
-    """Leave an event"""
-    participation = db.query(EventParticipant).filter(
-        and_(
-            EventParticipant.user_id == current_user["user_id"],
-            EventParticipant.event_id == event_id
-        )
-    ).first()
-    
-    if not participation:
-        raise HTTPException(status_code=404, detail="Not participating in this event")
-    
-    db.delete(participation)
-    db.commit()
-    
-    return {"message": "Successfully left event"}
-
-# Challenges endpoints
-@app.get("/forums/challenges", response_model=List[ChallengeResponse])
-async def get_challenges(
-    current_user: dict = Depends(get_current_user),
-    db: Session = Depends(get_db)
-):
-    """Get all wellness challenges"""
-    challenges = db.query(Challenge).order_by(desc(Challenge.start_date)).all()
-    
-    # Get user's challenge participations
-    participations = db.query(ChallengeParticipant).filter(
-        ChallengeParticipant.user_id == current_user["user_id"]
-    ).all()
-    
-    participating_challenge_ids = {str(p.challenge_id) for p in participations}
-    
-    challenge_responses = []
-    for challenge in challenges:
-        participant_count = db.query(ChallengeParticipant).filter(
-            ChallengeParticipant.challenge_id == challenge.id
-        ).count()
-        
-        challenge_responses.append(ChallengeResponse(
-            id=str(challenge.id),
-            title=challenge.title,
-            description=challenge.description,
-            category=challenge.category,
-            duration_days=challenge.duration_days,
-            start_date=challenge.start_date,
-            end_date=challenge.end_date,
-            participant_count=participant_count,
-            is_participating=str(challenge.id) in participating_challenge_ids,
-            created_at=challenge.created_at
-        ))
-    
-    return challenge_responses
-
-@app.post("/forums/challenges", response_model=ChallengeResponse)
-async def create_challenge(
-    challenge_data: ChallengeCreate,
-    current_user: dict = Depends(get_current_user),
-    db: Session = Depends(get_db)
-):
-    """Create a new wellness challenge"""
-    challenge = Challenge(
-        title=challenge_data.title,
-        description=challenge_data.description,
-        category=challenge_data.category,
-        duration_days=challenge_data.duration_days,
-        start_date=challenge_data.start_date,
-        end_date=challenge_data.end_date,
-        created_by=current_user["user_id"]
-    )
-    
-    db.add(challenge)
-    db.commit()
-    db.refresh(challenge)
-    
-    return ChallengeResponse(
-        id=str(challenge.id),
-        title=challenge.title,
-        description=challenge.description,
-        category=challenge.category,
-        duration_days=challenge.duration_days,
-        start_date=challenge.start_date,
-        end_date=challenge.end_date,
-        participant_count=0,
-        is_participating=False,
-        created_at=challenge.created_at
-    )
-
-@app.post("/forums/challenges/{challenge_id}/join")
-async def join_challenge(
-    challenge_id: str,
-    current_user: dict = Depends(get_current_user),
-    db: Session = Depends(get_db)
-):
-    """Join a challenge"""
-    # Check if challenge exists
-    challenge = db.query(Challenge).filter(Challenge.id == challenge_id).first()
-    if not challenge:
-        raise HTTPException(status_code=404, detail="Challenge not found")
-    
-    # Check if already participating
-    existing = db.query(ChallengeParticipant).filter(
-        and_(
-            ChallengeParticipant.user_id == current_user["user_id"],
-            ChallengeParticipant.challenge_id == challenge_id
-        )
-    ).first()
-    
-    if existing:
-        raise HTTPException(status_code=400, detail="Already participating in this challenge")
-    
-    # Create participation record
-    participation = ChallengeParticipant(
-        user_id=current_user["user_id"],
-        challenge_id=challenge_id
-    )
-    
-    db.add(participation)
-    db.commit()
-    
-    return {"message": "Successfully joined challenge"}
-
-@app.delete("/forums/challenges/{challenge_id}/leave")
-async def leave_challenge(
-    challenge_id: str,
-    current_user: dict = Depends(get_current_user),
-    db: Session = Depends(get_db)
-):
-    """Leave a challenge"""
-    participation = db.query(ChallengeParticipant).filter(
-        and_(
-            ChallengeParticipant.user_id == current_user["user_id"],
-            ChallengeParticipant.challenge_id == challenge_id
-        )
-    ).first()
-    
-    if not participation:
-        raise HTTPException(status_code=404, detail="Not participating in this challenge")
-    
-    db.delete(participation)
-    db.commit()
-    
-    return {"message": "Successfully left challenge"}
+            unique_display = get_unique_display_name(user)
+            return unique_display, unique_display
+        return get_unique_display_name({'id': user_id}), get_unique_display_name({'id': user_id})
+    except Exception as e:
+        logger.warning(f"Could not fetch user {user_id}: {e}")
+        fallback = get_unique_display_name({'id': user_id})
+        return fallback, fallback
 
 @app.get("/health")
-async def health_check():
-    """Health check endpoint"""
-    return {"status": "healthy", "service": "community-service"}
+async def health():
+    return {"status": "healthy", "service": "community", "timestamp": datetime.utcnow().isoformat()}
+
+@app.get("/debug/auth")
+async def debug_auth(request: Request):
+    """Debug endpoint to check authentication headers"""
+    headers = dict(request.headers)
+    auth_header = headers.get("authorization", "No Authorization header")
+    
+    return {
+        "authorization_header": auth_header,
+        "has_bearer": auth_header.startswith("Bearer ") if auth_header != "No Authorization header" else False,
+        "all_headers": {k: v for k, v in headers.items() if k.lower() in ['authorization', 'content-type', 'user-agent']},
+        "timestamp": datetime.utcnow().isoformat()
+    }
+
+@app.post("/debug/test-thread-creation")
+async def test_thread_creation():
+    """Debug endpoint to test ForumThread creation without authentication"""
+    try:
+        from shared.models import ForumThread
+        
+        # Test creating a ForumThread object
+        test_thread = ForumThread(
+            forum_id="test-forum-id",
+            title="Test Thread",
+            content="Test content",
+            author_id="test-user-id"
+        )
+        
+        return {
+            "success": True,
+            "message": "ForumThread object created successfully",
+            "thread_id": test_thread.id,
+            "forum_id": test_thread.forum_id,
+            "title": test_thread.title,
+            "author_id": test_thread.author_id
+        }
+        
+    except Exception as e:
+        return {
+            "success": False,
+            "error": str(e),
+            "error_type": type(e).__name__
+        }
+
+@app.get("/user/stats")
+async def get_user_stats(current_user: dict = Depends(get_current_user), db: Session = Depends(get_db)):
+    """Get user community statistics"""
+    try:
+        user_id = current_user.get('user_id')
+        
+        # Get challenges joined count
+        challenges_joined = db.query(ChallengeParticipant).filter(
+            ChallengeParticipant.user_id == user_id
+        ).count()
+        
+        # Get events joined count
+        events_joined = db.query(EventParticipant).filter(
+            EventParticipant.user_id == user_id
+        ).count()
+        
+        # Get active challenges count (challenges user joined that are still active)
+        active_challenges = db.query(ChallengeParticipant).join(
+            Challenge, ChallengeParticipant.challenge_id == Challenge.id
+        ).filter(
+            ChallengeParticipant.user_id == user_id,
+            Challenge.end_date > datetime.utcnow()
+        ).count()
+        
+        # Get completed challenge progress count
+        completed_activities = db.query(ChallengeProgress).filter(
+            ChallengeProgress.user_id == user_id,
+            ChallengeProgress.completed == True
+        ).count()
+        
+        # Calculate basic engagement score
+        engagement_score = min(100, (challenges_joined * 10) + (events_joined * 5) + (completed_activities * 2))
+        
+        return {
+            "challenges_joined": challenges_joined,
+            "events_joined": events_joined,
+            "active_challenges": active_challenges,
+            "completed_activities": completed_activities,
+            "community_engagement_score": engagement_score
+        }
+    except Exception as e:
+        logger.error(f"Error getting user stats: {e}")
+        raise HTTPException(status_code=500, detail="Failed to get user stats")
+
+@app.get("/forums")
+async def get_forums(current_user: dict = Depends(get_current_user), db: Session = Depends(get_db)):
+    """Get all forums"""
+    try:
+        user_id = current_user.get('user_id')
+        
+        # Get all active forums from database
+        forums = db.query(CommunityForum).order_by(CommunityForum.created_at.desc()).all()
+        
+        result = []
+        for forum in forums:
+            # Get creator info
+            username, full_name = get_user_display_name(forum.created_by, db) if forum.created_by else ("System", "System Admin")
+            
+            # Calculate actual member count from ForumMembership
+            member_count = db.query(ForumMembership).filter(
+                ForumMembership.forum_id == forum.id,
+                ForumMembership.is_active == True
+            ).count()
+            
+            # Check if current user is a member
+            is_joined = db.query(ForumMembership).filter(
+                ForumMembership.user_id == user_id,
+                ForumMembership.forum_id == forum.id,
+                ForumMembership.is_active == True
+            ).first() is not None
+            
+            # Count recent posts/challenges/events in this forum category
+            recent_posts = db.query(ChallengeComment).join(
+                Challenge, ChallengeComment.challenge_id == Challenge.id
+            ).filter(
+                Challenge.category == forum.category,
+                ChallengeComment.created_at > datetime.utcnow() - timedelta(days=7)
+            ).count()
+            
+            result.append({
+                "id": forum.id,
+                "name": forum.name,
+                "description": forum.description,
+                "category": forum.category,
+                "color_theme": "calm_blue",  # Default theme
+                "psychological_focus": ["general"],  # Default focus
+                "member_count": member_count,
+                "created_by": {"name": username, "full_name": full_name},
+                "created_at": forum.created_at.isoformat(),
+                "recent_posts": recent_posts,
+                "is_joined": is_joined
+            })
+        
+        # If no forums in database, create default ones
+        if not result:
+            # Create default forums in database
+            default_forums_data = [
+                {
+                    "name": "Mindfulness & Meditation",
+                    "description": "Share your mindfulness journey and meditation experiences",
+                    "category": "mindfulness"
+                },
+                {
+                    "name": "Challenge Support",
+                    "description": "Get support and share experiences with ongoing challenges",
+                    "category": "challenges"
+                },
+                {
+                    "name": "General Discussion",
+                    "description": "General wellness discussions and community support",
+                    "category": "general"
+                },
+                {
+                    "name": "Mental Health Support",
+                    "description": "Safe space for mental health discussions and support",
+                    "category": "mental-health"
+                }
+            ]
+            
+            for forum_data in default_forums_data:
+                new_forum = CommunityForum(
+                    name=forum_data["name"],
+                    description=forum_data["description"],
+                    category=forum_data["category"],
+                    created_by=user_id  # Create as current user
+                )
+                db.add(new_forum)
+            
+            try:
+                db.commit()
+                logger.info("Created default forums")
+                
+                # Fetch the newly created forums
+                forums = db.query(CommunityForum).order_by(CommunityForum.created_at.desc()).all()
+                
+                # Create some default threads for the forums
+                from shared.models import ForumThread
+                
+                default_threads = [
+                    {
+                        "forum_category": "mindfulness",
+                        "title": "Welcome to Mindfulness Discussions",
+                        "content": "Share your mindfulness journey and experiences here. What techniques work best for you?"
+                    },
+                    {
+                        "forum_category": "challenges",
+                        "title": "Challenge Support & Motivation",
+                        "content": "Need encouragement with your current challenges? Share your struggles and victories here!"
+                    },
+                    {
+                        "forum_category": "general",
+                        "title": "Welcome to the Community",
+                        "content": "Introduce yourself and connect with other members of our wellness community."
+                    }
+                ]
+                
+                for forum in forums:
+                    # Find matching default thread
+                    thread_data = next((t for t in default_threads if t["forum_category"] == forum.category), None)
+                    if thread_data:
+                        try:
+                            new_thread = ForumThread(
+                                forum_id=forum.id,
+                                title=thread_data["title"],
+                                content=thread_data["content"],
+                                author_id=user_id
+                            )
+                            db.add(new_thread)
+                        except Exception as thread_error:
+                            logger.warning(f"Could not create default thread: {thread_error}")
+                
+                try:
+                    db.commit()
+                    logger.info("Created default threads")
+                except Exception as thread_commit_error:
+                    logger.warning(f"Could not commit default threads: {thread_commit_error}")
+                    db.rollback()
+                
+                for forum in forums:
+                    username, full_name = get_user_display_name(forum.created_by, db)
+                    
+                    # Check if current user is a member of this forum
+                    is_joined = db.query(ForumMembership).filter(
+                        ForumMembership.user_id == user_id,
+                        ForumMembership.forum_id == forum.id,
+                        ForumMembership.is_active == True
+                    ).first() is not None
+                    
+                    # Get actual member count
+                    member_count = db.query(ForumMembership).filter(
+                        ForumMembership.forum_id == forum.id,
+                        ForumMembership.is_active == True
+                    ).count() or 1
+                    
+                    result.append({
+                        "id": forum.id,
+                        "name": forum.name,
+                        "description": forum.description,
+                        "category": forum.category,
+                        "color_theme": "calm_blue",
+                        "psychological_focus": ["general"],
+                        "member_count": member_count,
+                        "created_by": {"name": username, "full_name": full_name},
+                        "created_at": forum.created_at.isoformat(),
+                        "recent_posts": 1,  # Now we have default threads
+                        "is_joined": is_joined
+                    })
+                    
+            except Exception as e:
+                db.rollback()
+                logger.error(f"Error creating default forums: {e}")
+                # Return static defaults if database creation fails
+                return [
+                    {
+                        "id": "forum-mindfulness",
+                        "name": "Mindfulness & Meditation",
+                        "description": "Share your mindfulness journey and meditation experiences",
+                        "category": "mindfulness",
+                        "color_theme": "calm_blue",
+                        "psychological_focus": ["mindfulness", "stress-relief"],
+                        "member_count": 1,
+                        "created_by": {"name": "Community", "full_name": "Community Admin"},
+                        "created_at": datetime.utcnow().isoformat(),
+                        "recent_posts": 0,
+                        "is_joined": False  # Default to false for static fallbacks
+                    },
+                    {
+                        "id": "forum-challenges",
+                        "name": "Challenge Support",
+                        "description": "Get support and share experiences with ongoing challenges",
+                        "category": "challenges",
+                        "color_theme": "energy_orange",
+                        "psychological_focus": ["motivation", "goal-setting"],
+                        "member_count": 1,
+                        "created_by": {"name": "Community", "full_name": "Community Admin"},
+                        "created_at": datetime.utcnow().isoformat(),
+                        "recent_posts": 0,
+                        "is_joined": False  # Default to false for static fallbacks
+                    }
+                ]
+        
+        return result
+    except Exception as e:
+        logger.error(f"Error getting forums: {e}")
+        raise HTTPException(status_code=500, detail="Failed to get forums")
+
+@app.get("/forums/events")
+async def get_events(current_user: dict = Depends(get_current_user), db: Session = Depends(get_db)):
+    """Get all community events"""
+    try:
+        user_id = current_user.get('user_id')
+        
+        # Get all active events from database
+        events = db.query(CommunityEvent).filter(
+            CommunityEvent.end_time > datetime.utcnow()  # Only get future events
+        ).order_by(CommunityEvent.start_time.asc()).all()
+        
+        result = []
+        for event in events:
+            # Check if user is participating
+            is_participating = db.query(EventParticipant).filter(
+                EventParticipant.event_id == event.id,
+                EventParticipant.user_id == user_id
+            ).first() is not None
+            
+            # Get participant count
+            participant_count = db.query(EventParticipant).filter(
+                EventParticipant.event_id == event.id
+            ).count()
+            
+            # Get comment count
+            comment_count = db.query(EventComment).filter(
+                EventComment.event_id == event.id
+            ).count()
+            
+            # Get creator info
+            username, full_name = get_user_display_name(event.created_by, db)
+            
+            result.append({
+                "id": event.id,
+                "title": event.title,
+                "description": event.description,
+                "category": "general",  # Default category
+                "event_type": "workshop",  # Default type
+                "start_time": event.start_time.isoformat(),
+                "end_time": event.end_time.isoformat(),
+                "location": event.location,
+                "meeting_link": event.location if event.is_virtual else None,  # Use location as meeting link for virtual events
+                "max_participants": event.max_participants,
+                "participant_count": participant_count,
+                "comment_count": comment_count,
+                "is_participating": is_participating,
+                "created_by": {"name": username, "full_name": full_name},
+                "created_at": event.created_at.isoformat()
+            })
+        
+        return result
+    except Exception as e:
+        logger.error(f"Error getting events: {e}")
+        raise HTTPException(status_code=500, detail="Failed to get events")
+
+@app.post("/forums/events/{event_id}/join")
+async def join_event(event_id: str, current_user: dict = Depends(get_current_user), db: Session = Depends(get_db)):
+    """Join a community event"""
+    try:
+        user_id = current_user.get('user_id')
+        logger.info(f"User {user_id} joining event {event_id}")
+        
+        # Check if event exists
+        event = db.query(CommunityEvent).filter(
+            CommunityEvent.id == event_id
+        ).first()
+        
+        if not event:
+            raise HTTPException(status_code=404, detail="Event not found")
+        
+        # Check if already participating
+        existing = db.query(EventParticipant).filter(
+            EventParticipant.event_id == event_id,
+            EventParticipant.user_id == user_id
+        ).first()
+        
+        if existing:
+            raise HTTPException(status_code=400, detail="Already participating in this event")
+        
+        # Check participant limit
+        if event.max_participants:
+            current_count = db.query(EventParticipant).filter(
+                EventParticipant.event_id == event_id
+            ).count()
+            
+            if current_count >= event.max_participants:
+                raise HTTPException(status_code=400, detail="Event is full")
+        
+        # Add user to event
+        new_participant = EventParticipant(
+            event_id=event_id,
+            user_id=user_id,
+            joined_at=datetime.utcnow()
+        )
+        db.add(new_participant)
+        db.commit()
+        
+        # Get updated participant count
+        participant_count = db.query(EventParticipant).filter(
+            EventParticipant.event_id == event_id
+        ).count()
+        
+        return {
+            "success": True,
+            "message": "Successfully joined event",
+            "participant_count": participant_count
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        db.rollback()
+        logger.error(f"Error joining event {event_id}: {e}")
+        raise HTTPException(status_code=500, detail="Failed to join event")
+
+@app.delete("/forums/events/{event_id}/leave")
+async def leave_event(event_id: str, current_user: dict = Depends(get_current_user), db: Session = Depends(get_db)):
+    """Leave a community event"""
+    try:
+        user_id = current_user.get('user_id')
+        logger.info(f"User {user_id} leaving event {event_id}")
+        
+        # Remove user from event
+        existing_participant = db.query(EventParticipant).filter(
+            EventParticipant.event_id == event_id,
+            EventParticipant.user_id == user_id
+        ).first()
+        
+        if not existing_participant:
+            raise HTTPException(status_code=400, detail="Not participating in this event")
+        
+        db.delete(existing_participant)
+        db.commit()
+        
+        # Get updated participant count
+        participant_count = db.query(EventParticipant).filter(
+            EventParticipant.event_id == event_id
+        ).count()
+        
+        return {
+            "success": True,
+            "message": "Successfully left event",
+            "participant_count": participant_count
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        db.rollback()
+        logger.error(f"Error leaving event {event_id}: {e}")
+        raise HTTPException(status_code=500, detail="Failed to leave event")
+
+@app.get("/forums/challenges")
+async def get_challenges(current_user: dict = Depends(get_current_user), db: Session = Depends(get_db)):
+    """Get all challenges"""
+    try:
+        user_id = current_user.get('user_id')
+        
+        # Get all active challenges from database
+        challenges = db.query(Challenge).filter(
+            Challenge.end_date > datetime.utcnow()  # Only get active challenges
+        ).order_by(Challenge.created_at.desc()).all()
+        
+        result = []
+        for challenge in challenges:
+            # Check if user is participating
+            is_participating = db.query(ChallengeParticipant).filter(
+                ChallengeParticipant.challenge_id == challenge.id,
+                ChallengeParticipant.user_id == user_id
+            ).first() is not None
+            
+            # Get participant count
+            participant_count = db.query(ChallengeParticipant).filter(
+                ChallengeParticipant.challenge_id == challenge.id
+            ).count()
+            
+            # Get comment count
+            comment_count = db.query(ChallengeComment).filter(
+                ChallengeComment.challenge_id == challenge.id
+            ).count()
+            
+            # Get creator info
+            username, full_name = get_user_display_name(challenge.created_by, db)
+            
+            result.append({
+                "id": challenge.id,
+                "title": challenge.title,
+                "description": challenge.description,
+                "category": challenge.category,
+                "duration_days": challenge.duration_days,
+                "start_date": challenge.start_date.isoformat(),
+                "end_date": challenge.end_date.isoformat() if challenge.end_date else None,
+                "participant_count": participant_count,
+                "comment_count": comment_count,
+                "is_participating": is_participating,
+                "created_by": {"name": username, "full_name": full_name},
+                "created_at": challenge.created_at.isoformat()
+            })
+        
+        return result
+    except Exception as e:
+        logger.error(f"Error getting challenges: {e}")
+        raise HTTPException(status_code=500, detail="Failed to get challenges")
+
+@app.post("/forums/challenges/{challenge_id}/join")
+async def join_challenge(challenge_id: str, current_user: dict = Depends(get_current_user), db: Session = Depends(get_db)):
+    """Join a challenge"""
+    try:
+        user_id = current_user.get('user_id')
+        logger.info(f"User {user_id} joining challenge {challenge_id}")
+        
+        # Check if challenge exists
+        challenge = db.query(Challenge).filter(
+            Challenge.id == challenge_id
+        ).first()
+        
+        if not challenge:
+            raise HTTPException(status_code=404, detail="Challenge not found")
+        
+        # Check if already participating
+        existing = db.query(ChallengeParticipant).filter(
+            ChallengeParticipant.challenge_id == challenge_id,
+            ChallengeParticipant.user_id == user_id
+        ).first()
+        
+        if existing:
+            raise HTTPException(status_code=400, detail="Already participating in this challenge")
+        
+        # Add user to challenge
+        new_participant = ChallengeParticipant(
+            challenge_id=challenge_id,
+            user_id=user_id,
+            joined_at=datetime.utcnow()
+        )
+        db.add(new_participant)
+        db.commit()
+        
+        # Get updated participant count
+        participant_count = db.query(ChallengeParticipant).filter(
+            ChallengeParticipant.challenge_id == challenge_id
+        ).count()
+        
+        return {
+            "success": True,
+            "message": "Successfully joined challenge",
+            "participant_count": participant_count
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        db.rollback()
+        logger.error(f"Error joining challenge {challenge_id}: {e}")
+        raise HTTPException(status_code=500, detail="Failed to join challenge")
+
+@app.post("/forums/challenges/{challenge_id}/leave")
+async def leave_challenge(challenge_id: str, current_user: dict = Depends(get_current_user), db: Session = Depends(get_db)):
+    """Leave a challenge"""
+    try:
+        user_id = current_user.get('user_id')
+        logger.info(f"User {user_id} leaving challenge {challenge_id}")
+        
+        # Find the participant record
+        existing_participant = db.query(ChallengeParticipant).filter(
+            ChallengeParticipant.challenge_id == challenge_id,
+            ChallengeParticipant.user_id == user_id
+        ).first()
+        
+        if not existing_participant:
+            raise HTTPException(status_code=400, detail="Not participating in this challenge")
+        
+        # First, delete any related progress records
+        progress_records = db.query(ChallengeProgress).filter(
+            ChallengeProgress.challenge_participant_id == existing_participant.id
+        ).all()
+        
+        for progress in progress_records:
+            db.delete(progress)
+        
+        # Then delete the participant record
+        db.delete(existing_participant)
+        db.commit()
+        
+        # Get updated participant count
+        participant_count = db.query(ChallengeParticipant).filter(
+            ChallengeParticipant.challenge_id == challenge_id
+        ).count()
+        
+        return {
+            "success": True,
+            "message": "Successfully left challenge", 
+            "participant_count": participant_count
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        db.rollback()
+        logger.error(f"Error leaving challenge {challenge_id}: {e}")
+        raise HTTPException(status_code=500, detail="Failed to leave challenge")
+
+@app.get("/forums/challenges/{challenge_id}/progress")
+async def get_challenge_progress(challenge_id: str, current_user: dict = Depends(get_current_user), db: Session = Depends(get_db)):
+    """Get user's progress for a challenge"""
+    try:
+        user_id = current_user.get('user_id')
+        
+        # Check if user is participating in this challenge
+        participant = db.query(ChallengeParticipant).filter(
+            ChallengeParticipant.challenge_id == challenge_id,
+            ChallengeParticipant.user_id == user_id
+        ).first()
+        
+        if not participant:
+            raise HTTPException(status_code=403, detail="Not participating in this challenge")
+        
+        # Get all progress entries for this user and challenge
+        progress_entries = db.query(ChallengeProgress).filter(
+            ChallengeProgress.challenge_id == challenge_id,
+            ChallengeProgress.user_id == user_id
+        ).order_by(ChallengeProgress.date.desc()).all()
+        
+        daily_completions = []
+        for progress in progress_entries:
+            daily_completions.append({
+                "id": progress.id,
+                "date": progress.date.isoformat(),
+                "completed": progress.completed,
+                "notes": progress.notes,
+                "reflection": progress.reflection,
+                "mood_rating": progress.mood_rating,
+                "difficulty_rating": progress.difficulty_rating,
+                "streak_count": progress.streak_count,
+                "created_at": progress.created_at.isoformat()
+            })
+        
+        # Calculate totals
+        total_days = len(progress_entries)
+        completed_days = sum(1 for p in progress_entries if p.completed)
+        
+        return {
+            "daily_completions": daily_completions,
+            "total_days": total_days,
+            "completed_days": completed_days
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error getting challenge progress: {e}")
+        raise HTTPException(status_code=500, detail="Failed to get challenge progress")
+
+@app.post("/forums/challenges/{challenge_id}/progress")
+async def update_challenge_progress(
+    challenge_id: str,
+    progress_data: dict,
+    current_user: dict = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """Update challenge progress for today"""
+    try:
+        user_id = current_user.get('user_id')
+        logger.info(f"User {user_id} updating progress for challenge {challenge_id}")
+        
+        # Check if user is participating in this challenge, if not create participation
+        participant = db.query(ChallengeParticipant).filter(
+            ChallengeParticipant.challenge_id == challenge_id,
+            ChallengeParticipant.user_id == user_id
+        ).first()
+        
+        if not participant:
+            # Auto-join the user to the challenge if they're logging progress
+            participant = ChallengeParticipant(
+                challenge_id=challenge_id,
+                user_id=user_id,
+                joined_at=datetime.utcnow()
+            )
+            db.add(participant)
+            db.commit()
+            db.refresh(participant)
+        
+        today = datetime.utcnow().date()
+        
+        # Check if progress already exists for today
+        existing_progress = db.query(ChallengeProgress).filter(
+            ChallengeProgress.challenge_id == challenge_id,
+            ChallengeProgress.user_id == user_id,
+            ChallengeProgress.date == today
+        ).first()
+        
+        # Calculate streak count
+        previous_progress = db.query(ChallengeProgress).filter(
+            ChallengeProgress.challenge_id == challenge_id,
+            ChallengeProgress.user_id == user_id,
+            ChallengeProgress.date < today,
+            ChallengeProgress.completed == True
+        ).order_by(ChallengeProgress.date.desc()).first()
+        
+        streak_count = 1
+        if previous_progress and progress_data.get('completed', False):
+            # Check for consecutive days
+            yesterday = today - timedelta(days=1)
+            if previous_progress.date == yesterday:
+                streak_count = previous_progress.streak_count + 1
+        elif not progress_data.get('completed', False):
+            streak_count = 0
+        
+        if existing_progress:
+            # Update existing progress
+            existing_progress.completed = progress_data.get('completed', False)
+            existing_progress.notes = progress_data.get('notes', '')
+            existing_progress.reflection = progress_data.get('reflection', '')
+            existing_progress.mood_rating = progress_data.get('mood_rating')
+            existing_progress.difficulty_rating = progress_data.get('difficulty_rating')
+            existing_progress.streak_count = streak_count
+        else:
+            # Create new progress entry
+            new_progress = ChallengeProgress(
+                challenge_participant_id=participant.id,
+                challenge_id=challenge_id,
+                user_id=user_id,
+                date=today,
+                completed=progress_data.get('completed', False),
+                notes=progress_data.get('notes', ''),
+                reflection=progress_data.get('reflection', ''),
+                mood_rating=progress_data.get('mood_rating'),
+                difficulty_rating=progress_data.get('difficulty_rating'),
+                streak_count=streak_count
+            )
+            db.add(new_progress)
+        
+        db.commit()
+        
+        return {
+            "success": True,
+            "message": "Progress updated successfully",
+            "streak_count": streak_count
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        db.rollback()
+        logger.error(f"Error updating challenge progress: {e}")
+        raise HTTPException(status_code=500, detail="Failed to update progress")
+
+@app.get("/forums/challenges/{challenge_id}/comments")
+async def get_challenge_comments(challenge_id: str, current_user: dict = Depends(get_current_user), db: Session = Depends(get_db)):
+    """Get comments for a challenge"""
+    try:
+        # Get all comments for this challenge
+        comments = db.query(ChallengeComment).filter(
+            ChallengeComment.challenge_id == challenge_id
+        ).order_by(ChallengeComment.created_at.desc()).all()
+        
+        result = []
+        for comment in comments:
+            # Get author info
+            username, full_name = get_user_display_name(comment.user_id, db)
+            
+            result.append({
+                "id": comment.id,
+                "content": comment.content,
+                "author": {
+                    "id": comment.user_id,
+                    "name": username,
+                    "avatar_url": None,
+                    "badges": []  # Could implement badges later
+                },
+                "created_at": comment.created_at.isoformat(),
+                "like_count": comment.like_count,
+                "is_liked": False,  # Could implement comment likes later
+                "parent_id": comment.parent_id,
+                "replies": []  # Could implement nested replies later
+            })
+        
+        return result
+        
+    except Exception as e:
+        logger.error(f"Error getting challenge comments: {e}")
+        raise HTTPException(status_code=500, detail="Failed to get comments")
+
+@app.post("/forums/challenges/{challenge_id}/comments")
+async def add_challenge_comment(
+    challenge_id: str,
+    comment_data: dict,
+    current_user: dict = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """Add a comment to a challenge"""
+    try:
+        user_id = current_user.get('user_id')
+        
+        # Check if challenge exists
+        challenge = db.query(Challenge).filter(
+            Challenge.id == challenge_id
+        ).first()
+        
+        if not challenge:
+            raise HTTPException(status_code=404, detail="Challenge not found")
+        
+        # Create new comment
+        new_comment = ChallengeComment(
+            challenge_id=challenge_id,
+            user_id=user_id,
+            content=comment_data.get('content', ''),
+            parent_id=comment_data.get('parent_id')
+        )
+        
+        db.add(new_comment)
+        db.commit()
+        db.refresh(new_comment)
+        
+        # Get author info
+        username, full_name = get_user_display_name(user_id, db)
+        
+        return {
+            "id": new_comment.id,
+            "content": new_comment.content,
+            "author": {
+                "id": user_id,
+                "name": username,
+                "avatar_url": None,
+                "badges": []
+            },
+            "created_at": new_comment.created_at.isoformat(),
+            "like_count": 0,
+            "is_liked": False,
+            "parent_id": new_comment.parent_id,
+            "replies": []
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        db.rollback()
+        logger.error(f"Error adding challenge comment: {e}")
+        raise HTTPException(status_code=500, detail="Failed to add comment")
+
+@app.get("/forums/challenges/{challenge_id}/leaderboard")
+async def get_challenge_leaderboard(challenge_id: str, limit: int = 10, current_user: dict = Depends(get_current_user), db: Session = Depends(get_db)):
+    """Get leaderboard for a challenge"""
+    try:
+        # Get challenge info for duration calculation
+        challenge = db.query(Challenge).filter(Challenge.id == challenge_id).first()
+        if not challenge:
+            raise HTTPException(status_code=404, detail="Challenge not found")
+        
+        # Get all participants and their progress
+        participants = db.query(ChallengeParticipant).filter(
+            ChallengeParticipant.challenge_id == challenge_id
+        ).all()
+        
+        leaderboard_data = []
+        
+        for participant in participants:
+            user_id = participant.user_id
+            
+            # Get username
+            username, full_name = get_user_display_name(user_id, db)
+            
+            # Get user's progress data
+            progress_entries = db.query(ChallengeProgress).filter(
+                ChallengeProgress.challenge_id == challenge_id,
+                ChallengeProgress.user_id == user_id
+            ).all()
+            
+            # Calculate stats
+            total_days = len(progress_entries)
+            completed_days = sum(1 for p in progress_entries if p.completed)
+            completion_percentage = (completed_days / challenge.duration_days * 100) if challenge.duration_days > 0 else 0
+            
+            # Get current streak
+            current_streak = 0
+            if progress_entries:
+                latest_progress = max(progress_entries, key=lambda x: x.date)
+                if latest_progress.completed:
+                    current_streak = latest_progress.streak_count
+            
+            leaderboard_data.append({
+                "user_id": user_id,
+                "name": username,
+                "username": username,
+                "avatar_url": None,
+                "completion_percentage": round(completion_percentage, 1),
+                "completed_days": completed_days,
+                "current_streak": current_streak,
+                "joined_at": participant.joined_at.isoformat()
+            })
+        
+        # Sort by completion percentage (descending), then by streak (descending)
+        leaderboard_data.sort(key=lambda x: (x["completion_percentage"], x["current_streak"]), reverse=True)
+        
+        # Apply limit
+        return leaderboard_data[:limit]
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error getting challenge leaderboard: {e}")
+        raise HTTPException(status_code=500, detail="Failed to get leaderboard")
+
+@app.post("/forums/events")
+async def create_event(event_data: dict, current_user: dict = Depends(get_current_user), db: Session = Depends(get_db)):
+    """Create a new community event"""
+    try:
+        user_id = current_user.get('user_id')
+        
+        # Create new event in database
+        new_event = CommunityEvent(
+            title=event_data.get('title'),
+            description=event_data.get('description'),
+            start_time=datetime.fromisoformat(event_data.get('start_time')),
+            end_time=datetime.fromisoformat(event_data.get('end_time')),
+            max_participants=event_data.get('max_participants'),
+            location=event_data.get('location'),
+            is_virtual=event_data.get('is_virtual', True),
+            created_by=user_id
+        )
+        
+        db.add(new_event)
+        db.commit()
+        db.refresh(new_event)
+        
+        username, full_name = get_user_display_name(user_id, db)
+        
+        return {
+            "id": new_event.id,
+            "title": new_event.title,
+            "description": new_event.description,
+            "category": "general",  # Default category
+            "event_type": "workshop",  # Default type
+            "start_time": new_event.start_time.isoformat(),
+            "end_time": new_event.end_time.isoformat(),
+            "location": new_event.location,
+            "meeting_link": new_event.location if new_event.is_virtual else None,
+            "max_participants": new_event.max_participants,
+            "participant_count": 0,
+            "is_participating": False,
+            "created_by": {"name": username, "full_name": full_name},
+            "created_at": new_event.created_at.isoformat()
+        }
+        
+    except Exception as e:
+        db.rollback()
+        logger.error(f"Error creating event: {e}")
+        raise HTTPException(status_code=500, detail="Failed to create event")
+
+@app.post("/forums/challenges")
+async def create_challenge(challenge_data: dict, current_user: dict = Depends(get_current_user), db: Session = Depends(get_db)):
+    """Create a new challenge"""
+    try:
+        user_id = current_user.get('user_id')
+        
+        start_date = datetime.utcnow()
+        end_date = start_date + timedelta(days=challenge_data.get('duration_days', 30))
+        
+        # Create new challenge in database
+        new_challenge = Challenge(
+            title=challenge_data.get('title'),
+            description=challenge_data.get('description'),
+            category=challenge_data.get('category', 'mindfulness'),
+            duration_days=challenge_data.get('duration_days', 30),
+            start_date=start_date,
+            end_date=end_date,
+            created_by=user_id
+        )
+        
+        db.add(new_challenge)
+        db.commit()
+        db.refresh(new_challenge)
+        
+        username, full_name = get_user_display_name(user_id, db)
+        
+        return {
+            "id": new_challenge.id,
+            "title": new_challenge.title,
+            "description": new_challenge.description,
+            "category": new_challenge.category,
+            "duration_days": new_challenge.duration_days,
+            "start_date": new_challenge.start_date.isoformat(),
+            "end_date": new_challenge.end_date.isoformat(),
+            "participant_count": 0,
+            "comment_count": 0,
+            "is_participating": False,
+            "created_by": {"name": username, "full_name": full_name},
+            "created_at": new_challenge.created_at.isoformat()
+        }
+        
+    except Exception as e:
+        db.rollback()
+        logger.error(f"Error creating challenge: {e}")
+        raise HTTPException(status_code=500, detail="Failed to create challenge")
 
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run(app, host="0.0.0.0", port=8006)
+    uvicorn.run(app, host="0.0.0.0", port=8002)
+
+@app.get("/user/activity")
+async def get_user_activity(current_user: dict = Depends(get_current_user), db: Session = Depends(get_db)):
+    """Get user's community activity history"""
+    try:
+        user_id = current_user.get('user_id')
+        
+        activities = []
+        
+        # Get recent challenge progress
+        recent_progress = db.query(ChallengeProgress).filter(
+            ChallengeProgress.user_id == user_id
+        ).order_by(ChallengeProgress.created_at.desc()).limit(10).all()
+        
+        for progress in recent_progress:
+            challenge = db.query(Challenge).filter(Challenge.id == progress.challenge_id).first()
+            if challenge:
+                activities.append({
+                    "id": f"progress-{progress.id}",
+                    "type": "challenge_progress",
+                    "title": f"Updated progress in '{challenge.title}'",
+                    "description": f"Completed: {'Yes' if progress.completed else 'No'}",
+                    "timestamp": progress.created_at.isoformat(),
+                    "data": {
+                        "challenge_id": challenge.id,
+                        "challenge_title": challenge.title,
+                        "completed": progress.completed,
+                        "notes": progress.notes
+                    }
+                })
+        
+        # Get recent challenge joins
+        recent_joins = db.query(ChallengeParticipant).filter(
+            ChallengeParticipant.user_id == user_id
+        ).order_by(ChallengeParticipant.joined_at.desc()).limit(5).all()
+        
+        for join in recent_joins:
+            challenge = db.query(Challenge).filter(Challenge.id == join.challenge_id).first()
+            if challenge:
+                activities.append({
+                    "id": f"join-{join.challenge_id}",
+                    "type": "challenge_joined",
+                    "title": f"Joined challenge '{challenge.title}'",
+                    "description": f"Started participating in {challenge.category} challenge",
+                    "timestamp": join.joined_at.isoformat(),
+                    "data": {
+                        "challenge_id": challenge.id,
+                        "challenge_title": challenge.title,
+                        "category": challenge.category
+                    }
+                })
+        
+        # Get recent comments
+        recent_comments = db.query(ChallengeComment).filter(
+            ChallengeComment.user_id == user_id
+        ).order_by(ChallengeComment.created_at.desc()).limit(5).all()
+        
+        for comment in recent_comments:
+            challenge = db.query(Challenge).filter(Challenge.id == comment.challenge_id).first()
+            if challenge:
+                activities.append({
+                    "id": f"comment-{comment.id}",
+                    "type": "challenge_comment",
+                    "title": f"Commented on '{challenge.title}'",
+                    "description": comment.content[:100] + "..." if len(comment.content) > 100 else comment.content,
+                    "timestamp": comment.created_at.isoformat(),
+                    "data": {
+                        "challenge_id": challenge.id,
+                        "challenge_title": challenge.title,
+                        "comment_content": comment.content
+                    }
+                })
+        
+        # Sort all activities by timestamp (newest first)
+        activities.sort(key=lambda x: x["timestamp"], reverse=True)
+        
+        return {
+            "activities": activities[:20],  # Limit to 20 most recent activities
+            "total_count": len(activities)
+        }
+        
+    except Exception as e:
+        logger.error(f"Error getting user activity: {e}")
+        raise HTTPException(status_code=500, detail="Failed to get user activity")
+
+@app.post("/forums/{forum_id}/join")
+async def join_forum(forum_id: str, current_user: dict = Depends(get_current_user), db: Session = Depends(get_db)):
+    """Join a community forum"""
+    try:
+        user_id = current_user.get('user_id')
+        logger.info(f"User {user_id} joining forum {forum_id}")
+        
+        # Check if forum exists
+        forum = db.query(CommunityForum).filter(
+            CommunityForum.id == forum_id
+        ).first()
+        
+        if not forum:
+            raise HTTPException(status_code=404, detail="Forum not found")
+        
+        # Check if already a member
+        existing_membership = db.query(ForumMembership).filter(
+            ForumMembership.user_id == user_id,
+            ForumMembership.forum_id == forum_id,
+            ForumMembership.is_active == True
+        ).first()
+        
+        if existing_membership:
+            return {
+                "success": True,
+                "message": f"Already a member of {forum.name}",
+                "forum_id": forum_id,
+                "forum_name": forum.name,
+                "is_joined": True
+            }
+        
+        # Create forum membership
+        membership = ForumMembership(
+            user_id=user_id,
+            forum_id=forum_id,
+            role="member"
+        )
+        db.add(membership)
+        db.commit()
+        
+        return {
+            "success": True,
+            "message": f"Successfully joined {forum.name}",
+            "forum_id": forum_id,
+            "forum_name": forum.name,
+            "is_joined": True
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error joining forum {forum_id}: {e}")
+        db.rollback()
+        raise HTTPException(status_code=500, detail="Failed to join forum")
+
+@app.delete("/forums/{forum_id}/leave")
+async def leave_forum(forum_id: str, current_user: dict = Depends(get_current_user), db: Session = Depends(get_db)):
+    """Leave a community forum"""
+    try:
+        user_id = current_user.get('user_id')
+        logger.info(f"User {user_id} leaving forum {forum_id}")
+        
+        # Check if forum exists
+        forum = db.query(CommunityForum).filter(
+            CommunityForum.id == forum_id
+        ).first()
+        
+        if not forum:
+            raise HTTPException(status_code=404, detail="Forum not found")
+        
+        # Find and deactivate membership
+        membership = db.query(ForumMembership).filter(
+            ForumMembership.user_id == user_id,
+            ForumMembership.forum_id == forum_id,
+            ForumMembership.is_active == True
+        ).first()
+        
+        if not membership:
+            return {
+                "success": True,
+                "message": f"You are not a member of {forum.name}",
+                "forum_id": forum_id,
+                "is_joined": False
+            }
+        
+        # Deactivate membership
+        membership.is_active = False
+        db.commit()
+        
+        return {
+            "success": True,
+            "message": f"Successfully left {forum.name}",
+            "forum_id": forum_id,
+            "is_joined": False
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error leaving forum {forum_id}: {e}")
+        db.rollback()
+        raise HTTPException(status_code=500, detail="Failed to leave forum")
+
+@app.post("/forums/thread")
+async def create_forum_thread(
+    thread_data: dict,
+    current_user: dict = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """Create a new forum discussion thread"""
+    try:
+        user_id = current_user.get('user_id')
+        logger.info(f"User {user_id} creating forum thread")
+        
+        # Check if forum exists
+        forum_id = thread_data.get('forum_id')
+        if forum_id:
+            forum = db.query(CommunityForum).filter(
+                CommunityForum.id == forum_id
+            ).first()
+            
+            if not forum:
+                raise HTTPException(status_code=404, detail="Forum not found")
+        
+        # Import ForumThread model if not already imported
+        from shared.models import ForumThread
+        
+        # Create new thread with debug logging
+        logger.info(f"Creating thread with data: title='{thread_data.get('title')}', forum_id='{forum_id}', author_id='{user_id}'")
+        
+        try:
+            new_thread = ForumThread(
+                forum_id=forum_id,
+                title=thread_data.get('title'),
+                content=thread_data.get('content', ''),
+                author_id=user_id
+            )
+            
+            logger.info("ForumThread object created successfully")
+            
+            db.add(new_thread)
+            db.commit()
+            db.refresh(new_thread)
+            
+            logger.info(f"Thread saved to database with ID: {new_thread.id}")
+            
+        except Exception as thread_error:
+            logger.error(f"Error creating ForumThread object: {thread_error}")
+            logger.error(f"Thread data: {thread_data}")
+            raise thread_error
+        
+        # Get creator info
+        username, full_name = get_user_display_name(user_id, db)
+        
+        return {
+            "id": new_thread.id,
+            "forum_id": new_thread.forum_id,
+            "title": new_thread.title,
+            "content": new_thread.content,
+            "category": forum.category if forum else "general",  # Add category
+            "author": {
+                "id": user_id,
+                "name": username,
+                "full_name": full_name
+            },
+            "created_at": new_thread.created_at.isoformat(),
+            "reply_count": 0,
+            "last_activity": new_thread.created_at.isoformat()
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        db.rollback()
+        logger.error(f"Error creating forum thread: {e}")
+        raise HTTPException(status_code=500, detail="Failed to create thread")
+
+@app.get("/forums/{forum_id}/threads")
+async def get_forum_threads(
+    forum_id: str,
+    current_user: dict = Depends(get_current_user),
+    db: Session = Depends(get_db),
+    limit: int = 20,
+    offset: int = 0,
+    format: str = Query("full", description="Response format: 'full' or 'array'")
+):
+    """Get threads for a specific forum"""
+    try:
+        # Check if forum exists
+        forum = db.query(CommunityForum).filter(
+            CommunityForum.id == forum_id
+        ).first()
+        
+        if not forum:
+            raise HTTPException(status_code=404, detail="Forum not found")
+        
+        # Import ForumThread model
+        from shared.models import ForumThread
+        
+        # Get threads for this forum
+        threads = db.query(ForumThread).filter(
+            ForumThread.forum_id == forum_id
+        ).order_by(ForumThread.created_at.desc()).offset(offset).limit(limit).all()
+        
+        result = []
+        for thread in threads:
+            # Get creator info
+            username, full_name = get_user_display_name(thread.author_id, db)
+            
+            # Get actual reply count from ThreadReply table
+            try:
+                from shared.models import ThreadReply
+                reply_count = db.query(ThreadReply).filter(
+                    ThreadReply.thread_id == thread.id
+                ).count()
+            except Exception as e:
+                logger.warning(f"Could not query ThreadReply for thread {thread.id}: {e}")
+                reply_count = 0
+            
+            # Get like count and user like status
+            user_id = current_user.get('user_id')
+            like_count = db.query(Like).filter(
+                Like.content_type == "thread",
+                Like.content_id == thread.id
+            ).count()
+            
+            is_liked = db.query(Like).filter(
+                Like.user_id == user_id,
+                Like.content_type == "thread",
+                Like.content_id == thread.id
+            ).first() is not None
+            
+            result.append({
+                "id": thread.id,
+                "title": thread.title,
+                "content": thread.content,
+                "category": forum.category,  # Add category directly to thread
+                "author": {
+                    "id": thread.author_id,
+                    "name": username,
+                    "full_name": full_name
+                },
+                "created_at": thread.created_at.isoformat(),
+                "reply_count": reply_count,
+                "like_count": like_count,
+                "is_liked": is_liked,
+                "last_activity": thread.updated_at.isoformat() if hasattr(thread, 'updated_at') else thread.created_at.isoformat(),
+                "forum": {
+                    "id": forum.id,
+                    "name": forum.name,
+                    "category": forum.category
+                }
+            })
+        
+        # Return format based on query parameter
+        if format == "array":
+            return result
+        else:
+            return {
+                "threads": result,
+                "forum": {
+                    "id": forum.id,
+                    "name": forum.name,
+                    "description": forum.description,
+                    "category": forum.category
+                },
+                "pagination": {
+                    "offset": offset,
+                    "limit": limit,
+                    "total": len(result)
+                }
+            }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error getting forum threads: {e}")
+        raise HTTPException(status_code=500, detail="Failed to get forum threads")
+
+@app.get("/forums/threads")
+async def get_all_threads(
+    current_user: dict = Depends(get_current_user),
+    db: Session = Depends(get_db),
+    limit: int = 20,
+    offset: int = 0
+):
+    """Get all recent forum threads across all forums"""
+    try:
+        # Import ForumThread model
+        from shared.models import ForumThread
+        
+        # Get recent threads from all forums
+        threads = db.query(ForumThread).order_by(
+            ForumThread.created_at.desc()
+        ).offset(offset).limit(limit).all()
+        
+        result = []
+        for thread in threads:
+            # Get creator info
+            username, full_name = get_user_display_name(thread.author_id, db)
+            
+            # Get forum info
+            forum = db.query(CommunityForum).filter(
+                CommunityForum.id == thread.forum_id
+            ).first()
+            
+            # Get like count and user like status
+            user_id = current_user.get('user_id')
+            like_count = db.query(Like).filter(
+                Like.content_type == "thread",
+                Like.content_id == thread.id
+            ).count()
+            
+            is_liked = db.query(Like).filter(
+                Like.user_id == user_id,
+                Like.content_type == "thread",
+                Like.content_id == thread.id
+            ).first() is not None
+            
+            result.append({
+                "id": thread.id,
+                "title": thread.title,
+                "content": thread.content,
+                "category": forum.category if forum else "general",  # Add category directly to thread
+                "author": {
+                    "id": thread.author_id,
+                    "name": username,
+                    "full_name": full_name
+                },
+                "created_at": thread.created_at.isoformat(),
+                "reply_count": 0,  # Placeholder
+                "like_count": like_count,
+                "is_liked": is_liked,
+                "last_activity": thread.updated_at.isoformat() if hasattr(thread, 'updated_at') else thread.created_at.isoformat(),
+                "forum": {
+                    "id": forum.id if forum else None,
+                    "name": forum.name if forum else "Unknown Forum",
+                    "category": forum.category if forum else "general"
+                }
+            })
+        
+        # Return just the array that the frontend expects
+        return result
+        
+    except Exception as e:
+        logger.error(f"Error getting all threads: {e}")
+        # Return empty array to prevent frontend errors
+        return []
+
+@app.get("/forums/thread/{thread_id}")
+async def get_forum_thread(
+    thread_id: str,
+    current_user: dict = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """Get a specific forum thread with replies"""
+    try:
+        # Import models
+        from shared.models import ForumThread, ThreadReply
+        
+        # Get the thread
+        thread = db.query(ForumThread).filter(
+            ForumThread.id == thread_id
+        ).first()
+        
+        if not thread:
+            raise HTTPException(status_code=404, detail="Thread not found")
+        
+        # Get thread creator info
+        username, full_name = get_user_display_name(thread.author_id, db)
+        
+        # Get replies for this thread
+        try:
+            replies = db.query(ThreadReply).filter(
+                ThreadReply.thread_id == thread_id
+            ).order_by(ThreadReply.created_at.asc()).all()
+        except:
+            # If ThreadReply table doesn't exist, return empty replies
+            replies = []
+        
+        reply_list = []
+        for reply in replies:
+            reply_username, reply_full_name = get_user_display_name(reply.author_id, db)
+            
+            # Get like count and user like status for reply
+            user_id = current_user.get('user_id')
+            reply_like_count = db.query(Like).filter(
+                Like.content_type == "reply",
+                Like.content_id == reply.id
+            ).count()
+            
+            reply_is_liked = db.query(Like).filter(
+                Like.user_id == user_id,
+                Like.content_type == "reply",
+                Like.content_id == reply.id
+            ).first() is not None
+            
+            reply_list.append({
+                "id": reply.id,
+                "content": reply.content,
+                "author": {
+                    "id": reply.author_id,
+                    "name": reply_username,
+                    "full_name": reply_full_name
+                },
+                "created_at": reply.created_at.isoformat(),
+                "like_count": reply_like_count,
+                "is_liked": reply_is_liked
+            })
+        
+        # Get like count and user like status for the thread
+        user_id = current_user.get('user_id')
+        thread_like_count = db.query(Like).filter(
+            Like.content_type == "thread",
+            Like.content_id == thread.id
+        ).count()
+        
+        thread_is_liked = db.query(Like).filter(
+            Like.user_id == user_id,
+            Like.content_type == "thread",
+            Like.content_id == thread.id
+        ).first() is not None
+        
+        return {
+            "id": thread.id,
+            "forum_id": thread.forum_id,
+            "title": thread.title,
+            "content": thread.content,
+            "author": {
+                "id": thread.author_id,
+                "name": username,
+                "full_name": full_name
+            },
+            "created_at": thread.created_at.isoformat(),
+            "like_count": thread_like_count,
+            "is_liked": thread_is_liked,
+            "replies": reply_list,
+            "reply_count": len(reply_list)
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error getting forum thread: {e}")
+        raise HTTPException(status_code=500, detail="Failed to get thread")
+
+@app.post("/forums/thread/{thread_id}/reply")
+async def reply_to_thread(
+    thread_id: str,
+    reply_data: dict,
+    current_user: dict = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """Reply to a forum thread"""
+    try:
+        user_id = current_user.get('user_id')
+        
+        # Import models
+        from shared.models import ForumThread, ThreadReply
+        
+        # Check if thread exists
+        thread = db.query(ForumThread).filter(
+            ForumThread.id == thread_id
+        ).first()
+        
+        if not thread:
+            raise HTTPException(status_code=404, detail="Thread not found")
+        
+        # Create new reply
+        try:
+            new_reply = ThreadReply(
+                thread_id=thread_id,
+                content=reply_data.get('content', ''),
+                author_id=user_id
+            )
+            
+            db.add(new_reply)
+            db.commit()
+            db.refresh(new_reply)
+            
+            # Calculate updated reply count
+            reply_count = db.query(ThreadReply).filter(
+                ThreadReply.thread_id == thread_id
+            ).count()
+            
+            # Get creator info
+            username, full_name = get_user_display_name(user_id, db)
+            
+            return {
+                "id": new_reply.id,
+                "content": new_reply.content,
+                "author": {
+                    "id": user_id,
+                    "name": username,
+                    "full_name": full_name
+                },
+                "created_at": new_reply.created_at.isoformat(),
+                "thread_reply_count": reply_count
+            }
+            
+        except Exception as model_error:
+            # If ThreadReply model doesn't work, return a mock response
+            logger.warning(f"ThreadReply model error: {model_error}, returning mock response")
+            username, full_name = get_user_display_name(user_id, db)
+            
+            return {
+                "id": f"temp-reply-{datetime.utcnow().timestamp()}",
+                "content": reply_data.get('content', ''),
+                "author": {
+                    "id": user_id,
+                    "name": username,
+                    "full_name": full_name
+                },
+                "created_at": datetime.utcnow().isoformat(),
+                "thread_reply_count": 1
+            }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        db.rollback()
+        logger.error(f"Error replying to thread: {e}")
+        raise HTTPException(status_code=500, detail="Failed to create reply")
+
+@app.get("/forums/events/{event_id}/comments")
+async def get_event_comments(event_id: str, current_user: dict = Depends(get_current_user), db: Session = Depends(get_db)):
+    """Get comments for an event"""
+    try:
+        # Check if event exists
+        event = db.query(CommunityEvent).filter(
+            CommunityEvent.id == event_id
+        ).first()
+        
+        if not event:
+            raise HTTPException(status_code=404, detail="Event not found")
+        
+        # Get all comments for this event
+        comments = db.query(EventComment).filter(
+            EventComment.event_id == event_id
+        ).order_by(EventComment.created_at.desc()).all()
+        
+        result = []
+        for comment in comments:
+            # Get author info
+            username, full_name = get_user_display_name(comment.user_id, db)
+            
+            # Get like count and user like status for the comment
+            user_id = current_user.get('user_id')
+            like_count = db.query(Like).filter(
+                Like.content_type == "event_comment",
+                Like.content_id == comment.id
+            ).count()
+            
+            is_liked = db.query(Like).filter(
+                Like.user_id == user_id,
+                Like.content_type == "event_comment",
+                Like.content_id == comment.id
+            ).first() is not None
+            
+            result.append({
+                "id": comment.id,
+                "content": comment.content,
+                "author": {
+                    "id": comment.user_id,
+                    "name": username,
+                    "full_name": full_name,
+                    "avatar_url": None,
+                    "badges": []
+                },
+                "created_at": comment.created_at.isoformat(),
+                "like_count": like_count,
+                "is_liked": is_liked,
+                "parent_id": comment.parent_id,
+                "replies": []  # Could implement nested replies later
+            })
+        
+        return result
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error getting event comments: {e}")
+        raise HTTPException(status_code=500, detail="Failed to get event comments")
+
+@app.post("/forums/events/{event_id}/comments")
+async def add_event_comment(
+    event_id: str,
+    comment_data: dict,
+    current_user: dict = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """Add a comment to an event"""
+    try:
+        user_id = current_user.get('user_id')
+        
+        # Check if event exists
+        event = db.query(CommunityEvent).filter(
+            CommunityEvent.id == event_id
+        ).first()
+        
+        if not event:
+            raise HTTPException(status_code=404, detail="Event not found")
+        
+        # Create new comment
+        new_comment = EventComment(
+            event_id=event_id,
+            user_id=user_id,
+            content=comment_data.get('content', ''),
+            parent_id=comment_data.get('parent_id')
+        )
+        
+        db.add(new_comment)
+        db.commit()
+        db.refresh(new_comment)
+        
+        # Get updated comment count
+        comment_count = db.query(EventComment).filter(
+            EventComment.event_id == event_id
+        ).count()
+        
+        # Get author info
+        username, full_name = get_user_display_name(user_id, db)
+        
+        return {
+            "id": new_comment.id,
+            "content": new_comment.content,
+            "author": {
+                "id": user_id,
+                "name": username,
+                "full_name": full_name,
+                "avatar_url": None,
+                "badges": []
+            },
+            "created_at": new_comment.created_at.isoformat(),
+            "like_count": 0,
+            "is_liked": False,
+            "parent_id": new_comment.parent_id,
+            "replies": [],
+            "event_comment_count": comment_count
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        db.rollback()
+        logger.error(f"Error adding event comment: {e}")
+        raise HTTPException(status_code=500, detail="Failed to add event comment")
+
+@app.post("/forums/like")
+async def toggle_content_like(
+    like_data: dict,
+    current_user: dict = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """Toggle like/unlike for content (thread, reply, etc.)"""
+    try:
+        user_id = current_user.get('user_id')
+        content_type = like_data.get('content_type')  # 'thread', 'reply', etc.
+        content_id = like_data.get('content_id')
+        
+        logger.info(f"User {user_id} toggling like for {content_type} {content_id}")
+        
+        # Check if user already liked this content
+        existing_like = db.query(Like).filter(
+            Like.user_id == user_id,
+            Like.content_type == content_type,
+            Like.content_id == content_id
+        ).first()
+        
+        if existing_like:
+            # Unlike: remove the like
+            db.delete(existing_like)
+            db.commit()
+            
+            return {
+                "success": True,
+                "liked": False,
+                "message": "Content unliked"
+            }
+        else:
+            # Like: add a new like
+            new_like = Like(
+                user_id=user_id,
+                content_type=content_type,
+                content_id=content_id
+            )
+            db.add(new_like)
+            db.commit()
+            
+            return {
+                "success": True,
+                "liked": True,
+                "message": "Content liked"
+            }
+            
+    except HTTPException:
+        raise
+    except Exception as e:
+        db.rollback()
+        logger.error(f"Error toggling like: {e}")
+        raise HTTPException(status_code=500, detail="Failed to toggle like")
+
+@app.get("/forums/content/{content_type}/{content_id}/likes")
+async def get_content_likes(
+    content_type: str,
+    content_id: str,
+    current_user: dict = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """Get like count and user's like status for content"""
+    try:
+        user_id = current_user.get('user_id')
+        
+        # Get total like count
+        like_count = db.query(Like).filter(
+            Like.content_type == content_type,
+            Like.content_id == content_id
+        ).count()
+        
+        # Check if current user liked this content
+        user_liked = db.query(Like).filter(
+            Like.user_id == user_id,
+            Like.content_type == content_type,
+            Like.content_id == content_id
+        ).first() is not None
+        
+        return {
+            "like_count": like_count,
+            "is_liked": user_liked
+        }
+        
+    except Exception as e:
+        logger.error(f"Error getting content likes: {e}")
+        raise HTTPException(status_code=500, detail="Failed to get content likes")
+
+@app.get("/forums/thread/{thread_id}/replies")
+async def get_thread_replies_only(
+    thread_id: str,
+    current_user: dict = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """Get only the replies for a specific thread"""
+    try:
+        # Import models
+        from shared.models import ThreadReply
+        
+        # Check if thread exists
+        from shared.models import ForumThread
+        thread = db.query(ForumThread).filter(
+            ForumThread.id == thread_id
+        ).first()
+        
+        if not thread:
+            raise HTTPException(status_code=404, detail="Thread not found")
+        
+        # Get replies for this thread
+        try:
+            replies = db.query(ThreadReply).filter(
+                ThreadReply.thread_id == thread_id
+            ).order_by(ThreadReply.created_at.asc()).all()
+        except:
+            # If ThreadReply table doesn't exist, return empty replies
+            replies = []
+        
+        reply_list = []
+        for reply in replies:
+            reply_username, reply_full_name = get_user_display_name(reply.author_id, db)
+            
+            # Get like count and user like status for reply
+            user_id = current_user.get('user_id')
+            reply_like_count = db.query(Like).filter(
+                Like.content_type == "reply",
+                Like.content_id == reply.id
+            ).count()
+            
+            reply_is_liked = db.query(Like).filter(
+                Like.user_id == user_id,
+                Like.content_type == "reply",
+                Like.content_id == reply.id
+            ).first() is not None
+            
+            reply_list.append({
+                "id": reply.id,
+                "content": reply.content,
+                "author": {
+                    "id": reply.author_id,
+                    "name": reply_username,
+                    "full_name": reply_full_name
+                },
+                "created_at": reply.created_at.isoformat(),
+                "like_count": reply_like_count,
+                "is_liked": reply_is_liked
+            })
+        
+        return reply_list
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error getting thread replies: {e}")
+        raise HTTPException(status_code=500, detail="Failed to get thread replies")

@@ -1,5 +1,7 @@
 import { createContext, useContext, useEffect, useState } from 'react'
 import { apiService } from '@/services/api'
+import { ensureDevAuthentication } from '@/utils/devAuth'
+import { getUserDisplayName, getUserInitials } from '@/utils/userDisplay'
 
 interface User {
   id: string
@@ -11,6 +13,9 @@ interface User {
   is_verified: boolean
   role: string
   created_at?: string
+  // Display utilities
+  displayName?: string
+  initials?: string
 }
 
 interface AuthContextType {
@@ -43,13 +48,43 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       if (token) {
         try {
           const userData = await apiService.getCurrentUser()
-          setUser(userData)
+          // Enhance user data with display utilities
+          const enhancedUser = {
+            ...userData,
+            displayName: getUserDisplayName(userData),
+            initials: getUserInitials(userData)
+          }
+          setUser(enhancedUser)
+          setLoading(false)
+          return
         } catch (error) {
           // Token is invalid, remove it
           localStorage.removeItem('mantrapath_token')
           localStorage.removeItem('mantrapath_refresh_token')
         }
       }
+
+      // If no valid session, try development auto-login
+      if (!import.meta.env.PROD) {
+        console.log('🔧 Development mode: Attempting auto-authentication...')
+        try {
+          const authSuccess = await ensureDevAuthentication()
+          if (authSuccess) {
+            const userData = await apiService.getCurrentUser()
+            // Enhance user data with display utilities
+            const enhancedUser = {
+              ...userData,
+              displayName: getUserDisplayName(userData),
+              initials: getUserInitials(userData)
+            }
+            setUser(enhancedUser)
+            console.log('✅ Development auto-authentication successful')
+          }
+        } catch (error) {
+          console.warn('❌ Development auto-authentication failed:', error)
+        }
+      }
+      
       setLoading(false)
     }
 
@@ -60,7 +95,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     try {
       await apiService.login(emailOrUsername, password)
       const userData = await apiService.getCurrentUser()
-      setUser(userData)
+      // Enhance user data with display utilities
+      const enhancedUser = {
+        ...userData,
+        displayName: getUserDisplayName(userData),
+        initials: getUserInitials(userData)
+      }
+      setUser(enhancedUser)
     } catch (error) {
       throw error
     }

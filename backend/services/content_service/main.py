@@ -181,6 +181,50 @@ async def get_personalized_feed(
     
     return result
 
+@app.get("/content/wellness")
+async def get_wellness_content(
+    skip: int = Query(0, ge=0),
+    limit: int = Query(20, ge=1, le=50),
+    content_type: Optional[str] = Query(None, pattern="^(article|video|audio|exercise)$"),
+    difficulty: Optional[str] = Query(None, pattern="^(beginner|intermediate|advanced)$"),
+    db: Session = Depends(get_db)
+):
+    """Get wellness and mental health related content"""
+    
+    # Define wellness categories
+    wellness_categories = ["wellness", "mental-health", "mindfulness", "meditation", "self-care", "stress-relief"]
+    
+    query = db.query(Content).filter(
+        and_(
+            Content.category.in_(wellness_categories),
+            Content.is_published == True
+        )
+    )
+    
+    if content_type:
+        query = query.filter(Content.content_type == content_type)
+    
+    if difficulty:
+        query = query.filter(Content.difficulty_level == difficulty)
+    
+    content_items = query.order_by(desc(Content.view_count), desc(Content.created_at)).offset(skip).limit(limit).all()
+    
+    return [
+        ContentSummary(
+            id=item.id,
+            title=item.title,
+            content_type=item.content_type,
+            category=item.category,
+            author=item.author,
+            duration_minutes=item.duration_minutes,
+            difficulty_level=item.difficulty_level,
+            view_count=item.view_count,
+            like_count=item.like_count,
+            created_at=item.created_at
+        )
+        for item in content_items
+    ]
+
 @app.get("/content/{content_id}", response_model=ContentResponse)
 async def get_content(
     content_id: UUID4,

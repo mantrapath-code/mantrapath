@@ -1,23 +1,39 @@
-# MantraPath - Holistic Mental Wellness Platform
+# MantraPath - Mental Health & Wellness Platform
 
-A comprehensive mental wellness platform that combines mood tracking, journaling, community features, and AI-powered chatbot support built with modern microservices architecture.
+A comprehensive mental health and wellness platform built with modern microservices architecture using Docker containers.
 
 ## 🚀 Quick Start
 
-### One Command Setup & Launch
-```bash
-# Initial setup (run once)
-./mantrapath setup
+### Prerequisites
+- Docker Desktop (required)
+- Node.js 18+ (for frontend development)
+- Git
 
-# Start the full development environment
-./mantrapath start
+### First Time Setup
+```bash
+# Clone the repository
+git clone <your-repo-url>
+cd mantrapath
+
+# Run first-time setup
+./start.sh
+# Select option 8: "First Time Setup"
 ```
 
-### Available Commands
+### Development
 ```bash
-./mantrapath start      # Start full development environment
-./mantrapath backend    # Start backend services only  
-./mantrapath frontend   # Start frontend only
+# Start full development environment (Backend + Frontend)
+./start.sh
+# Select option 1: "Full Stack"
+
+# Or use command line shortcuts
+./start.sh full         # Start everything
+./start.sh backend      # Backend services only  
+./start.sh frontend     # Frontend only
+./start.sh status       # Check service health
+./start.sh logs         # View service logs
+./start.sh stop         # Stop all services
+```
 ./mantrapath stop       # Stop all services
 ./mantrapath status     # Check service status
 ./mantrapath logs       # View service logs
@@ -47,9 +63,33 @@ mantrapath/
 └── tests/               # 🧪 Test suites
 ```
 
+## 🚀 Latest Enhancement - Unique User Identifier System ✅
+
+**Latest Update**: January 8, 2025
+
+### 🎯 Unique User Display System
+
+✅ **Privacy-First User Identification**
+- All usernames replaced with unique 5-character identifiers
+- Generated from first 5 characters of user ID for consistency
+- No personal names or usernames visible anywhere in the platform
+- Enhanced privacy protection across all UI components
+
+✅ **System-Wide Implementation**
+- Frontend components updated to use unique identifiers
+- Backend services modified to return display-safe user data
+- Community features show only unique IDs (e.g., "ABCD1", "XYZ23")
+- Profile systems use unique identifiers throughout
+
+✅ **Technical Implementation**
+- New utility functions for consistent ID generation
+- Backend user display utilities for API responses
+- Frontend hooks enhanced with display name generation
+- All user-facing components updated for unique display
+
 ## 🚀 Phase 2 Enhancements - Clean Implementation ✅
 
-**Latest Update**: August 2, 2025
+**Previous Update**: August 2, 2025
 
 ### 🎯 Phase 2 Achievements
 

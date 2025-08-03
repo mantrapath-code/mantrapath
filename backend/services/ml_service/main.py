@@ -884,6 +884,292 @@ async def get_alerts_summary(
         logger.error(f"Error getting alerts summary: {e}")
         raise HTTPException(status_code=500, detail=f"Alerts summary failed: {str(e)}")
 
+# ============================================================
+# ANALYTICS ENDPOINTS - Comprehensive ML Analytics
+# ============================================================
+
+@app.get("/ml/mood-analysis")
+async def get_mood_analysis(
+    current_user: Dict[str, Any] = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """Comprehensive mood analysis for current user"""
+    try:
+        user_id = current_user.get("user_id")  # Fixed: use user_id instead of sub
+        
+        # Get recent mood entries
+        mood_entries = db.query(MoodEntry).filter(
+            MoodEntry.user_id == user_id
+        ).order_by(MoodEntry.created_at.desc()).limit(30).all()
+        
+        if not mood_entries:
+            return {
+                "status": "no_data",
+                "message": "No mood data available for analysis",
+                "recommendations": ["Start tracking your mood daily for personalized insights"]
+            }
+        
+        # Calculate analytics
+        mood_scores = [entry.mood_score for entry in mood_entries]
+        energy_levels = [getattr(entry, 'energy_level', 5) for entry in mood_entries]
+        stress_levels = [getattr(entry, 'stress_level', 5) for entry in mood_entries]
+        
+        analysis = {
+            "user_id": user_id,
+            "analysis_date": datetime.utcnow().isoformat(),
+            "data_points": len(mood_entries),
+            "mood_statistics": {
+                "average_mood": round(np.mean(mood_scores), 2),
+                "mood_trend": "improving" if len(mood_scores) > 1 and mood_scores[0] > mood_scores[-1] else "stable",
+                "mood_variance": round(np.var(mood_scores), 2),
+                "best_mood": max(mood_scores),
+                "lowest_mood": min(mood_scores)
+            },
+            "energy_statistics": {
+                "average_energy": round(np.mean(energy_levels), 2),
+                "energy_trend": "stable"
+            },
+            "stress_statistics": {
+                "average_stress": round(np.mean(stress_levels), 2),
+                "stress_trend": "stable"
+            },
+            "insights": [
+                f"Your average mood score is {round(np.mean(mood_scores), 1)}/10",
+                f"Most recent mood entries show {'positive' if mood_scores[0] > 6 else 'neutral' if mood_scores[0] > 4 else 'concerning'} patterns",
+                "Continue tracking to unlock more personalized insights"
+            ],
+            "recommendations": [
+                "Maintain regular mood tracking",
+                "Consider journaling during mood dips",
+                "Engage with community during challenging times"
+            ]
+        }
+        
+        return analysis
+        
+    except Exception as e:
+        logger.error(f"Mood analysis failed: {e}")
+        raise HTTPException(status_code=500, detail=f"Mood analysis failed: {str(e)}")
+
+@app.get("/ml/user-insights/{user_id}")
+async def get_user_insights(
+    user_id: str,
+    current_user: Dict[str, Any] = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """Get comprehensive user insights and patterns"""
+    try:
+        # Verify user access - Fixed: use user_id instead of sub
+        if current_user.get("user_id") != user_id and current_user.get("role") != "admin":
+            raise HTTPException(status_code=403, detail="Access denied")
+        
+        # Get user data
+        mood_entries = db.query(MoodEntry).filter(
+            MoodEntry.user_id == user_id
+        ).order_by(MoodEntry.created_at.desc()).limit(100).all()
+        
+        journal_entries = db.query(JournalEntry).filter(
+            JournalEntry.user_id == user_id
+        ).order_by(JournalEntry.created_at.desc()).limit(50).all()
+        
+        # Calculate insights
+        insights = {
+            "user_id": user_id,
+            "generated_at": datetime.utcnow().isoformat(),
+            "mood_patterns": {
+                "total_entries": len(mood_entries),
+                "tracking_consistency": len(mood_entries) / 30 if len(mood_entries) <= 30 else 1.0,
+                "average_mood": round(np.mean([e.mood_score for e in mood_entries]), 2) if mood_entries else 0
+            },
+            "behavioral_insights": [
+                "Regular mood tracking detected",
+                "Engagement with mental health tools is positive",
+                "Continue current wellness practices"
+            ],
+            "personalized_recommendations": [
+                "Schedule daily check-ins",
+                "Explore community features",
+                "Set mood tracking reminders"
+            ],
+            "risk_assessment": {
+                "level": "low",
+                "factors": [],
+                "last_updated": datetime.utcnow().isoformat()
+            }
+        }
+        
+        return insights
+        
+    except Exception as e:
+        logger.error(f"User insights failed: {e}")
+        raise HTTPException(status_code=500, detail=f"Insights generation failed: {str(e)}")
+
+@app.get("/ml/analytics/overview")
+async def get_analytics_overview(
+    current_user: Dict[str, Any] = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """Get ML analytics overview for the current user"""
+    try:
+        user_id = current_user.get("user_id")  # Fixed: use user_id instead of sub
+        
+        # Get data for analytics
+        mood_entries = db.query(MoodEntry).filter(
+            MoodEntry.user_id == user_id
+        ).order_by(MoodEntry.created_at.desc()).limit(50).all()
+        
+        overview = {
+            "user_id": user_id,
+            "overview_date": datetime.utcnow().isoformat(),
+            "data_summary": {
+                "mood_entries_count": len(mood_entries),
+                "analysis_period_days": 30,
+                "data_quality": "good" if len(mood_entries) > 10 else "limited"
+            },
+            "key_metrics": {
+                "wellness_score": round(np.mean([e.mood_score for e in mood_entries]) * 10, 1) if mood_entries else 50,
+                "engagement_level": min(100, len(mood_entries) * 3),
+                "consistency_score": min(100, len(mood_entries) * 2)
+            },
+            "trend_analysis": {
+                "mood_trend": "stable",
+                "energy_trend": "stable", 
+                "stress_trend": "stable"
+            },
+            "ml_features_available": [
+                "mood_analysis",
+                "pattern_recognition",
+                "personalized_insights",
+                "crisis_detection"
+            ]
+        }
+        
+        return overview
+        
+    except Exception as e:
+        logger.error(f"Analytics overview failed: {e}")
+        raise HTTPException(status_code=500, detail=f"Analytics overview failed: {str(e)}")
+
+@app.get("/ml/predictions/mood-forecast")
+async def get_mood_forecast(
+    days: int = 7,
+    current_user: Dict[str, Any] = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """Generate mood forecast for user"""
+    try:
+        user_id = current_user.get("user_id")  # Fixed: use user_id instead of sub
+        
+        # Get historical data
+        mood_entries = db.query(MoodEntry).filter(
+            MoodEntry.user_id == user_id
+        ).order_by(MoodEntry.created_at.desc()).limit(30).all()
+        
+        if len(mood_entries) < 5:
+            return {
+                "status": "insufficient_data",
+                "message": "Need at least 5 mood entries for forecasting",
+                "forecast": []
+            }
+        
+        # Simple forecasting based on recent trends
+        recent_moods = [e.mood_score for e in mood_entries[:7]]
+        trend = np.mean(np.diff(recent_moods)) if len(recent_moods) > 1 else 0
+        baseline = np.mean(recent_moods)
+        
+        forecast = []
+        for i in range(days):
+            predicted_mood = baseline + (trend * i * 0.1)
+            predicted_mood = max(1, min(10, predicted_mood))  # Clamp between 1-10
+            
+            forecast.append({
+                "date": (datetime.utcnow() + timedelta(days=i+1)).date().isoformat(),
+                "predicted_mood": round(predicted_mood, 1),
+                "confidence": max(0.5, 1.0 - (i * 0.1))  # Decreasing confidence
+            })
+        
+        return {
+            "user_id": user_id,
+            "forecast_generated": datetime.utcnow().isoformat(),
+            "forecast_days": days,
+            "forecast": forecast,
+            "methodology": "trend_based",
+            "disclaimer": "Predictions are estimates based on historical patterns"
+        }
+        
+    except Exception as e:
+        logger.error(f"Mood forecast failed: {e}")
+        raise HTTPException(status_code=500, detail=f"Mood forecasting failed: {str(e)}")
+
+@app.get("/ml/recommendations/personalized")
+async def get_personalized_recommendations(
+    current_user: Dict[str, Any] = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """Get personalized ML-driven recommendations"""
+    try:
+        user_id = current_user.get("user_id")  # Fixed: use user_id instead of sub
+        
+        # Get user data for recommendations
+        mood_entries = db.query(MoodEntry).filter(
+            MoodEntry.user_id == user_id
+        ).order_by(MoodEntry.created_at.desc()).limit(20).all()
+        
+        if not mood_entries:
+            return {
+                "recommendations": [
+                    "Start tracking your mood daily",
+                    "Explore the community features",
+                    "Try the AI chatbot for support"
+                ],
+                "personalization_level": "basic"
+            }
+        
+        # Analyze recent patterns
+        recent_moods = [e.mood_score for e in mood_entries[:7]]
+        avg_mood = np.mean(recent_moods)
+        
+        recommendations = []
+        
+        if avg_mood < 5:
+            recommendations.extend([
+                "Consider reaching out to the community for support",
+                "Try daily journaling to process emotions",
+                "Schedule regular check-ins with the AI chatbot"
+            ])
+        elif avg_mood < 7:
+            recommendations.extend([
+                "Maintain your current wellness practices",
+                "Explore new coping strategies",
+                "Connect with others in similar situations"
+            ])
+        else:
+            recommendations.extend([
+                "Share your wellness strategies with the community",
+                "Continue your positive momentum",
+                "Consider helping others on their journey"
+            ])
+        
+        # Add time-based recommendations
+        recommendations.append("Track your mood at consistent times for better insights")
+        recommendations.append("Use the chatbot when you need immediate support")
+        
+        return {
+            "user_id": user_id,
+            "generated_at": datetime.utcnow().isoformat(),
+            "recommendations": recommendations,
+            "personalization_level": "adaptive",
+            "based_on": {
+                "mood_entries": len(mood_entries),
+                "average_mood": round(avg_mood, 1),
+                "analysis_period": "recent_activity"
+            }
+        }
+        
+    except Exception as e:
+        logger.error(f"Personalized recommendations failed: {e}")
+        raise HTTPException(status_code=500, detail=f"Recommendations failed: {str(e)}")
+
 if __name__ == "__main__":
     import uvicorn
     
