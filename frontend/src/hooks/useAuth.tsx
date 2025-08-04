@@ -116,7 +116,17 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }) => {
     try {
       const result = await apiService.register(userData)
-      // Don't set user after registration since email verification is required
+      
+      // If email verification is not required, automatically log the user in
+      if (!result.verification_required) {
+        try {
+          await login(userData.email, userData.password)
+        } catch (loginError) {
+          console.warn('Auto-login after registration failed:', loginError)
+          // Return the registration result anyway - user can manually log in
+        }
+      }
+      
       return result
     } catch (error) {
       throw error

@@ -35,6 +35,9 @@ from shared.auth import (
 # Create tables
 Base.metadata.create_all(bind=engine)
 
+# Check if email verification should be skipped (for local development)
+SKIP_EMAIL_VERIFICATION = os.getenv("SKIP_EMAIL_VERIFICATION", "false").lower() == "true"
+
 app = FastAPI(
     title="MantraPath Auth Service",
     description="Authentication and user management service",
@@ -253,11 +256,16 @@ async def register(user_data: UserRegister, db: Session = Depends(get_db)):
             detail="Username already taken"
         )
     
-    # Generate verification token
-    verification_token = generate_verification_token()
-    verification_expires = datetime.utcnow() + timedelta(hours=24)
+    # Generate verification token (only if email verification is not skipped)
+    verification_token = None
+    verification_expires = None
+    is_verified = SKIP_EMAIL_VERIFICATION  # Skip verification if flag is set
     
-    # Create user (unverified initially)
+    if not SKIP_EMAIL_VERIFICATION:
+        verification_token = generate_verification_token()
+        verification_expires = datetime.utcnow() + timedelta(hours=24)
+    
+    # Create user
     hashed_password = get_password_hash(user_data.password)
     db_user = User(
         email=user_data.email,
@@ -265,7 +273,7 @@ async def register(user_data: UserRegister, db: Session = Depends(get_db)):
         password_hash=hashed_password,
         first_name=user_data.first_name,
         last_name=user_data.last_name,
-        is_verified=False,
+        is_verified=is_verified,
         verification_token=verification_token,
         verification_token_expires=verification_expires
     )
@@ -301,18 +309,25 @@ async def register(user_data: UserRegister, db: Session = Depends(get_db)):
             detail="Registration failed. Please try again."
         )
     
-    # Send verification email
-    user_display_name = f"{db_user.first_name} {db_user.last_name}".strip() or db_user.username
-    email_sent = send_verification_email(
-        db_user.email, 
-        verification_token, 
-        user_display_name
-    )
+    # Send verification email (only if email verification is not skipped)
+    verification_required = not SKIP_EMAIL_VERIFICATION
+    message = "Registration successful!"
+    
+    if not SKIP_EMAIL_VERIFICATION:
+        user_display_name = f"{db_user.first_name} {db_user.last_name}".strip() or db_user.username
+        email_sent = send_verification_email(
+            db_user.email, 
+            verification_token, 
+            user_display_name
+        )
+        message = "Registration successful! Please check your email to verify your account."
+    else:
+        message = "Registration successful! You can now log in immediately."
     
     return RegistrationResponse(
-        message="Registration successful! Please check your email to verify your account.",
+        message=message,
         user_id=str(db_user.id),
-        verification_required=True
+        verification_required=verification_required
     )
 
 @app.post("/login", response_model=Token)
@@ -337,7 +352,8 @@ async def login(user_data: UserLogin, db: Session = Depends(get_db)):
             detail="Account is deactivated"
         )
     
-    if not user.is_verified:
+    # Only check email verification if not skipped
+    if not SKIP_EMAIL_VERIFICATION and not user.is_verified:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Please verify your email before logging in. Check your email for verification link."
