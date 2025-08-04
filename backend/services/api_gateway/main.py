@@ -74,10 +74,17 @@ def get_service_url(path: str) -> tuple[str, str]:
         return SERVICES["notification"], path
     
     # ML service routes
-    if path.startswith("/api/ml/"):
+    if path.startswith("/api/v1/ml/"):
+        # Strip the /api/v1/ml/ prefix for the ML service
+        ml_path = path[11:]  # Remove "/api/v1/ml/" (11 characters)
+        return SERVICES["ml"], f"/ml/{ml_path}"
+    elif path.startswith("/api/ml/"):
         # Strip the /api/ml/ prefix for the ML service
         ml_path = path[8:]  # Remove "/api/ml/" (8 characters)
-        return SERVICES["ml"], ml_path
+        return SERVICES["ml"], f"/ml/{ml_path}"
+    elif path.startswith("/ml/"):
+        # Direct ML service routes
+        return SERVICES["ml"], path
     
     # Media service routes
     if path.startswith("/api/v1/media/"):

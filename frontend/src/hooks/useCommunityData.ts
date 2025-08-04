@@ -333,22 +333,13 @@ export function useCommunityData() {
       
       // Handle authentication errors gracefully
       if (err.status === 401 || err.status === 403) {
-        console.log('User not authenticated for stats - using fallback')
-        return // Don't set fallback stats if not authenticated
+        console.log('User not authenticated for stats - cannot load')
+        return // Don't set any stats if not authenticated
       }
       
-      // For other errors, use fallback calculation if backend fails
-      if (enhancedStats === null) {
-        setEnhancedStats({
-          reputation: userReputation,
-          forums_joined: joinedForums.length,
-          threads_liked: communityStats.threadsLiked,
-          threads_created: 0,
-          replies_posted: communityStats.repliesPosted,
-          likes_received: 0,
-          help_score: Math.min(10, userReputation / 10)
-        })
-      }
+      // For other errors, show error state instead of fallback
+      setError('Failed to load community statistics')
+      setEnhancedStats(null)
     }
   }, [setUserReputation, setCommunityStats])
 

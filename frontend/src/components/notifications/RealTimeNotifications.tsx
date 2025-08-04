@@ -19,7 +19,7 @@ import { motion, AnimatePresence } from 'framer-motion'
 import { useWebSocket } from '@/hooks/useWebSocket'
 import { notificationApi } from '@/services/api'
 import { SmartNotificationScheduler } from './SmartNotificationScheduler'
-import { formatRelativeTimeDescriptive } from '@/utils/timeFormat'
+import { formatRelativeTime } from '@/utils/timeFormat'
 import { useAuth } from '@/hooks/useAuth'
 
 interface Notification {
@@ -237,7 +237,7 @@ export function RealTimeNotifications({ onMoodPatternNotifications }: RealTimeNo
   }
 
   const formatTimeAgo = (timestamp: string) => {
-    return formatRelativeTimeDescriptive(timestamp)
+    return formatRelativeTime(timestamp)
   }
 
   return (

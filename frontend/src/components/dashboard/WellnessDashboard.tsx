@@ -5,39 +5,34 @@ import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Trophy, Heart, BookOpen, Users, Target, Brain, Palette, ChartLine, Share } from "@phosphor-icons/react"
-import { useMoods } from "@/hooks/useMoods"
-import { useUserStats } from "@/hooks/useWellness"
+import { useUserStats, useWellness } from "@/hooks/useWellness"
 import { useJournal } from "@/hooks/useJournal"
 import { useMoodBasedTheme } from "@/hooks/useMoodTheme"
-import { MoodPatternNotifications } from "../mood/MoodPatternNotifications"
-import { EnhancedMoodChart } from "../mood/EnhancedMoodChart"
-import { EmotionalWeatherWidget } from "../mood/EmotionalWeatherWidget"
-import { QuickMoodEntry } from "../mood/QuickMoodEntry"
-import { WeeklyMoodReport } from "../mood/WeeklyMoodReport"
-import { MoodPatternSharing } from "../mood/MoodPatternSharing"
-import { CelebrationModal } from "../mood/CelebrationModal"
+
 import { motion, AnimatePresence } from "framer-motion"
 import { toast } from "sonner"
 
 export function WellnessDashboard() {
-  const { moods, getMoodTrend } = useMoods()
+  const { moodEntries, analytics } = useWellness()
   const { entries } = useJournal()
   const { stats, loading: statsLoading, error: statsError } = useUserStats()
   const { currentTheme, availableThemes, applyTheme, autoApplyMoodTheme, getCurrentMood, isThemeChanging } = useMoodBasedTheme()
   
-  const [moodTrend, setMoodTrend] = useState<'positive' | 'concerning' | 'stable'>('stable')
+  const [moodTrend, setMoodTrend] = useState<'improving' | 'declining' | 'stable'>('stable')
   
   // Celebration state
   const [celebrations, setCelebrations] = useState<any[]>([])
   const [showCelebrations, setShowCelebrations] = useState(false)
   
-  const recentMoods = moods.slice(0, 7)
+  const recentMoods = moodEntries.slice(0, 7)
   const userCurrentMood = getCurrentMood()
   
-  // Get mood trend on component mount and when moods change
+  // Get mood trend from analytics
   useEffect(() => {
-    getMoodTrend().then(setMoodTrend).catch(() => setMoodTrend('stable'))
-  }, [getMoodTrend, moods])
+    if (analytics?.moodTrend) {
+      setMoodTrend(analytics.moodTrend)
+    }
+  }, [analytics])
   
   // Handle celebration triggering
   const handleCelebrationTriggered = (newCelebrations: any[]) => {
@@ -55,11 +50,6 @@ export function WellnessDashboard() {
     console.log('Celebrations seen:', celebrationIds)
     handleCelebrationClose()
   }
-  
-  // Get mood trend on component mount and when moods change
-  useEffect(() => {
-    getMoodTrend().then(setMoodTrend).catch(() => setMoodTrend('stable'))
-  }, [getMoodTrend, moods])
   
   const handleThemeChange = (themeKey: string) => {
     applyTheme(themeKey)
@@ -99,10 +89,10 @@ export function WellnessDashboard() {
   }
   
   const averageMood = recentMoods.length > 0 
-    ? recentMoods.reduce((sum, mood) => sum + getMoodValue(mood.mood), 0) / recentMoods.length
+    ? recentMoods.reduce((sum, mood) => sum + mood.mood, 0) / recentMoods.length
     : 3
   
-  const wellnessScore = Math.round((averageMood / 5) * 100)
+  const wellnessScore = Math.round((averageMood / 10) * 100)
   
   return (
     <div className="space-y-6">
@@ -156,20 +146,20 @@ export function WellnessDashboard() {
                 </p>
               </div>
               
-              {moodTrend === 'positive' && (
+              {moodTrend === 'improving' && (
                 <div className="text-sm text-green-600 bg-green-50 p-3 rounded-lg">
                   🌟 You're doing great! Your mood has been trending positively.
                 </div>
               )}
               
-              {moodTrend === 'concerning' && (
+              {moodTrend === 'declining' && (
                 <div className="text-sm text-orange-600 bg-orange-50 p-3 rounded-lg">
                   💜 Remember to be gentle with yourself. Consider reaching out for support.
                 </div>
               )}
 
               {/* Current Mood Status */}
-              {moods.length > 0 && (
+              {recentMoods.length > 0 && (
                 <div className="flex items-center justify-between p-3 bg-muted/50 rounded-lg">
                   <span className="text-sm font-medium">Current Mood:</span>
                   <div className="flex items-center gap-2">
@@ -180,7 +170,7 @@ export function WellnessDashboard() {
                       {userCurrentMood}
                     </Badge>
                     <span className="text-xs text-muted-foreground">
-                      {new Date(moods[0].timestamp).toLocaleDateString()}
+                      {new Date(recentMoods[0].timestamp).toLocaleDateString()}
                     </span>
                   </div>
                 </div>
@@ -278,9 +268,11 @@ export function WellnessDashboard() {
               animate={{ opacity: 1, x: 0 }}
               transition={{ delay: 0.5 }}
             >
-              {recentMoods.length > 0 && (
-                <EnhancedMoodChart />
-              )}
+              {/* Mood tracking temporarily disabled - service under maintenance */}
+              <div className="bg-card p-6 rounded-lg border">
+                <h3 className="text-lg font-medium mb-2">Wellness Overview</h3>
+                <p className="text-muted-foreground">Your wellness journey continues. Check back soon for enhanced mood insights.</p>
+              </div>
             </motion.div>
 
             {/* Sidebar Widgets */}
@@ -290,21 +282,18 @@ export function WellnessDashboard() {
               animate={{ opacity: 1, x: 0 }}
               transition={{ delay: 0.6 }}
             >
-              {/* Quick Mood Entry */}
-              <div className="sticky top-32">
-                <QuickMoodEntry 
-                  compact={true}
-                  onEntryComplete={() => {
-                    // Refresh mood data when new entry is added
-                    window.location.reload()
-                  }}
-                  onCelebrationTriggered={handleCelebrationTriggered}
-                />
+              {/* Quick Actions */}
+              <div className="sticky top-32 bg-card p-4 rounded-lg border">
+                <h4 className="font-medium mb-3">Quick Actions</h4>
+                <div className="space-y-2">
+                  <p className="text-sm text-muted-foreground">Wellness tools coming soon</p>
+                </div>
               </div>
               
-              {/* Emotional Weather Widget */}
-              <div className="sticky top-80">
-                <EmotionalWeatherWidget compact={true} />
+              {/* Wellness Insights */}
+              <div className="sticky top-80 bg-card p-4 rounded-lg border">
+                <h4 className="font-medium mb-3">Wellness Insights</h4>
+                <p className="text-sm text-muted-foreground">Personalized insights coming soon</p>
               </div>
             </motion.div>
           </div>
@@ -328,11 +317,25 @@ export function WellnessDashboard() {
         </TabsContent>
         
         <TabsContent value="reports" className="space-y-6">
-          <WeeklyMoodReport />
+          <Card>
+            <CardHeader>
+              <CardTitle>Wellness Reports</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <p className="text-muted-foreground">Detailed wellness reports will be available soon. Continue your mindful journey!</p>
+            </CardContent>
+          </Card>
         </TabsContent>
 
         <TabsContent value="community" className="space-y-6">
-          <MoodPatternSharing />
+          <Card>
+            <CardHeader>
+              <CardTitle>Community Wellness</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <p className="text-muted-foreground">Community wellness features coming soon. Stay connected on your wellness journey!</p>
+            </CardContent>
+          </Card>
         </TabsContent>
 
         <TabsContent value="themes" className="space-y-6">
@@ -424,14 +427,7 @@ export function WellnessDashboard() {
         </TabsContent>
       </Tabs>
 
-      {/* Celebration Modal */}
-      {showCelebrations && celebrations.length > 0 && (
-        <CelebrationModal
-          celebrations={celebrations}
-          onClose={handleCelebrationClose}
-          onCelebrationsSeen={handleCelebrationsSeen}
-        />
-      )}
+      {/* Celebrations temporarily disabled - wellness celebrations coming soon */}
     </div>
   )
 }

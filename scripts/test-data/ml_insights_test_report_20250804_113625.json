@@ -1,0 +1,30 @@
+{
+  "timestamp": "2025-08-04T11:36:25.651900",
+  "user_id": "4bc700b4-94da-44ef-904d-0951691e3902",
+  "tests": {
+    "endpoints": {
+      "Personalized Insights": {
+        "status": "\u274c FAILED (404)",
+        "error": "{\"detail\":\"Not Found\"}"
+      },
+      "Pattern Analysis": {
+        "status": "\u274c FAILED (404)",
+        "error": "{\"detail\":\"Not Found\"}"
+      },
+      "Correlation Analysis": {
+        "status": "\u274c FAILED (404)",
+        "error": "{\"detail\":\"Not Found\"}"
+      },
+      "Health Check": {
+        "status": "\u274c FAILED (404)",
+        "error": "{\"detail\":\"Not Found\"}"
+      }
+    }
+  },
+  "summary": {
+    "total_tests": 4,
+    "successful_tests": 0,
+    "success_rate": "0.0%",
+    "status": "FAIL"
+  }
+}

@@ -56,19 +56,18 @@ class ApiService {
           const healthData = await response.json()
           console.log('Backend health data:', healthData)
         } else {
-          console.warn('⚠️ Backend responded but not healthy:', response.status)
+          console.error('❌ Backend responded but not healthy:', response.status)
+          throw new Error(`Backend health check failed with status: ${response.status}`)
         }
         
         resolve(this.isBackendAvailable)
       } catch (error) {
-        console.warn('🔧 Backend not available at', this.baseUrl)
-        console.warn('To start the backend services:')
-        console.warn('   ./start.sh')
-        console.warn('   # Select option 2: Backend Services Only')
-        console.warn('   # OR')
-        console.warn('   ./start.sh backend')
-        console.warn('')
-        console.warn('Using mock data mode until backend is available...')
+        console.error('❌ Backend not available at', this.baseUrl, error)
+        console.error('To start the backend services:')
+        console.error('   ./start.sh')
+        console.error('   # Select option 2: Backend Services Only')
+        console.error('   # OR')
+        console.error('   ./start.sh backend')
         this.isBackendAvailable = false
         resolve(false)
       }
@@ -328,10 +327,15 @@ class ApiService {
   }
 
   async markCelebrationsAsSeen(celebrationIds: string[]) {
-    return this.request<{message: string}>('/api/v1/mood/celebrations/mark-shown', {
-      method: 'POST',
-      body: JSON.stringify(celebrationIds)
-    })
+    try {
+      return this.request<{message: string}>('/api/v1/mood/celebrations/mark-shown', {
+        method: 'POST',
+        body: JSON.stringify(celebrationIds)
+      })
+    } catch (error) {
+      console.warn('Failed to mark celebrations as seen:', error)
+      throw error // Don't hide API errors with fake success responses
+    }
   }
 
   async getCelebrationStats() {
@@ -565,6 +569,90 @@ class ApiService {
         next_update: string
       }
     }>('/api/v1/analytics/optimal-notification-times')
+  }
+
+  // Additional analytics endpoints for unified insights
+  async getPatternAnalysis() {
+    try {
+      // Use the new current user pattern analysis endpoint
+      return this.request<{
+        patterns: any[]
+        insights: string[]
+        recommendations: string[]
+      }>('/api/v1/ml/analyze-patterns/me', {
+        method: 'POST'
+      })
+    } catch (error) {
+      console.warn('Pattern analysis endpoint error:', error)
+      throw new Error('Pattern analysis endpoint is not available')
+    }
+  }
+
+  async getCorrelationAnalysis() {
+    try {
+      // Use the mood analytics overview which includes correlation data
+      return this.request<{
+        mood_statistics: any
+        energy_statistics: any
+        stress_statistics: any
+        insights: string[]
+        correlations?: any[]
+      }>('/api/v1/ml/mood-analysis')
+    } catch (error) {
+      console.warn('Correlation analysis endpoint error:', error)
+      throw new Error('Correlation analysis endpoint is not available')
+    }
+  }
+
+  async getMLPersonalizedInsights() {
+    try {
+      // Use the new current user personalized insights endpoint
+      return this.request<{
+        user_id: string
+        insights: any[]
+        insight_type: string
+        generated_at: string
+        data_quality: any
+      }>(`/api/v1/ml/personalized-insights/me?insight_type=weekly_summary`)
+    } catch (error) {
+      console.warn('ML personalized insights endpoint error:', error)
+      throw new Error('ML personalized insights endpoint is not available')
+    }
+  }
+
+  private getUserId(): string {
+    // Helper method to get current user ID from auth state
+    // First try to get from localStorage if stored there
+    const storedUser = localStorage.getItem('user')
+    if (storedUser) {
+      try {
+        const user = JSON.parse(storedUser)
+        return user.id || user.user_id || ''
+      } catch (e) {
+        console.warn('Failed to parse stored user data:', e)
+      }
+    }
+    
+    // If no stored user, we need to make sure the user is authenticated
+    // The actual user ID should be extracted from the JWT token on the backend
+    // For now, return empty string and let the backend handle the user identification
+    return ''
+  }
+
+  async getMLAnalyticsOverview() {
+    try {
+      return this.request<{
+        user_id: string
+        overview_date: string
+        data_summary: any
+        key_metrics: any
+        trend_analysis: any
+        ml_features_available: string[]
+      }>('/api/v1/ml/analytics/overview')
+    } catch (error) {
+      console.warn('ML analytics overview endpoint error:', error)
+      throw new Error('ML analytics overview endpoint is not available')
+    }
   }
 
   // Community
@@ -1241,6 +1329,121 @@ export const communityApi = {
   addChallengeComment: apiService.addChallengeComment.bind(apiService),
   getChallengeComments: apiService.getChallengeComments.bind(apiService),
   getPersonalizedFeed: apiService.getPersonalizedFeed.bind(apiService),
+  
+  // Community Feed API
+  getCommunityFeed: async (filters) => {
+    try {
+      // Use forums/challenges and forums/events as community feed sources
+      const [challenges, events] = await Promise.all([
+        apiService.request('/forums/challenges'),
+        apiService.request('/forums/events')
+      ])
+
+      // Transform challenges and events into feed items
+      const feedItems: Array<{
+        id: string
+        type: string
+        title: string
+        content: string
+        author: { id: string; name: string }
+        created_at: string
+        engagement: { likes: number; comments: number; participants: number }
+        category: string
+        is_liked: boolean
+        metadata?: any
+      }> = []
+      
+      // Add challenges as feed items
+      if (challenges && Array.isArray(challenges)) {
+        challenges.forEach((challenge: any) => {
+          feedItems.push({
+            id: challenge.id,
+            type: 'challenge',
+            title: challenge.title,
+            content: challenge.description,
+            author: challenge.created_by || { id: 'system', name: 'System' },
+            created_at: challenge.created_at,
+            engagement: {
+              likes: 0,
+              comments: challenge.comment_count || 0,
+              participants: challenge.participant_count || 0
+            },
+            category: challenge.category || 'general',
+            is_liked: false,
+            metadata: {
+              duration_days: challenge.duration_days,
+              start_date: challenge.start_date,
+              end_date: challenge.end_date
+            }
+          })
+        })
+      }
+
+      // Add events as feed items
+      if (events && Array.isArray(events)) {
+        events.forEach((event: any) => {
+          feedItems.push({
+            id: event.id,
+            type: 'event',
+            title: event.title,
+            content: event.description,
+            author: event.created_by || { id: 'system', name: 'System' },
+            created_at: event.created_at,
+            engagement: {
+              likes: 0,
+              comments: 0,
+              participants: event.participant_count || 0
+            },
+            category: 'events',
+            is_liked: false,
+            metadata: {
+              start_time: event.start_time,
+              end_time: event.end_time,
+              location: event.location,
+              is_virtual: event.is_virtual
+            }
+          })
+        })
+      }
+
+      // Sort by created_at (most recent first)
+      feedItems.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
+
+      // Apply filters
+      let filteredItems = feedItems
+      
+      if (filters.types && filters.types.length > 0) {
+        filteredItems = filteredItems.filter(item => filters.types.includes(item.type))
+      }
+
+      if (filters.timeRange && filters.timeRange !== 'all') {
+        const timeMap: Record<string, number> = {
+          '1d': 1,
+          '7d': 7,
+          '30d': 30
+        }
+        const days = timeMap[filters.timeRange] || 7
+        const cutoffDate = new Date()
+        cutoffDate.setDate(cutoffDate.getDate() - days)
+        
+        filteredItems = filteredItems.filter(item => 
+          new Date(item.created_at) >= cutoffDate
+        )
+      }
+
+      return filteredItems
+    } catch (error) {
+      console.error('Error fetching community feed:', error)
+      // Return empty array on error instead of throwing
+      return []
+    }
+  },
+
+  getUserCommunityScore: async () => {
+    return apiService.request<any>('/community/score', {
+      method: 'GET'
+    })
+  },
 }
 
 export const notificationApi = {

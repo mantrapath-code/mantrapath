@@ -156,6 +156,109 @@ class MonitoringRequest(BaseModel):
     user_data: Dict[str, Any]
     force_check: bool = False
 
+# Helper function to calculate user statistics
+def calculate_user_statistics(mood_entries, journal_entries):
+    """Calculate statistical insights from user data"""
+    try:
+        statistics = {
+            "best_day": "",
+            "energy_peak": "",
+            "mood_streak": 0,
+            "average_mood": 0,
+            "mood_variability": 0,
+            "total_entries": len(mood_entries)
+        }
+        
+        if not mood_entries:
+            return statistics
+            
+        # Calculate average mood
+        total_mood = sum(entry.mood_score for entry in mood_entries)
+        statistics["average_mood"] = round(total_mood / len(mood_entries), 1)
+        
+        # Calculate mood variability (standard deviation)
+        avg = statistics["average_mood"]
+        variance = sum((entry.mood_score - avg) ** 2 for entry in mood_entries) / len(mood_entries)
+        statistics["mood_variability"] = round(variance ** 0.5, 1)
+        
+        # Find best day of week (day with highest average mood)
+        day_moods = {}
+        day_names = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"]
+        
+        for entry in mood_entries:
+            day_of_week = entry.created_at.weekday()
+            if day_of_week not in day_moods:
+                day_moods[day_of_week] = []
+            day_moods[day_of_week].append(entry.mood_score)
+        
+        if day_moods:
+            day_averages = {day: sum(scores)/len(scores) for day, scores in day_moods.items()}
+            best_day_num = max(day_averages, key=day_averages.get)
+            statistics["best_day"] = day_names[best_day_num]
+        
+        # Find energy peak time (hour with highest average energy)
+        if hasattr(mood_entries[0], 'energy_level'):
+            hour_energy = {}
+            for entry in mood_entries:
+                hour = entry.created_at.hour
+                energy = getattr(entry, 'energy_level', 5)
+                if hour not in hour_energy:
+                    hour_energy[hour] = []
+                hour_energy[hour].append(energy)
+            
+            if hour_energy:
+                hour_averages = {hour: sum(levels)/len(levels) for hour, levels in hour_energy.items()}
+                peak_hour = max(hour_averages, key=hour_averages.get)
+                
+                # Convert to readable time
+                if peak_hour < 12:
+                    statistics["energy_peak"] = f"{peak_hour}:00 AM"
+                elif peak_hour == 12:
+                    statistics["energy_peak"] = "12:00 PM"
+                else:
+                    statistics["energy_peak"] = f"{peak_hour-12}:00 PM"
+        
+        # Calculate current mood streak (consecutive days above average)
+        if len(mood_entries) > 1:
+            sorted_entries = sorted(mood_entries, key=lambda x: x.created_at)
+            daily_moods = {}
+            
+            # Group by date
+            for entry in sorted_entries:
+                date_key = entry.created_at.date()
+                if date_key not in daily_moods:
+                    daily_moods[date_key] = []
+                daily_moods[date_key].append(entry.mood_score)
+            
+            # Calculate daily averages
+            daily_averages = {date: sum(scores)/len(scores) for date, scores in daily_moods.items()}
+            overall_avg = statistics["average_mood"]
+            
+            # Count consecutive good days from most recent
+            streak = 0
+            sorted_dates = sorted(daily_averages.keys(), reverse=True)
+            
+            for date in sorted_dates:
+                if daily_averages[date] >= overall_avg:
+                    streak += 1
+                else:
+                    break
+                    
+            statistics["mood_streak"] = streak
+        
+        return statistics
+        
+    except Exception as e:
+        logger.error(f"Error calculating statistics: {e}")
+        return {
+            "best_day": "",
+            "energy_peak": "",
+            "mood_streak": 0,
+            "average_mood": 0,
+            "mood_variability": 0,
+            "total_entries": 0
+        }
+
 # Health check
 @app.get("/health")
 async def health_check():
@@ -175,6 +278,108 @@ async def health_check():
         "phase_2a_active": True,
         "crisis_prediction_available": crisis_predictor.ready
     }
+
+# Additional health check for /ml/health endpoint
+@app.get("/ml/health")
+async def ml_health_check():
+    """ML Service health check (alternative endpoint)"""
+    return await health_check()
+
+# Correlation analysis endpoint
+@app.get("/ml/correlation-analysis/me")
+async def get_correlation_analysis(
+    current_user: dict = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """Get correlation analysis between mood, activities, and external factors"""
+    try:
+        user_id = current_user.get("sub") or current_user.get("id") or current_user.get("user_id")
+        if not user_id:
+            raise HTTPException(status_code=400, detail="Unable to extract user ID from token")
+        
+        # Get user's mood and journal entries
+        mood_entries = db.query(MoodEntry).filter(
+            MoodEntry.user_id == user_id
+        ).order_by(MoodEntry.created_at.desc()).limit(100).all()
+        
+        journal_entries = db.query(JournalEntry).filter(
+            JournalEntry.user_id == user_id
+        ).order_by(JournalEntry.created_at.desc()).limit(50).all()
+        
+        if not mood_entries:
+            return {
+                "user_id": user_id,
+                "correlations": {},
+                "insights": [],
+                "data_points": 0,
+                "message": "Insufficient data for correlation analysis"
+            }
+        
+        # Calculate correlations
+        correlations = {}
+        insights = []
+        
+        # Mood-time correlation
+        mood_by_hour = {}
+        for entry in mood_entries:
+            hour = entry.created_at.hour
+            if hour not in mood_by_hour:
+                mood_by_hour[hour] = []
+            mood_by_hour[hour].append(entry.mood_score)
+        
+        # Find best and worst times
+        avg_by_hour = {hour: sum(scores)/len(scores) for hour, scores in mood_by_hour.items() if scores}
+        if avg_by_hour:
+            best_hour = max(avg_by_hour.keys(), key=lambda h: avg_by_hour[h])
+            worst_hour = min(avg_by_hour.keys(), key=lambda h: avg_by_hour[h])
+            
+            correlations["time_patterns"] = {
+                "best_hour": best_hour,
+                "worst_hour": worst_hour,
+                "hourly_averages": avg_by_hour
+            }
+            
+            insights.append(f"You tend to feel best around {best_hour}:00 and lowest around {worst_hour}:00")
+        
+        # Activity correlations from journal entries
+        if journal_entries:
+            activity_keywords = ["exercise", "meditation", "sleep", "work", "social", "outdoors"]
+            activity_moods = {keyword: [] for keyword in activity_keywords}
+            
+            for journal in journal_entries:
+                content = journal.content.lower()
+                # Find mood entries close to this journal entry
+                nearby_moods = [m for m in mood_entries 
+                              if abs((m.created_at - journal.created_at).total_seconds()) < 3600]
+                
+                if nearby_moods:
+                    avg_mood = sum(m.mood_score for m in nearby_moods) / len(nearby_moods)
+                    for keyword in activity_keywords:
+                        if keyword in content:
+                            activity_moods[keyword].append(avg_mood)
+            
+            # Calculate activity impact
+            activity_impact = {}
+            for activity, moods in activity_moods.items():
+                if moods:
+                    activity_impact[activity] = sum(moods) / len(moods)
+            
+            if activity_impact:
+                correlations["activity_impact"] = activity_impact
+                best_activity = max(activity_impact.keys(), key=lambda a: activity_impact[a])
+                insights.append(f"Your mood tends to be highest when you mention '{best_activity}' in your journal")
+        
+        return {
+            "user_id": user_id,
+            "correlations": correlations,
+            "insights": insights,
+            "data_points": len(mood_entries),
+            "analysis_date": datetime.utcnow().isoformat()
+        }
+        
+    except Exception as e:
+        logger.error(f"Error in correlation analysis: {e}")
+        raise HTTPException(status_code=500, detail=f"Correlation analysis failed: {str(e)}")
 
 @app.post("/ml/analyze-patterns")
 async def analyze_user_patterns(
@@ -219,21 +424,98 @@ async def analyze_user_patterns(
         patterns = pattern_analyzer.analyze_user_patterns({
             "mood_data": mood_data,
             "journal_data": journal_data,
-            "user_id": behavior_data.user_id
+            "interaction_data": behavior_data.interaction_data
         })
         
         return {
             "user_id": behavior_data.user_id,
             "patterns": patterns,
-            "analysis_timestamp": datetime.utcnow(),
-            "data_points_analyzed": {
-                "mood_entries": len(mood_data),
-                "journal_entries": len(journal_data)
-            }
+            "analysis_date": datetime.utcnow(),
+            "insights": [
+                "Pattern analysis completed",
+                f"Analyzed {len(mood_entries)} mood entries",
+                f"Analyzed {len(journal_entries)} journal entries"
+            ],
+            "recommendations": [
+                "Continue regular mood tracking",
+                "Maintain journaling practice"
+            ]
         }
         
     except Exception as e:
         logger.error(f"Error analyzing patterns for user {behavior_data.user_id}: {e}")
+        raise HTTPException(status_code=500, detail=f"Pattern analysis failed: {str(e)}")
+
+@app.post("/ml/analyze-patterns/me")
+async def analyze_my_patterns(
+    current_user: Dict[str, Any] = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """Analyze current user's behavior patterns using ML"""
+    try:
+        user_id = current_user.get("user_id")
+        if not user_id:
+            raise HTTPException(status_code=400, detail="Unable to identify user")
+            
+        # Get user's mood and journal data from database
+        mood_entries = db.query(MoodEntry).filter(
+            MoodEntry.user_id == user_id
+        ).order_by(MoodEntry.created_at.desc()).limit(100).all()
+        
+        journal_entries = db.query(JournalEntry).filter(
+            JournalEntry.user_id == user_id
+        ).order_by(JournalEntry.created_at.desc()).limit(50).all()
+        
+        # Convert to format expected by ML models
+        mood_data = [
+            {
+                "timestamp": entry.created_at,
+                "mood_score": entry.mood_score,
+                "energy_level": getattr(entry, 'energy_level', 5),
+                "context": getattr(entry, 'context', {})
+            }
+            for entry in mood_entries
+        ]
+        
+        journal_data = [
+            {
+                "timestamp": entry.created_at,
+                "content": entry.content,
+                "mood_before": getattr(entry, 'mood_before', None),
+                "mood_after": getattr(entry, 'mood_after', None),
+                "tags": getattr(entry, 'tags', [])
+            }
+            for entry in journal_entries
+        ]
+        
+        # Analyze patterns
+        patterns = pattern_analyzer.analyze_user_patterns({
+            "mood_data": mood_data,
+            "journal_data": journal_data,
+            "interaction_data": []  # No interaction data needed for this endpoint
+        })
+        
+        # Calculate additional statistics for insights
+        statistics = calculate_user_statistics(mood_entries, journal_entries)
+        
+        return {
+            "user_id": user_id,
+            "patterns": patterns,
+            "statistics": statistics,
+            "analysis_date": datetime.utcnow(),
+            "insights": [
+                "Pattern analysis completed",
+                f"Analyzed {len(mood_entries)} mood entries",
+                f"Analyzed {len(journal_entries)} journal entries"
+            ],
+            "recommendations": [
+                "Continue regular mood tracking",
+                "Maintain journaling practice"
+            ]
+        }
+        
+    except Exception as e:
+        logger.error(f"Error analyzing patterns for current user: {e}")
         raise HTTPException(status_code=500, detail=f"Pattern analysis failed: {str(e)}")
 
 @app.get("/ml/optimal-times/{user_id}")
@@ -354,6 +636,67 @@ async def get_personalized_insights(
 ):
     """Generate AI-powered personalized insights"""
     try:
+        # Get user data
+        mood_entries = db.query(MoodEntry).filter(
+            MoodEntry.user_id == user_id,
+            MoodEntry.created_at >= datetime.utcnow() - timedelta(days=7)
+        ).all()
+        
+        journal_entries = db.query(JournalEntry).filter(
+            JournalEntry.user_id == user_id,
+            JournalEntry.created_at >= datetime.utcnow() - timedelta(days=7)
+        ).all()
+        
+        # Prepare data for insight generation
+        user_data = {
+            "mood_entries": [
+                {
+                    "timestamp": entry.created_at,
+                    "mood_score": entry.mood_score,
+                    "energy_level": getattr(entry, 'energy_level', 5)
+                }
+                for entry in mood_entries
+            ],
+            "journal_entries": [
+                {
+                    "timestamp": entry.created_at,
+                    "content": entry.content
+                }
+                for entry in journal_entries
+            ]
+        }
+        
+        # Generate insights using content engine
+        insights = content_engine.generate_personalized_insights(user_data, insight_type)
+        
+        return {
+            "user_id": user_id,
+            "insights": insights,
+            "insight_type": insight_type,
+            "generated_at": datetime.utcnow(),
+            "data_quality": {
+                "mood_entries_count": len(mood_entries),
+                "journal_entries_count": len(journal_entries),
+                "confidence_level": "high" if len(mood_entries) > 5 else "moderate"
+            }
+        }
+
+    except Exception as e:
+        logger.error(f"Personalized insights failed: {e}")
+        raise HTTPException(status_code=500, detail=f"Insights generation failed: {str(e)}")
+
+@app.get("/ml/personalized-insights/me")
+async def get_my_personalized_insights(
+    insight_type: str = "weekly_summary",
+    current_user: Dict[str, Any] = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """Generate AI-powered personalized insights for current user"""
+    try:
+        user_id = current_user.get("user_id")
+        if not user_id:
+            raise HTTPException(status_code=400, detail="Unable to identify user")
+            
         # Get user data
         mood_entries = db.query(MoodEntry).filter(
             MoodEntry.user_id == user_id,

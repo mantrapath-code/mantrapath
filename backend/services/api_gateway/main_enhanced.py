@@ -83,6 +83,12 @@ SERVICE_REGISTRY = {
         "version": "v1",
         "websocket": True
     },
+    "ml": {
+        "url": os.getenv("ML_SERVICE_URL", "http://localhost:8008"),
+        "health_endpoint": "/health",
+        "routes": ["/api/v1/ml/", "/ml/", "/crisis/", "/dashboard/"],
+        "version": "v1"
+    },
     "media": {
         "url": os.getenv("MEDIA_SERVICE_URL", "http://localhost:8009"),
         "health_endpoint": "/health",

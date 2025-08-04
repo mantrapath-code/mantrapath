@@ -95,7 +95,7 @@ export function useChatbot() {
   // Start new chat session
   const startNewSession = useCallback(async () => {
     try {
-      const newSession = await apiService.createChatSession()
+      const newSession = await apiService.createChatSession() as { id: string }
       setCurrentSessionId(newSession.id)
       setMessages([])
       

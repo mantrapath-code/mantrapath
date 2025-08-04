@@ -135,8 +135,15 @@ export function EnhancedChallengeCard({ challenge, onJoin, onLeave, onRefresh }:
   }, [challenge.id, challenge.is_participating, isAuthenticated])
 
   const loadProgressData = async () => {
+    if (!isAuthenticated) {
+      console.log('❌ User not authenticated, skipping progress data load')
+      return
+    }
+
     try {
+      console.log('🔄 Loading progress data for challenge:', challenge.id)
       const data = await communityApi.getChallengeProgress(challenge.id)
+      console.log('✅ Progress data loaded:', data)
       
       // Handle both array response and object with daily_completions
       let progressArray: ChallengeProgressData[] = []
@@ -162,12 +169,20 @@ export function EnhancedChallengeCard({ challenge, onJoin, onLeave, onRefresh }:
       }
       
     } catch (error: any) {
-      console.error('Failed to load progress data:', error)
+      console.error('❌ Failed to load progress data:', error)
+      console.error('Error details:', error?.response || error?.message)
+      
       // Set empty array on error to prevent crashes
       setProgressData([])
       
       // Show user-friendly error message
-      if (error?.status !== 401) { // Don't show error for auth issues
+      if (error?.status === 401) {
+        toast.error('Please log in to view progress data')
+      } else if (error?.status === 403) {
+        toast.error('You must join this challenge to view progress')
+      } else if (error?.message?.includes('Not participating')) {
+        toast.error('Join the challenge first to track your progress')
+      } else {
         toast.error('Unable to load progress data. Please refresh and try again.')
       }
     }
@@ -184,14 +199,21 @@ export function EnhancedChallengeCard({ challenge, onJoin, onLeave, onRefresh }:
 
   const loadComments = async () => {
     try {
+      console.log('🔄 Loading comments for challenge:', challenge.id)
       const data = await communityApi.getChallengeComments(challenge.id)
+      console.log('✅ Comments loaded:', data)
+      
       setComments(Array.isArray(data) ? data : [])
     } catch (error: any) {
-      console.error('Failed to load comments:', error)
+      console.error('❌ Failed to load comments:', error)
+      console.error('Error details:', error?.response || error?.message)
+      
       setComments([])
       
       // Only show error if it's not an auth issue
-      if (error?.status !== 401) {
+      if (error?.status === 401) {
+        toast.error('Please log in to view comments')
+      } else if (error?.status !== 401) {
         toast.error('Unable to load comments. Please refresh and try again.')
       }
     }

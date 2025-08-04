@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { useMoods } from './useMoods'
+import { useWellness } from './useWellness'
 import { useUserStats } from './useWellness'
 
 export interface MoodTheme {
@@ -180,15 +180,23 @@ export const moodThemes: Record<string, MoodTheme> = {
 }
 
 export function useMoodBasedTheme() {
-  const { moods } = useMoods()
+  const { moodEntries } = useWellness()
   const { stats } = useUserStats()
   const [isThemeChanging, setIsThemeChanging] = useState(false)
   const [localTheme, setLocalTheme] = useState<string>('default')
 
+  const convertMoodScore = (score: number): 'very-low' | 'low' | 'neutral' | 'good' | 'excellent' => {
+    if (score <= 2) return 'very-low'
+    if (score <= 4) return 'low'
+    if (score <= 6) return 'neutral'
+    if (score <= 8) return 'good'
+    return 'excellent'
+  }
+
   const getCurrentMood = () => {
-    // Handle case when moods array is empty or backend is not available
-    if (!moods || moods.length === 0) return 'neutral'
-    return moods[0].mood
+    // Handle case when mood entries array is empty or backend is not available
+    if (!moodEntries || moodEntries.length === 0) return 'neutral'
+    return convertMoodScore(moodEntries[0].mood)
   }
 
   const getRecommendedTheme = (mood: string) => {
@@ -238,16 +246,16 @@ export function useMoodBasedTheme() {
 
   // Auto-apply theme when mood changes and on initial load
   useEffect(() => {
-    if (moods.length > 0) {
-      const latestMood = moods[0]
-      const timeSinceLastMood = Date.now() - latestMood.timestamp
+    if (moodEntries.length > 0) {
+      const latestMood = moodEntries[0]
+      const timeSinceLastMood = Date.now() - new Date(latestMood.timestamp).getTime()
       
       // Only auto-apply if mood was logged within last hour
       if (timeSinceLastMood < 60 * 60 * 1000) {
         autoApplyMoodTheme()
       }
     }
-  }, [moods])
+  }, [moodEntries])
 
   // Initialize theme from localStorage on mount
   useEffect(() => {
@@ -263,15 +271,15 @@ export function useMoodBasedTheme() {
     }
   }, [stats?.currentTheme])
 
-  // Auto-apply mood theme when moods change
+  // Auto-apply mood theme when mood entries change
   useEffect(() => {
-    if (moods && moods.length > 0) {
+    if (moodEntries && moodEntries.length > 0) {
       const currentMood = getCurrentMood()
       if (currentMood !== 'neutral') {
         autoApplyMoodTheme()
       }
     }
-  }, [moods])
+  }, [moodEntries])
 
   return {
     currentTheme: localTheme,

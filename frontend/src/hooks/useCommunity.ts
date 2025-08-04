@@ -64,7 +64,13 @@ export function useCommunity() {
       setError(null)
       
       const threadsData = await apiService.getForumThreads(forumId)
-      setThreads(threadsData)
+      // Transform API response to match expected Thread interface
+      const transformedThreads: Thread[] = threadsData.map((thread: any) => ({
+        ...thread,
+        author: thread.author?.name || thread.author || 'Unknown',
+        view_count: 0 // API doesn't return view count yet
+      }))
+      setThreads(transformedThreads)
       
     } catch (err) {
       console.error('Failed to load threads:', err)
@@ -124,12 +130,19 @@ export function useCommunity() {
         forum_id: forumId,
         title,
         content
-      })
+      }) as any
       
-      setThreads(prev => [newThread, ...prev])
+      // Transform new thread to match Thread interface
+      const transformedThread: Thread = {
+        ...newThread,
+        author: newThread.author?.name || newThread.author || 'Unknown',
+        view_count: 0
+      }
+      
+      setThreads(prev => [transformedThread, ...prev])
       toast.success('Thread created successfully!')
       
-      return newThread
+      return transformedThread
       
     } catch (err) {
       console.error('Failed to create thread:', err)
@@ -143,9 +156,15 @@ export function useCommunity() {
   // Reply to thread
   const replyToThread = useCallback(async (threadId: string, content: string, parentId?: string) => {
     try {
-      const newReply = await apiService.replyToThread(threadId, content, parentId)
+      const newReply = await apiService.replyToThread(threadId, content, parentId) as any
       
-      setReplies(prev => [...prev, newReply])
+      // Transform new reply to match Reply interface
+      const transformedReply: Reply = {
+        ...newReply,
+        author: newReply.author?.name || newReply.author || 'Unknown'
+      }
+      
+      setReplies(prev => [...prev, transformedReply])
       
       // Update thread reply count
       setThreads(prev => prev.map(thread => 

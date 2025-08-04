@@ -1044,6 +1044,36 @@ async def create_challenge(challenge_data: dict, current_user: dict = Depends(ge
         logger.error(f"Error creating challenge: {e}")
         raise HTTPException(status_code=500, detail="Failed to create challenge")
 
+# Import feed endpoints
+try:
+    from .feed_endpoints import get_community_feed, get_user_community_score
+except ImportError:
+    # Fallback if feed_endpoints module has issues
+    def get_community_feed(*args, **kwargs):
+        return []
+    def get_user_community_score(*args, **kwargs):
+        return {'total_score': 0, 'breakdown': {'participation': 0, 'engagement': 0, 'helpfulness': 0, 'consistency': 0}, 'level': 'New Member', 'next_level_threshold': 20}
+
+@app.get("/feed")
+async def community_feed(
+    types: str = Query("thread,challenge,event"),
+    time_range: str = Query("7d"),
+    sort_by: str = Query("recent"),
+    limit: int = Query(20),
+    current_user: dict = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """Get unified community feed"""
+    return get_community_feed(current_user, db, types, time_range, sort_by, limit)
+
+@app.get("/user/community-score")
+async def user_community_score(
+    current_user: dict = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """Get user's community engagement score"""
+    return get_user_community_score(current_user, db)
+
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run(app, host="0.0.0.0", port=8002)

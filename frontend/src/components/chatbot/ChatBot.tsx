@@ -5,7 +5,6 @@ import { Input } from "@/components/ui/input"
 import { Badge } from "@/components/ui/badge"
 import { ChatCircle, Robot, User, ArrowsOut, ArrowsIn, Wind } from "@phosphor-icons/react"
 import { useChatbot } from "@/hooks/useChatbot"
-import { useMoods } from "@/hooks/useMoods"
 import { BreathingExercise } from "../common/BreathingExercise"
 import { motion, AnimatePresence } from "framer-motion"
 import { cn } from "@/lib/utils"
@@ -16,7 +15,6 @@ interface ChatBotProps {
 
 export function ChatBot({ className }: ChatBotProps) {
   const { messages, actions } = useChatbot()
-  const { addMood } = useMoods()
   const [input, setInput] = useState("")
   const [isLoading, setIsLoading] = useState(false)
   const [isExpanded, setIsExpanded] = useState(false)
@@ -51,14 +49,8 @@ export function ChatBot({ className }: ChatBotProps) {
       const suggestedMood = detectMoodFromMessage(userMessage)
       
       if (suggestedMood) {
-        setTimeout(() => {
-          const shouldLog = window.confirm(
-            `I noticed you might be feeling ${suggestedMood}. Would you like me to log this in your mood tracker?`
-          )
-          if (shouldLog) {
-            addMood(suggestedMood)
-          }
-        }, 2000)
+        // Mood suggestions are now handled by the wellness service
+        console.log(`AI suggested mood: ${suggestedMood}`)
       }
       
     } catch (error) {
@@ -83,7 +75,7 @@ export function ChatBot({ className }: ChatBotProps) {
 
   const onBreathingComplete = () => {
     setShowBreathingExercise(false)
-    addMessage("Great job! How are you feeling now? Remember, you can always come back to breathing exercises whenever you need them. 🌟", 'mitra')
+    actions.sendMessage("Great job! How are you feeling now? Remember, you can always come back to breathing exercises whenever you need them. 🌟")
   }
   
   return (

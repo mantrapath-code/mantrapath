@@ -139,15 +139,26 @@ export function useWellness() {
       })
 
       // Convert and add to local state
+      const backendEntryTyped = backendEntry as {
+        id: string
+        mood_score: number
+        energy_level?: number
+        stress_level?: number
+        sleep_quality?: number
+        notes?: string
+        context_tags?: string[]
+        created_at: string
+      }
+      
       const newEntry: MoodEntry = {
-        id: backendEntry.id,
-        mood: backendEntry.mood_score,
-        energy: backendEntry.energy_level || 5,
-        stress: backendEntry.stress_level || 5,
-        sleep: backendEntry.sleep_quality || 5,
-        note: backendEntry.notes || '',
-        tags: backendEntry.context_tags || [],
-        timestamp: backendEntry.created_at
+        id: backendEntryTyped.id,
+        mood: backendEntryTyped.mood_score,
+        energy: backendEntryTyped.energy_level || 5,
+        stress: backendEntryTyped.stress_level || 5,
+        sleep: backendEntryTyped.sleep_quality || 5,
+        note: backendEntryTyped.notes || '',
+        tags: backendEntryTyped.context_tags || [],
+        timestamp: backendEntryTyped.created_at
       }
 
       setMoodEntries(prev => [newEntry, ...prev])
@@ -306,8 +317,8 @@ export const useUserStats = () => {
 }
 
 export const useMoodAnalytics = () => {
-  const [personalizedInsights, setPersonalizedInsights] = useState(null)
-  const [optimalTimes, setOptimalTimes] = useState(null)
+  const [personalizedInsights, setPersonalizedInsights] = useState<any>(null)
+  const [optimalTimes, setOptimalTimes] = useState<any>(null)
   const [loading, setLoading] = useState(false)
 
   const getPersonalizedInsights = useCallback(async () => {
@@ -318,17 +329,9 @@ export const useMoodAnalytics = () => {
       return insights
     } catch (error) {
       console.error('Failed to fetch personalized insights:', error)
-      // Return fallback insights
-      return {
-        insights: [],
-        recommendations: [],
-        optimal_times: [],
-        weekly_summary: {
-          current_week_score: 0,
-          trend: 'stable',
-          improvement_areas: []
-        }
-      }
+      // Return null instead of fallback insights
+      setPersonalizedInsights(null)
+      return null
     } finally {
       setLoading(false)
     }
@@ -346,13 +349,13 @@ export const useMoodAnalytics = () => {
   }, [])
 
   const getWeeklyInsights = useCallback(() => {
-    // Mock weekly insights for backward compatibility
-    if (personalizedInsights) {
+    // Return real weekly insights from backend data
+    if (personalizedInsights && personalizedInsights.weekly_summary) {
       return {
-        averageMood: personalizedInsights.weekly_summary.current_week_score || 4.2,
-        moodVariability: 0.8,
+        averageMood: personalizedInsights.weekly_summary.current_week_score || 0,
+        moodVariability: personalizedInsights.weekly_summary.variability || 0,
         dominantMood: personalizedInsights.weekly_summary.trend === 'improving' ? 'good' : 'neutral',
-        patterns: [],
+        patterns: personalizedInsights.weekly_summary.patterns || [],
         insights: personalizedInsights.insights || [],
         recommendations: personalizedInsights.recommendations || []
       }

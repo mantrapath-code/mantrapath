@@ -33,7 +33,7 @@ import {
 import { motion, AnimatePresence } from 'framer-motion'
 import { moodApi, notificationApi } from '@/services/api'
 import { toast } from 'sonner'
-import { useMoods } from '@/hooks/useMoods'
+import { useWellness } from '@/hooks/useWellness'
 import { useKV } from '@/hooks/useKV'
 
 interface NotificationSchedule {
@@ -89,7 +89,7 @@ export function SmartNotificationScheduler() {
   const [loading, setLoading] = useState(true)
   const [backendConnected, setBackendConnected] = useState(false)
   
-  const { moods } = useMoods()
+  const { moodEntries } = useWellness()
 
   useEffect(() => {
     initializeSmartScheduling()
@@ -163,7 +163,7 @@ export function SmartNotificationScheduler() {
     
     // Analyze mood patterns to find optimal intervention windows
     const oneMonthAgo = Date.now() - (30 * 24 * 60 * 60 * 1000)
-    const recentMoods = moods.filter(mood => mood.timestamp >= oneMonthAgo)
+    const recentMoods = moodEntries.filter(mood => mood.timestamp >= oneMonthAgo)
     
     if (recentMoods.length < 10) {
       // Not enough data, return basic optimal times
@@ -221,7 +221,7 @@ export function SmartNotificationScheduler() {
   }
 
   const groupMoodsByDayAndTime = (moods: any[]) => {
-    return moods.reduce((acc, mood) => {
+    return moodEntries.reduce((acc, mood) => {
       const date = new Date(mood.timestamp)
       const day = date.getDay()
       const hour = date.getHours()
@@ -235,7 +235,7 @@ export function SmartNotificationScheduler() {
 
   const calculateAverageMood = (moods: any[]) => {
     const moodValues = { 'very-low': 1, 'low': 2, 'neutral': 3, 'good': 4, 'excellent': 5 }
-    return moods.reduce((sum, mood) => sum + moodValues[mood.mood], 0) / moods.length
+    return moodEntries.reduce((sum, mood) => sum + moodValues[mood.mood], 0) / moodEntries.length
   }
 
   const getContextForTime = (hour: number): string => {
@@ -256,7 +256,7 @@ export function SmartNotificationScheduler() {
   }
 
   const findHighEnergyTimes = (moods: any[]) => {
-    const highEnergyMoods = moods.filter(mood => 
+    const highEnergyMoods = moodEntries.filter(mood => 
       mood.energy === 'high' || ['good', 'excellent'].includes(mood.mood)
     )
     

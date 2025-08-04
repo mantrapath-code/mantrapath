@@ -2,21 +2,17 @@ import { useState, useEffect } from "react"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Button } from "@/components/ui/button"
 import { ChatCircle, X } from "@phosphor-icons/react"
-import { MoodTracker } from "@/components/mood"
-import { PersonalizedInsights } from "@/components/mood"
 import { JournalSection } from "@/components/journal"
 import { ChatBot } from "@/components/chatbot"
 import { EnhancedCommunitySection } from "@/components/community"
 import { WellnessDashboard } from "@/components/dashboard"
 import { CrisisPredictionDashboard } from "@/components/dashboard"
-import { MoodPatternNotifications } from "@/components/mood"
 import { RealTimeNotifications } from "@/components/notifications"
 import { AuthScreen } from "@/components/auth"
 import { EmailVerification } from "@/components/auth"
 import { DevelopmentBanner } from "@/components/common"
 import { ProfileDropdown, ProfileDashboard } from "@/components/profile"
 import { InsightsPage } from "@/pages/InsightsPage"
-import { WeatherPage } from "@/pages/WeatherPage"
 import { AchievementsPage } from "@/pages/AchievementsPage"
 import { AuthProvider, useAuth } from "@/hooks/useAuth"
 import { useMoodBasedTheme } from "@/hooks/useMoodTheme"
@@ -164,11 +160,9 @@ function AppContent() {
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 pb-8">
           <div className="lg:col-span-2">
             <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-              <TabsList className="grid grid-cols-7 w-full mb-6">
+              <TabsList className="grid grid-cols-5 w-full mb-6">
                 <TabsTrigger value="dashboard">Dashboard</TabsTrigger>
-                <TabsTrigger value="mood">Mood</TabsTrigger>
                 <TabsTrigger value="insights">Insights</TabsTrigger>
-                <TabsTrigger value="weather">Weather</TabsTrigger>
                 <TabsTrigger value="achievements">Achievements</TabsTrigger>
                 <TabsTrigger value="journal">Journal</TabsTrigger>
                 <TabsTrigger value="community">Community</TabsTrigger>
@@ -182,15 +176,6 @@ function AppContent() {
                   <WellnessDashboard />
                 </motion.div>
               </TabsContent>
-              
-              <TabsContent value="mood" className="space-y-6">
-                <motion.div
-                  initial={{ opacity: 0, y: 20 }}
-                  animate={{ opacity: 1, y: 0 }}
-                >
-                  <MoodTracker />
-                </motion.div>
-              </TabsContent>
 
               <TabsContent value="insights" className="space-y-6">
                 <motion.div
@@ -198,15 +183,6 @@ function AppContent() {
                   animate={{ opacity: 1, y: 0 }}
                 >
                   <InsightsPage />
-                </motion.div>
-              </TabsContent>
-
-              <TabsContent value="weather" className="space-y-6">
-                <motion.div
-                  initial={{ opacity: 0, y: 20 }}
-                  animate={{ opacity: 1, y: 0 }}
-                >
-                  <WeatherPage />
                 </motion.div>
               </TabsContent>
 
@@ -340,9 +316,6 @@ function AppContent() {
           </div>
         </div>
       </footer>
-      
-      {/* Mood Pattern Notifications - Global component for critical alerts only */}
-      <MoodPatternNotifications onlyCritical={true} />
       
       <Toaster 
         position="top-right"
