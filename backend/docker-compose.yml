@@ -155,46 +155,6 @@ services:
       - mantrapath-network
     restart: unless-stopped
 
-  # Phi-3 Mini Agent Service (Local AI)
-  phi3-agent:
-    image: vllm/vllm-openai:latest
-    container_name: mantrapath_phi3_agent
-    environment:
-      - VLLM_WORKER_MULTIPROC_METHOD=spawn
-      - VLLM_LOGGING_LEVEL=DEBUG
-      - CUDA_VISIBLE_DEVICES=""
-      - VLLM_USE_CPU=1
-    ports:
-      - "8010:8000"  # Different port to avoid conflicts
-    volumes:
-      - ~/.cache/huggingface:/root/.cache/huggingface
-    command: [
-      "--model", "microsoft/Phi-3-mini-4k-instruct",
-      "--served-model-name", "phi3-mini",
-      "--host", "0.0.0.0",
-      "--port", "8000",
-      "--max-model-len", "4096",
-      "--trust-remote-code",
-      "--tensor-parallel-size", "1",
-      "--max-num-seqs", "16",
-      "--disable-log-requests",
-      "--device", "cpu",
-      "--dtype", "float32"
-    ]
-    deploy:
-      resources:
-        limits:
-          memory: 4G
-    restart: unless-stopped
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
-      interval: 60s
-      timeout: 30s
-      retries: 3
-      start_period: 180s
-    networks:
-      - mantrapath-network
-
   # Agent Redis for ML caching
   agent-redis:
     image: redis:7-alpine
@@ -226,9 +186,11 @@ services:
       - DATABASE_URL=postgresql://mantrapath:mantrapath123@postgres:5432/mantrapath
       - REDIS_URL=redis://redis:6379
       - AGENT_REDIS_URL=redis://agent-redis:6379
-      - PHI3_AGENT_URL=http://phi3-agent:8000/v1/chat/completions
       - JWT_SECRET_KEY=${JWT_SECRET_KEY:-your-super-secret-jwt-key-change-in-production}
       - OPENAI_API_KEY=${OPENAI_API_KEY:-your-openai-api-key-here}
+      - PHI4_MODEL_AVAILABLE=true
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     depends_on:
       postgres:
         condition: service_healthy
@@ -236,7 +198,6 @@ services:
         condition: service_healthy
       agent-redis:
         condition: service_healthy
-      # phi3-agent is optional - service will use fallback if not available
     networks:
       - mantrapath-network
     restart: unless-stopped
@@ -322,6 +283,7 @@ services:
       - JWT_SECRET_KEY=${JWT_SECRET_KEY:-your-super-secret-jwt-key-change-in-production}
       - MOOD_SERVICE_URL=http://mood-service:8003
       - NOTIFICATION_SERVICE_URL=http://notification-service:8007
+      - USE_SERVER_UNIFIED_INSIGHTS=true
     depends_on:
       postgres:
         condition: service_healthy
@@ -332,6 +294,12 @@ services:
     networks:
       - mantrapath-network
     restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8008/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
 
   # Media Service
   media-service:

@@ -57,6 +57,25 @@ class UserProfile(Base):
     # Relationships
     user = relationship("User", back_populates="profile")
 
+# --- E1: Multilingual Foundations (Added) ---
+class UserLanguagePreference(Base):
+    """Per-user language & basic cultural preferences (MVP)"""
+    __tablename__ = "user_language_preferences"
+
+    id = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
+    user_id = Column(String, ForeignKey("users.id"), nullable=False, unique=True, index=True)
+    primary_language = Column(String, nullable=False, default="en")  # ISO 639-1
+    secondary_languages = Column(JSON)  # list of ISO codes
+    auto_detect_language = Column(Boolean, default=True)
+    cultural_region = Column(String)  # ISO 3166-1 alpha-2
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    __table_args__ = (
+        Index('idx_user_language_pref_user', 'user_id'),
+    )
+# --- End E1 addition ---
+
 class MoodEntry(Base):
     """Mood tracking entries with Phase 1 enhancements"""
     __tablename__ = "mood_entries"

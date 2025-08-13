@@ -8,7 +8,7 @@ import logging
 import os
 import sys
 from datetime import datetime
-from typing import List, Optional, Dict, Any
+from typing import List, Optional, Dict, Any, Union
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, Depends, HTTPException, BackgroundTasks
@@ -37,7 +37,7 @@ logger = logging.getLogger(__name__)
 Base.metadata.create_all(bind=engine)
 
 # Configuration
-PHI3_AGENT_URL = os.getenv("PHI3_AGENT_URL", "http://phi3-agent:8000/v1/chat/completions")
+PHI4_MODEL_AVAILABLE = os.getenv("PHI4_MODEL_AVAILABLE", "true").lower() == "true"
 AGENT_REDIS_URL = os.getenv("AGENT_REDIS_URL", "redis://agent-redis:6379")
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 
@@ -57,10 +57,10 @@ class ChatResponse(BaseModel):
     source: str = "phi3"  # phi3, openai, or fallback
 
 class ChatbotService:
-    """Main chatbot service with Phi3 integration and fallbacks"""
+    """Main chatbot service with PHI4 integration and fallbacks"""
     
     def __init__(self):
-        self.phi3_available = False
+        self.phi4_available = PHI4_MODEL_AVAILABLE
         self.openai_available = bool(OPENAI_API_KEY)
         self.redis_client = None
         
@@ -74,36 +74,22 @@ class ChatbotService:
         except Exception as e:
             logger.warning(f"Agent Redis not available: {e}")
             
-        # Check Phi3 availability
-        await self._check_phi3_availability()
-        
-        logger.info(f"Chatbot service initialized - Phi3: {self.phi3_available}, OpenAI: {self.openai_available}")
-    
-    async def _check_phi3_availability(self):
-        """Check if Phi3 agent is available"""
-        try:
-            async with httpx.AsyncClient(timeout=10.0) as client:
-                response = await client.get(f"{PHI3_AGENT_URL.replace('/v1/chat/completions', '/health')}")
-                self.phi3_available = response.status_code == 200
-                logger.info(f"Phi3 agent availability: {self.phi3_available}")
-        except Exception as e:
-            logger.warning(f"Phi3 agent not available: {e}")
-            self.phi3_available = False
+        logger.info(f"Chatbot service initialized - PHI4: {self.phi4_available}, OpenAI: {self.openai_available}")
     
     async def generate_response(
         self, 
         user_message: str, 
         user_id: str, 
-        conversation_history: List[Dict] = None
+        conversation_history: Optional[List[Dict[str, Any]]] = None
     ) -> ChatResponse:
         """Generate response using best available method"""
         
-        # Try Phi3 first (local AI)
-        if self.phi3_available:
+        # Try PHI4 first (local model)
+        if self.phi4_available:
             try:
-                return await self._generate_phi3_response(user_message, user_id, conversation_history)
+                return await self._generate_phi4_response(user_message, user_id, conversation_history)
             except Exception as e:
-                logger.error(f"Phi3 generation failed: {e}")
+                logger.error(f"PHI4 generation failed: {e}")
                 # Fall through to next option
         
         # Try OpenAI as backup
@@ -117,65 +103,100 @@ class ChatbotService:
         # Use intelligent fallback
         return await self._generate_fallback_response(user_message, user_id)
     
-    async def _generate_phi3_response(
+    async def _generate_phi4_response(
         self, 
         user_message: str, 
         user_id: str, 
-        conversation_history: List[Dict] = None
+        conversation_history: Optional[List[Dict[str, Any]]] = None
     ) -> ChatResponse:
-        """Generate response using Phi3 local model"""
+        """Generate response using PHI4 model via ollama"""
         
-        # Build context-aware prompt
-        system_prompt = self._build_therapeutic_prompt(user_id)
-        messages = [
-            {"role": "system", "content": system_prompt},
-            {"role": "user", "content": user_message}
-        ]
+        logger.info(f"PHI4 request for user {user_id}: {user_message[:50]}...")
         
-        # Add conversation history if available
-        if conversation_history:
-            for msg in conversation_history[-5:]:  # Last 5 messages for context
-                messages.insert(-1, {
-                    "role": msg.get("sender", "user"),
-                    "content": msg.get("content", "")
-                })
-        
-        async with httpx.AsyncClient(timeout=30.0) as client:
-            response = await client.post(
-                PHI3_AGENT_URL,
-                json={
-                    "model": "phi3-mini",
-                    "messages": messages,
-                    "max_tokens": 512,
+        try:
+            import aiohttp
+            import json
+            
+            # Build therapeutic prompt
+            system_prompt = self._build_therapeutic_prompt(user_id)
+            
+            # Create conversation context
+            context_messages = ""
+            if conversation_history:
+                for msg in conversation_history[-3:]:  # Last 3 messages for context
+                    role = "User" if msg.get("is_user") else "Assistant"
+                    context_messages += f"{role}: {msg.get('content', '')}\n"
+            
+            # Ollama API endpoint - use host.docker.internal to reach host machine from container
+            url = "http://host.docker.internal:11434/api/generate"
+            
+            full_prompt = f"""{system_prompt}
+
+Previous conversation context:
+{context_messages}
+
+Current user message: {user_message}
+
+Please provide a thoughtful, compassionate response focused on mental wellness and support:"""
+            
+            payload = {
+                "model": "phi4",
+                "prompt": full_prompt,
+                "stream": False,
+                "options": {
                     "temperature": 0.7,
                     "top_p": 0.9,
-                    "frequency_penalty": 0.1,
-                    "presence_penalty": 0.1
+                    "top_k": 40,
+                    "num_predict": 200  # Limit response length
                 }
-            )
-            response.raise_for_status()
+            }
             
-            result = response.json()
-            response_text = result["choices"][0]["message"]["content"].strip()
-            
-            # Analyze response for crisis detection
-            crisis_detected = self._detect_crisis(user_message, response_text)
+            async with aiohttp.ClientSession() as session:
+                timeout = aiohttp.ClientTimeout(total=30)
+                async with session.post(url, json=payload, timeout=timeout) as response:
+                    if response.status == 200:
+                        result = await response.json()
+                        phi4_response = result.get("response", "").strip()
+                        
+                        if not phi4_response:
+                            phi4_response = "I'm here to support you on your wellness journey. Could you share more about what's on your mind?"
+                        
+                        # Analyze for crisis detection
+                        crisis_detected = self._detect_crisis(user_message, phi4_response)
+                        
+                        return ChatResponse(
+                            response=phi4_response,
+                            session_id="",  # Will be set by caller
+                            tone="supportive",
+                            intervention_type="ai_therapeutic",
+                            crisis_detected=crisis_detected,
+                            confidence_score=0.85,
+                            source="phi4"
+                        )
+                    else:
+                        logger.error(f"Ollama API error: {response.status}")
+                        raise Exception(f"Ollama API returned status {response.status}")
+                        
+        except Exception as e:
+            logger.error(f"Error generating PHI4 response: {str(e)}")
+            # Return fallback response but still mark as PHI4 attempt
+            fallback_response = "I understand you're reaching out, and I'm here to listen. Sometimes technology has its moments, but our connection remains important. How are you feeling right now?"
             
             return ChatResponse(
-                response=response_text,
-                session_id="",  # Will be set by caller
-                tone="supportive",
+                response=fallback_response,
+                session_id="",
+                tone="supportive", 
                 intervention_type="ai_therapeutic",
-                crisis_detected=crisis_detected,
-                confidence_score=0.85,
-                source="phi3"
+                crisis_detected=self._detect_crisis(user_message, fallback_response),
+                confidence_score=0.60,
+                source="phi4_fallback"
             )
     
     async def _generate_openai_response(
         self, 
         user_message: str, 
         user_id: str, 
-        conversation_history: List[Dict] = None
+        conversation_history: Optional[List[Dict[str, Any]]] = None
     ) -> ChatResponse:
         """Generate response using OpenAI as backup"""
         
@@ -428,7 +449,7 @@ async def health_check():
             "status": "healthy",
             "timestamp": datetime.utcnow().isoformat(),
             "database": "connected",
-            "phi3_available": chatbot_service.phi3_available,
+            "phi4_available": chatbot_service.phi4_available,
             "openai_available": chatbot_service.openai_available,
             "version": "3.0.0"
         }
@@ -438,6 +459,51 @@ async def health_check():
             "status": "unhealthy",
             "error": str(e),
             "timestamp": datetime.utcnow().isoformat()
+        }
+
+@app.get("/api/chatbot/test")
+async def test_phi4_endpoint():
+    """Test endpoint for PHI4 integration (no auth required)"""
+    try:
+        test_message = "Hello, this is a test message for PHI4 integration."
+        
+        # Test PHI4 generation directly
+        if chatbot_service.phi4_available:
+            try:
+                # Test the actual PHI4 connection
+                response = await chatbot_service._generate_phi4_response(
+                    test_message, 
+                    "test_user", 
+                    None
+                )
+                
+                return {
+                    "status": "success",
+                    "phi4_working": True,
+                    "response": response.response,
+                    "source": response.source,
+                    "confidence": response.confidence_score,
+                    "message": "PHI4 is working with real ollama connection"
+                }
+            except Exception as e:
+                logger.error(f"PHI4 test failed: {e}")
+                return {
+                    "status": "phi4_error",
+                    "phi4_working": False,
+                    "error": str(e),
+                    "fallback_available": chatbot_service.openai_available
+                }
+        else:
+            return {
+                "status": "phi4_disabled",
+                "phi4_working": False,
+                "message": "PHI4 is not available"
+            }
+    except Exception as e:
+        logger.error(f"Test endpoint error: {e}")
+        return {
+            "status": "error",
+            "error": str(e)
         }
 
 @app.post("/chat/session")

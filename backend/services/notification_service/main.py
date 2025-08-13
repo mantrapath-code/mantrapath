@@ -24,6 +24,8 @@ from shared.database import get_db
 from shared.auth import get_current_user
 # from shared.auth import require_admin  # TODO: implement require_admin function
 from shared.models import Notification, User, UserProfile
+from shared.events import get_event_bus, EventChannels, Event
+from shared.feature_flags import get_flag_bool
 
 app = FastAPI(
     title="MantraPath Notification Service",
@@ -80,6 +82,73 @@ class ConnectionManager:
             await self.send_personal_message(message, user_id)
 
 manager = ConnectionManager()
+
+# E4: WebSocket Insight Delta Handler
+class InsightDeltaHandler:
+    """Handles real-time insight delta messages via WebSocket"""
+    
+    def __init__(self, connection_manager: ConnectionManager):
+        self.manager = connection_manager
+        logging.info("🔄 InsightDeltaHandler initialized")
+    
+    async def process_insight_delta_event(self, event: Event):
+        """Process insight delta event and send to user via WebSocket"""
+        try:
+            user_id = event.user_id
+            delta_data = event.data
+            
+            if not user_id:
+                return
+            
+            # Create WebSocket message for insight delta
+            message = {
+                "type": "insight_delta",
+                "timestamp": event.timestamp.isoformat() if event.timestamp else datetime.now().isoformat(),
+                "data": delta_data
+            }
+            
+            # Send to user via WebSocket
+            await self.manager.send_personal_message(message, user_id)
+            logging.info(f"📊 Sent insight delta to user {user_id} via WebSocket")
+            
+        except Exception as e:
+            logging.error(f"❌ Error processing insight delta event: {e}")
+
+# Initialize insight delta handler
+insight_delta_handler = InsightDeltaHandler(manager)
+
+# E4: Setup event subscriptions
+@app.on_event("startup")
+async def startup_event():
+    """Setup real-time insight delta subscriptions"""
+    if get_flag_bool('USE_EVENT_BUS'):
+        await setup_insight_subscriptions()
+
+async def setup_insight_subscriptions():
+    """Setup event subscriptions for insight deltas"""
+    try:
+        bus = get_event_bus()
+        
+        # Subscribe to insight delta events
+        await bus.subscribe(
+            EventChannels.INSIGHT_DELTA,
+            insight_delta_handler.process_insight_delta_event
+        )
+        
+        logging.info("🔔 Insight delta subscriptions established in notification service")
+        
+    except Exception as e:
+        logging.error(f"❌ Failed to setup insight subscriptions: {e}")
+
+@app.on_event("shutdown")
+async def shutdown_event():
+    """Cleanup on shutdown"""
+    try:
+        from shared.events import cleanup_event_bus
+        await cleanup_event_bus()
+        logging.info("🛑 Event bus cleaned up in notification service")
+    except Exception as e:
+        logging.error(f"❌ Error during shutdown cleanup: {e}")
 
 # Pydantic models
 class NotificationCreate(BaseModel):

@@ -77,10 +77,15 @@ def get_service_url(path: str) -> tuple[str, str]:
     if path.startswith("/api/v1/ml/"):
         # Strip the /api/v1/ml/ prefix for the ML service
         ml_path = path[11:]  # Remove "/api/v1/ml/" (11 characters)
+        # If the remaining path already targets a top-level ML namespace (ml/, crisis/, dashboard/), don't prepend another /ml
+        if ml_path.startswith(("ml/", "crisis/", "dashboard/")):
+            return SERVICES["ml"], f"/{ml_path}"
         return SERVICES["ml"], f"/ml/{ml_path}"
     elif path.startswith("/api/ml/"):
         # Strip the /api/ml/ prefix for the ML service
         ml_path = path[8:]  # Remove "/api/ml/" (8 characters)
+        if ml_path.startswith(("ml/", "crisis/", "dashboard/")):
+            return SERVICES["ml"], f"/{ml_path}"
         return SERVICES["ml"], f"/ml/{ml_path}"
     elif path.startswith("/ml/"):
         # Direct ML service routes

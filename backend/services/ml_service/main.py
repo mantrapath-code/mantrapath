@@ -6,8 +6,8 @@ Provides machine learning capabilities for personalized notification timing and 
 from fastapi import FastAPI, Depends, HTTPException, BackgroundTasks
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
-from typing import List, Dict, Any, Optional
-from datetime import datetime, timedelta
+from typing import List, Dict, Any, Optional, Iterable
+from datetime import datetime, timedelta, timezone
 import os
 import logging
 import uuid
@@ -22,6 +22,8 @@ sys.path.append(os.path.join(os.path.dirname(__file__), '..', '..'))
 from shared.database import get_db
 from shared.auth import get_current_user
 from shared.models import MoodEntry, JournalEntry, Notification
+from shared.events import get_event_bus, EventChannels, Event, publish_insight_delta
+from shared.feature_flags import get_flag_bool
 
 # Import ML models
 from models.pattern_analyzer import MoodPatternAnalyzer
@@ -62,6 +64,179 @@ effectiveness_tracker = EffectivenessTracker()
 crisis_predictor = CrisisPredictionSystem()
 early_warning_system = EarlyWarningSystem()
 
+# E4: Real-Time Insight Delta Processor
+class RealTimeInsightProcessor:
+    """Processes real-time events and generates insight deltas"""
+    
+    def __init__(self):
+        self.insight_cache = {}  # Simple in-memory cache {user_id: cache_data}
+        self.cache_ttl = 300  # 5 minutes TTL
+        logger.info("🔄 RealTimeInsightProcessor initialized")
+    
+    async def process_mood_entry_event(self, event: Event):
+        """Process mood entry created event and generate insight delta"""
+        try:
+            user_id = event.user_id
+            mood_data = event.data
+            
+            if not user_id:
+                return
+            
+            # Calculate quick insight updates
+            delta = await self._calculate_mood_delta(user_id, mood_data)
+            
+            # Publish insight delta
+            if delta:
+                await publish_insight_delta(user_id, delta)
+                logger.info(f"📊 Published insight delta for user {user_id}")
+                
+        except Exception as e:
+            logger.error(f"❌ Error processing mood entry event: {e}")
+    
+    async def process_journal_entry_event(self, event: Event):
+        """Process journal entry created event and generate insight delta"""
+        try:
+            user_id = event.user_id
+            journal_data = event.data
+            
+            if not user_id:
+                return
+            
+            # Calculate quick insight updates
+            delta = await self._calculate_journal_delta(user_id, journal_data)
+            
+            # Publish insight delta
+            if delta:
+                await publish_insight_delta(user_id, delta)
+                logger.info(f"📝 Published journal insight delta for user {user_id}")
+                
+        except Exception as e:
+            logger.error(f"❌ Error processing journal entry event: {e}")
+    
+    async def process_challenge_progress_event(self, event: Event):
+        """Process challenge progress updated event and generate insight delta"""
+        try:
+            user_id = event.user_id
+            challenge_data = event.data
+            
+            if not user_id:
+                return
+            
+            # Calculate quick insight updates
+            delta = await self._calculate_challenge_delta(user_id, challenge_data)
+            
+            # Publish insight delta
+            if delta:
+                await publish_insight_delta(user_id, delta)
+                logger.info(f"🏆 Published challenge insight delta for user {user_id}")
+                
+        except Exception as e:
+            logger.error(f"❌ Error processing challenge progress event: {e}")
+    
+    async def _calculate_mood_delta(self, user_id: str, mood_data: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+        """Calculate mood-related insight deltas"""
+        try:
+            current_time = datetime.now(timezone.utc)
+            
+            # Update cache with new mood entry count
+            cache_key = f"mood_insights_{user_id}"
+            cached_data = self.insight_cache.get(cache_key, {})
+            
+            # Simple delta calculations
+            delta = {
+                "type": "mood_update",
+                "timestamp": current_time.isoformat(),
+                "changes": {
+                    "latest_mood": mood_data.get("mood_score"),
+                    "energy_level": mood_data.get("energy_level"),
+                    "stress_level": mood_data.get("stress_level"),
+                    "days_tracked_increment": 1  # This day was tracked
+                }
+            }
+            
+            # Calculate streak if cache exists
+            last_entry_date = cached_data.get("last_mood_date")
+            today = current_time.date().isoformat()
+            
+            if last_entry_date:
+                # Simple consecutive day check
+                try:
+                    last_date = datetime.fromisoformat(last_entry_date).date()
+                    current_date = current_time.date()
+                    
+                    if (current_date - last_date).days == 1:
+                        # Consecutive day - increment streak
+                        current_streak = cached_data.get("mood_streak", 0) + 1
+                        delta["changes"]["mood_streak"] = current_streak
+                    elif (current_date - last_date).days == 0:
+                        # Same day - maintain streak
+                        delta["changes"]["mood_streak"] = cached_data.get("mood_streak", 1)
+                    else:
+                        # Gap in days - reset streak
+                        delta["changes"]["mood_streak"] = 1
+                except Exception:
+                    delta["changes"]["mood_streak"] = 1
+            else:
+                delta["changes"]["mood_streak"] = 1
+            
+            # Update cache
+            self.insight_cache[cache_key] = {
+                "last_mood_date": today,
+                "mood_streak": delta["changes"].get("mood_streak", 1),
+                "last_updated": current_time.isoformat()
+            }
+            
+            return delta
+            
+        except Exception as e:
+            logger.error(f"❌ Error calculating mood delta: {e}")
+            return None
+    
+    async def _calculate_journal_delta(self, user_id: str, journal_data: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+        """Calculate journal-related insight deltas"""
+        try:
+            current_time = datetime.now(timezone.utc)
+            
+            delta = {
+                "type": "journal_update",
+                "timestamp": current_time.isoformat(),
+                "changes": {
+                    "journal_entries_increment": 1,
+                    "latest_sentiment": journal_data.get("sentiment_label"),
+                    "sentiment_score": journal_data.get("sentiment_score")
+                }
+            }
+            
+            return delta
+            
+        except Exception as e:
+            logger.error(f"❌ Error calculating journal delta: {e}")
+            return None
+    
+    async def _calculate_challenge_delta(self, user_id: str, challenge_data: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+        """Calculate challenge-related insight deltas"""
+        try:
+            current_time = datetime.now(timezone.utc)
+            
+            delta = {
+                "type": "challenge_update",
+                "timestamp": current_time.isoformat(),
+                "changes": {
+                    "challenge_completed": challenge_data.get("completed", False),
+                    "streak_count": challenge_data.get("streak_count", 0),
+                    "engagement_increment": 1
+                }
+            }
+            
+            return delta
+            
+        except Exception as e:
+            logger.error(f"❌ Error calculating challenge delta: {e}")
+            return None
+
+# Initialize real-time processor
+realtime_processor = RealTimeInsightProcessor()
+
 # Initialize API-only crisis monitoring dashboard
 crisis_dashboard = None
 try:
@@ -83,7 +258,49 @@ async def startup_event():
     # Start metrics collection background task
     asyncio.create_task(collect_metrics_background())
     
+    # E4: Setup real-time event subscriptions
+    if get_flag_bool('USE_EVENT_BUS'):
+        await setup_realtime_subscriptions()
+    
     logger.info("✅ Crisis prediction monitoring active")
+
+async def setup_realtime_subscriptions():
+    """Setup event subscriptions for real-time insight processing"""
+    try:
+        bus = get_event_bus()
+        
+        # Subscribe to mood entry events
+        await bus.subscribe(
+            EventChannels.MOOD_ENTRY_CREATED,
+            realtime_processor.process_mood_entry_event
+        )
+        
+        # Subscribe to journal entry events
+        await bus.subscribe(
+            EventChannels.JOURNAL_ENTRY_CREATED,
+            realtime_processor.process_journal_entry_event
+        )
+        
+        # Subscribe to challenge progress events
+        await bus.subscribe(
+            EventChannels.CHALLENGE_PROGRESS_UPDATED,
+            realtime_processor.process_challenge_progress_event
+        )
+        
+        logger.info("🔔 Real-time event subscriptions established")
+        
+    except Exception as e:
+        logger.error(f"❌ Failed to setup real-time subscriptions: {e}")
+
+@app.on_event("shutdown")
+async def shutdown_event():
+    """Cleanup on shutdown"""
+    try:
+        from shared.events import cleanup_event_bus
+        await cleanup_event_bus()
+        logger.info("🛑 Event bus cleaned up")
+    except Exception as e:
+        logger.error(f"❌ Error during shutdown cleanup: {e}")
 
 async def collect_metrics_background():
     """Background task to collect crisis prediction metrics"""
@@ -157,105 +374,79 @@ class MonitoringRequest(BaseModel):
     force_check: bool = False
 
 # Helper function to calculate user statistics
-def calculate_user_statistics(mood_entries, journal_entries):
-    """Calculate statistical insights from user data"""
+from shared.models import MoodEntry as _MoodEntry, JournalEntry as _JournalEntry
+
+def calculate_user_statistics(mood_entries: Iterable[_MoodEntry], journal_entries: Iterable[_JournalEntry]) -> Dict[str, Any]:
+    """Calculate statistical insights from user data (typing improved)."""
     try:
-        statistics = {
+        mood_entries_list: List[_MoodEntry] = list(mood_entries)
+        _ = list(journal_entries)  # currently unused
+        statistics: Dict[str, Any] = {
             "best_day": "",
             "energy_peak": "",
             "mood_streak": 0,
-            "average_mood": 0,
-            "mood_variability": 0,
-            "total_entries": len(mood_entries)
+            "average_mood": 0.0,
+            "mood_variability": 0.0,
+            "total_entries": len(mood_entries_list)
         }
-        
-        if not mood_entries:
+        if not mood_entries_list:
             return statistics
-            
-        # Calculate average mood
-        total_mood = sum(entry.mood_score for entry in mood_entries)
-        statistics["average_mood"] = round(total_mood / len(mood_entries), 1)
-        
-        # Calculate mood variability (standard deviation)
-        avg = statistics["average_mood"]
-        variance = sum((entry.mood_score - avg) ** 2 for entry in mood_entries) / len(mood_entries)
-        statistics["mood_variability"] = round(variance ** 0.5, 1)
-        
-        # Find best day of week (day with highest average mood)
-        day_moods = {}
+        scores: List[int] = [int(getattr(entry, 'mood_score', 0) or 0) for entry in mood_entries_list]
+        total_mood = sum(scores)
+        statistics["average_mood"] = round(total_mood / len(scores), 1) if scores else 0.0
+        avg = statistics["average_mood"]  # already float
+        variance = (sum((s - avg) ** 2 for s in scores) / len(scores)) if scores else 0.0
+        statistics["mood_variability"] = round(variance ** 0.5, 1) if variance else 0.0
+        day_moods: Dict[int, List[int]] = {}
         day_names = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"]
-        
-        for entry in mood_entries:
-            day_of_week = entry.created_at.weekday()
-            if day_of_week not in day_moods:
-                day_moods[day_of_week] = []
-            day_moods[day_of_week].append(entry.mood_score)
-        
+        for entry in mood_entries_list:
+            created = getattr(entry, 'created_at', None)
+            if not created:
+                continue
+            day_of_week = created.weekday()
+            day_moods.setdefault(day_of_week, []).append(int(getattr(entry,'mood_score',0) or 0))
         if day_moods:
-            day_averages = {day: sum(scores)/len(scores) for day, scores in day_moods.items()}
-            best_day_num = max(day_averages, key=day_averages.get)
-            statistics["best_day"] = day_names[best_day_num]
-        
-        # Find energy peak time (hour with highest average energy)
-        if hasattr(mood_entries[0], 'energy_level'):
-            hour_energy = {}
-            for entry in mood_entries:
-                hour = entry.created_at.hour
-                energy = getattr(entry, 'energy_level', 5)
-                if hour not in hour_energy:
-                    hour_energy[hour] = []
-                hour_energy[hour].append(energy)
-            
-            if hour_energy:
-                hour_averages = {hour: sum(levels)/len(levels) for hour, levels in hour_energy.items()}
-                peak_hour = max(hour_averages, key=hour_averages.get)
-                
-                # Convert to readable time
-                if peak_hour < 12:
-                    statistics["energy_peak"] = f"{peak_hour}:00 AM"
-                elif peak_hour == 12:
-                    statistics["energy_peak"] = "12:00 PM"
-                else:
-                    statistics["energy_peak"] = f"{peak_hour-12}:00 PM"
-        
-        # Calculate current mood streak (consecutive days above average)
-        if len(mood_entries) > 1:
-            sorted_entries = sorted(mood_entries, key=lambda x: x.created_at)
-            daily_moods = {}
-            
-            # Group by date
+            day_averages: Dict[int, float] = {day: (sum(scores)/len(scores) if scores else 0.0) for day, scores in day_moods.items()}
+            if day_averages:
+                best_day_num = max(day_averages, key=lambda d: day_averages[d])
+                statistics["best_day"] = day_names[best_day_num]
+        hour_energy: Dict[int, List[int]] = {}
+        for entry in mood_entries_list:
+            created = getattr(entry, 'created_at', None)
+            if not created:
+                continue
+            hour = created.hour
+            energy = int(getattr(entry, 'energy_level', 5) or 5)
+            hour_energy.setdefault(hour, []).append(energy)
+        if hour_energy:
+            hour_averages: Dict[int, float] = {h: (sum(levels)/len(levels) if levels else 0.0) for h, levels in hour_energy.items()}
+            if hour_averages:
+                peak_hour = max(hour_averages, key=lambda h: hour_averages[h])
+                statistics["energy_peak"] = f"{peak_hour:02d}:00"
+        if len(mood_entries_list) > 1:
+            sorted_entries = sorted([e for e in mood_entries_list if getattr(e,'created_at',None)], key=lambda x: x.created_at)
+            daily_moods: Dict[Any, List[int]] = {}
             for entry in sorted_entries:
                 date_key = entry.created_at.date()
-                if date_key not in daily_moods:
-                    daily_moods[date_key] = []
-                daily_moods[date_key].append(entry.mood_score)
-            
-            # Calculate daily averages
-            daily_averages = {date: sum(scores)/len(scores) for date, scores in daily_moods.items()}
+                daily_moods.setdefault(date_key, []).append(int(getattr(entry,'mood_score',0) or 0))
+            daily_averages: Dict[Any, float] = {date: (sum(values)/len(values) if values else 0.0) for date, values in daily_moods.items()}
             overall_avg = statistics["average_mood"]
-            
-            # Count consecutive good days from most recent
             streak = 0
-            sorted_dates = sorted(daily_averages.keys(), reverse=True)
-            
-            for date in sorted_dates:
+            for date in sorted(daily_averages.keys(), reverse=True):
                 if daily_averages[date] >= overall_avg:
                     streak += 1
                 else:
                     break
-                    
             statistics["mood_streak"] = streak
-        
         return statistics
-        
     except Exception as e:
         logger.error(f"Error calculating statistics: {e}")
         return {
             "best_day": "",
             "energy_peak": "",
             "mood_streak": 0,
-            "average_mood": 0,
-            "mood_variability": 0,
+            "average_mood": 0.0,
+            "mood_variability": 0.0,
             "total_entries": 0
         }
 
@@ -266,7 +457,7 @@ async def health_check():
     return {
         "status": "healthy",
         "service": "ml_service",
-        "timestamp": datetime.utcnow(),
+        "timestamp": datetime.now(timezone.utc).isoformat(),
         "models_loaded": {
             "pattern_analyzer": pattern_analyzer.is_ready(),
             "timing_predictor": timing_predictor.is_ready(),
@@ -1512,6 +1703,71 @@ async def get_personalized_recommendations(
     except Exception as e:
         logger.error(f"Personalized recommendations failed: {e}")
         raise HTTPException(status_code=500, detail=f"Recommendations failed: {str(e)}")
+
+# ==================================================
+# E2 & E3 UNIFIED INSIGHTS ENDPOINTS
+# ==================================================
+from integrations.unified_insights_aggregator import aggregator
+from integrations.enhanced_unified_insights_aggregator import enhanced_aggregator
+from shared.feature_flags import feature_enabled, get_flag_bool
+
+@app.get("/api/v1/insights/unified")
+async def get_unified_insights(
+    force_refresh: bool = False,
+    enhanced: bool = False,
+    current_user: dict = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """
+    E2/E3 Epic: Unified insights aggregation endpoint
+    Aggregates insights from mood, journal, community, and ML data
+    
+    Parameters:
+    - enhanced: Use enhanced ML aggregator with sentiment analysis and pattern detection
+    """
+    if not feature_enabled('USE_SERVER_UNIFIED_INSIGHTS'):
+        raise HTTPException(status_code=404, detail="Unified insights disabled")
+    
+    user_id = current_user.get("sub") or current_user.get("id") or current_user.get("user_id")
+    if not user_id:
+        raise HTTPException(status_code=400, detail="User ID missing")
+    
+    # Choose aggregator based on enhanced flag and feature availability
+    use_enhanced = enhanced and get_flag_bool('USE_ENHANCED_ML_INSIGHTS', default=True)
+    
+    if use_enhanced:
+        result = enhanced_aggregator.get_unified_insights(db, user_id, force_refresh=force_refresh)
+        result['version'] = 'v2_enhanced'
+    else:
+        result = aggregator.get_unified_insights(db, user_id, force_refresh=force_refresh)
+        result['version'] = 'v1_baseline'
+    
+    return result
+
+@app.get("/api/v1/insights/models/status")
+async def get_ml_models_status(
+    current_user: dict = Depends(get_current_user)
+):
+    """
+    Get status of ML models used in enhanced insights
+    """
+    if not get_flag_bool('USE_ENHANCED_ML_INSIGHTS', default=True):
+        raise HTTPException(status_code=404, detail="Enhanced ML insights disabled")
+    
+    return enhanced_aggregator.get_model_status()
+
+@app.post("/api/v1/insights/unified/clear-cache")
+async def clear_unified_insights_cache(
+    current_user: dict = Depends(get_current_user)
+):
+    """
+    Clear unified insights cache (for testing)
+    """
+    # Clear both caches
+    aggregator.clear_cache()
+    enhanced_aggregator.clear_cache()
+    
+    return {"message": "Cache cleared successfully"}
 
 if __name__ == "__main__":
     import uvicorn
