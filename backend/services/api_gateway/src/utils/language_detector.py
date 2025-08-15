@@ -5,7 +5,7 @@ Detects language from text input for voice commands and content
 
 import time
 import re
-from typing import Dict, List, Optional, Tuple
+from typing import Dict, List, Optional, Tuple, Any
 import structlog
 
 # Import language detection libraries

@@ -18,6 +18,45 @@ celery==5.3.4
 openai==1.3.7
 python-dotenv==1.0.0
 pytest==7.4.3
+
+# BK-003 Event Bus Dependencies
+nats-py>=2.6.0
+pytest-asyncio>=0.21.1
+pytest-cov>=4.1.0
+
+# V3 Enhanced Dependencies (from api_gateway requirements-v3.txt)
+
+# AI & ML Integration
+numpy>=1.24.0
+scikit-learn>=1.3.0
+transformers>=4.35.0
+torch>=2.1.0  # For AI context processing
+sentence-transformers>=2.2.2  # For semantic similarity
+
+# Voice Processing & NLP
+nltk>=3.8.1
+spacy>=3.7.0
+langdetect>=1.0.9
+textblob>=0.17.1
+# Note: speech-recognition is optional for ARM64 compatibility
+# speech-recognition>=3.9.0  # For voice command processing (when available)
+# librosa>=0.10.1  # For audio processing (heavy dependency, optional)
+
+# Cultural Intelligence & Localization
+babel>=2.13.0
+# polyglot>=16.7.4  # For multilingual text processing (ARM64 compatibility issues)
+pycountry>=22.3.13  # For country/region detection
+
+# WebSocket & Real-time Features (fixed version compatibility)
+python-socketio>=5.8.0  # Fixed: use python-socketio not socketio
+async-lru>=2.0.4
+cachetools>=5.3.2
+
+# Additional testing and development dependencies
+coverage==7.3.2
+pytest-asyncio==0.21.1
+pytest-cov==4.1.0
+nats-py==2.6.0
 pytest-asyncio==0.21.1
 loguru==0.7.2
 prometheus-client==0.19.0

@@ -1,0 +1,112 @@
+# Performance Configuration for MantraPath V3
+# Performance monitoring and optimization settings
+
+performance:
+  # General performance settings
+  general:
+    max_request_size: 50MB
+    request_timeout: 30  # seconds
+    keep_alive_timeout: 5  # seconds
+    max_connections: 1000
+    worker_processes: 4
+    
+  # Circuit breaker settings
+  circuit_breaker:
+    failure_threshold: 5
+    recovery_timeout: 30  # seconds
+    half_open_max_calls: 3
+    monitoring_period: 60  # seconds
+    
+  # Rate limiting
+  rate_limiting:
+    global:
+      requests_per_minute: 1000
+      burst_size: 100
+    per_user:
+      requests_per_minute: 60
+      burst_size: 10
+    per_ip:
+      requests_per_minute: 100
+      burst_size: 20
+      
+  # Caching
+  caching:
+    default_ttl: 300  # seconds
+    max_size: 1000  # entries
+    voice_cache_ttl: 1800  # 30 minutes
+    cultural_cache_ttl: 3600  # 1 hour
+    
+  # Load balancing
+  load_balancing:
+    algorithm: "round_robin"  # round_robin, least_connections, ip_hash
+    health_check_interval: 30  # seconds
+    health_check_timeout: 5  # seconds
+    max_retries: 3
+    
+  # Monitoring
+  monitoring:
+    metrics_enabled: true
+    metrics_port: 9090
+    health_check_path: "/health"
+    detailed_health_path: "/health/detailed"
+    
+  # Performance thresholds
+  thresholds:
+    response_time:
+      warning: 1000  # milliseconds
+      critical: 5000  # milliseconds
+    cpu_usage:
+      warning: 70  # percentage
+      critical: 90  # percentage
+    memory_usage:
+      warning: 80  # percentage
+      critical: 95  # percentage
+    disk_usage:
+      warning: 85  # percentage
+      critical: 95  # percentage
+      
+  # Real-time processing
+  realtime:
+    voice_latency_target: 100  # milliseconds
+    ai_processing_timeout: 5000  # milliseconds
+    cultural_processing_timeout: 1000  # milliseconds
+    
+  # Database performance
+  database:
+    connection_pool_size: 20
+    connection_timeout: 30  # seconds
+    query_timeout: 30  # seconds
+    slow_query_threshold: 1000  # milliseconds
+    
+  # Redis performance
+  redis:
+    connection_pool_size: 10
+    connection_timeout: 5  # seconds
+    command_timeout: 1  # seconds
+    max_retries: 3
+    
+  # Service-specific settings
+  services:
+    voice_service:
+      max_concurrent_requests: 50
+      processing_timeout: 10  # seconds
+      
+    ml_service:
+      max_concurrent_requests: 20
+      processing_timeout: 30  # seconds
+      
+    translation_service:
+      max_concurrent_requests: 100
+      processing_timeout: 15  # seconds
+      
+    chatbot_service:
+      max_concurrent_requests: 100
+      processing_timeout: 10  # seconds
+      
+  # NATS performance
+  nats:
+    max_pending_messages: 1000
+    ack_wait: 30  # seconds
+    max_deliver: 3
+    connect_timeout: 5  # seconds
+    publish_timeout: 2  # seconds

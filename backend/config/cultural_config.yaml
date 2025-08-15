@@ -1,0 +1,130 @@
+# Cultural Configuration for MantraPath V3
+# Cultural context and adaptation settings
+
+cultural:
+  # Cultural detection
+  detection:
+    enabled: true
+    confidence_threshold: 0.7
+    fallback_region: "US"
+    
+  # Supported regions with cultural dimensions
+  regions:
+    US:
+      name: "United States"
+      formality: "medium"
+      directness: "high"
+      time_sensitivity: "high"
+      context: "low"
+      power_distance: 40
+      individualism: 91
+      uncertainty_avoidance: 46
+      long_term_orientation: 26
+      
+    JP:
+      name: "Japan"
+      formality: "high"
+      directness: "low" 
+      time_sensitivity: "high"
+      context: "high"
+      power_distance: 54
+      individualism: 46
+      uncertainty_avoidance: 92
+      long_term_orientation: 88
+      
+    DE:
+      name: "Germany"
+      formality: "medium"
+      directness: "very_high"
+      time_sensitivity: "very_high"
+      context: "low"
+      power_distance: 35
+      individualism: 67
+      uncertainty_avoidance: 65
+      long_term_orientation: 83
+      
+    BR:
+      name: "Brazil"
+      formality: "low"
+      directness: "medium"
+      time_sensitivity: "low"
+      context: "medium"
+      power_distance: 69
+      individualism: 38
+      uncertainty_avoidance: 76
+      long_term_orientation: 44
+      
+    IN:
+      name: "India"
+      formality: "high"
+      directness: "low"
+      time_sensitivity: "medium"
+      context: "high"
+      power_distance: 77
+      individualism: 48
+      uncertainty_avoidance: 40
+      long_term_orientation: 51
+      
+    CN:
+      name: "China"
+      formality: "high"
+      directness: "low"
+      time_sensitivity: "medium"
+      context: "high"
+      power_distance: 80
+      individualism: 20
+      uncertainty_avoidance: 30
+      long_term_orientation: 87
+      
+  # Adaptation rules
+  adaptation:
+    ui:
+      formality_high:
+        greeting: "Dear valued user"
+        buttons: "Please select"
+        confirmations: "We would be honored if you could confirm"
+      formality_medium:
+        greeting: "Hello"
+        buttons: "Choose"
+        confirmations: "Please confirm"
+      formality_low:
+        greeting: "Hi there"
+        buttons: "Pick"
+        confirmations: "OK?"
+        
+    content:
+      directness_high:
+        instructions: "Direct and explicit"
+        feedback: "Clear and immediate"
+      directness_low:
+        instructions: "Gentle and indirect"
+        feedback: "Soft and considerate"
+        
+    interaction:
+      time_sensitivity_high:
+        response_timeout: 5  # seconds
+        progress_indicators: true
+      time_sensitivity_low:
+        response_timeout: 30  # seconds
+        progress_indicators: false
+        
+  # Language-culture mappings
+  language_culture:
+    en: ["US", "UK", "CA", "AU"]
+    es: ["ES", "MX", "AR", "CO"]
+    fr: ["FR", "CA", "BE", "CH"]
+    de: ["DE", "AT", "CH"]
+    it: ["IT", "CH"]
+    pt: ["BR", "PT"]
+    zh: ["CN", "TW", "HK", "SG"]
+    ja: ["JP"]
+    ko: ["KR"]
+    ar: ["SA", "AE", "EG", "MA"]
+    hi: ["IN"]
+    ru: ["RU", "BY", "KZ"]
+    
+  # Processing settings
+  processing:
+    cache_ttl: 3600  # seconds
+    update_frequency: 86400  # seconds (daily)
+    confidence_decay: 0.1  # per day

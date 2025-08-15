@@ -72,6 +72,13 @@ class GatewayConfig(BaseSettings):
     metrics_enabled: bool = Field(default=True)
     metrics_port: int = Field(default=9090)
     
+    # V3 Enhanced Features
+    voice_routing_enabled: bool = Field(default=True)
+    ai_context_enabled: bool = Field(default=True)
+    cultural_adaptation_enabled: bool = Field(default=True)
+    websocket_voice_streaming: bool = Field(default=True)
+    performance_monitoring: bool = Field(default=True)
+    
     model_config = {
         "env_file": ".env",
         "env_prefix": "GATEWAY_",

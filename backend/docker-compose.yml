@@ -34,25 +34,89 @@ services:
       retries: 5
       start_period: 30s
 
-  # API Gateway - New Modular Implementation
+  # NATS for real-time messaging and WebSocket clustering with JetStream
+  nats:
+    image: nats:2.10-alpine
+    ports:
+      - "4222:4222"    # Client connections
+      - "8222:8222"    # HTTP monitoring
+      - "6222:6222"    # Clustering port
+    volumes:
+      - nats_data:/data/jetstream
+      - ./config/nats.conf:/etc/nats/nats.conf:ro
+    networks:
+      - mantrapath-network
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:8222/healthz"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 10s
+    command: [
+      "--config", "/etc/nats/nats.conf"
+    ]
+    environment:
+      - NATS_JETSTREAM_MAX_MEMORY=1GB
+      - NATS_JETSTREAM_MAX_FILE=10GB
+
+  # API Gateway - Main service (V3 Enhanced)
   api-gateway:
     build:
-      context: ./services/api_gateway
-      dockerfile: Dockerfile
+      context: .
+      dockerfile: services/api_gateway/Dockerfile
     ports:
       - "8000:8000"
+      - "8001:8001"  # WebSocket port
+      - "9090:9090"  # Metrics port
     env_file:
       - .env
     environment:
-      # Gateway Configuration
-      - GATEWAY_ENVIRONMENT=development
-      - GATEWAY_DEBUG=true
+      # V3 Enhanced Configuration
+      - GATEWAY_VERSION=v3_enhanced
+      - GATEWAY_ENVIRONMENT=${ENVIRONMENT:-development}
+      - GATEWAY_DEBUG=${DEBUG:-true}
       - GATEWAY_HOST=0.0.0.0
-      - GATEWAY_PORT=${API_GATEWAY_PORT}
-      - GATEWAY_REDIS_URL=redis://redis:6379
+      - GATEWAY_PORT=8000
+      - WEBSOCKET_PORT=8001
+      - METRICS_PORT=9090
       
-      # Service URLs
-      - SERVICE_AUTH_SERVICE_URL=http://auth-service:${AUTH_SERVICE_PORT}
+      # Voice Features
+      - VOICE_ROUTING_ENABLED=true
+      - VOICE_COMMAND_TIMEOUT=5000
+      - VOICE_CONFIDENCE_THRESHOLD=0.7
+      - SUPPORTED_LANGUAGES=en,hi,es,fr,de,it,pt,ru,ja,zh,ko,ar,bn,ta,te,gu,mr,pa,ur,ml,kn,as
+      - VOICE_SERVICE_URL=http://voice-service:8004
+      
+      # AI Context
+      - AI_CONTEXT_ENABLED=true
+      - AI_CONTEXT_CACHE_TTL=300
+      - AI_CONTEXT_MAX_SIZE=1024
+      - ML_SERVICE_URL=http://ml-service:8006
+      
+      # Cultural Intelligence
+      - CULTURAL_ADAPTATION_ENABLED=true
+      - CULTURAL_CONTEXT_CACHE_TTL=600
+      - DEFAULT_CULTURE=neutral
+      - CULTURAL_FALLBACK_ENABLED=true
+      - TRANSLATION_SERVICE_URL=http://translation-service:8005
+      
+      # WebSocket Enhanced
+      - WEBSOCKET_MAX_CONNECTIONS=10000
+      - WEBSOCKET_HEARTBEAT_INTERVAL=30
+      - WEBSOCKET_VOICE_STREAMING=true
+      - WEBSOCKET_CLUSTERING_ENABLED=true
+      - NATS_URL=nats://nats:4222
+      
+      # Performance
+      - CONTEXT_CACHE_SIZE=10000
+      - CONNECTION_POOL_SIZE=100
+      - RESPONSE_CACHE_TTL=60
+      - PERFORMANCE_MONITORING=true
+      
+      # Database & Cache
+      - DATABASE_URL=postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@postgres:5432/${POSTGRES_DB:-mantrapath}
+      - REDIS_URL=redis://redis:6379/0
+      - REDIS_CONTEXT_DB=1
       - SERVICE_PROFILE_SERVICE_URL=http://profile-service:${PROFILE_SERVICE_PORT}
       - SERVICE_MOOD_SERVICE_URL=http://mood-service:${MOOD_SERVICE_PORT}
       - SERVICE_CHATBOT_SERVICE_URL=http://chatbot-service:${CHATBOT_SERVICE_PORT}
@@ -430,6 +494,7 @@ services:
 volumes:
   postgres_data:
   agent_redis_data:
+  nats_data:
 
 networks:
   mantrapath-network:

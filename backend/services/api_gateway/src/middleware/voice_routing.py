@@ -8,6 +8,7 @@ import logging
 from typing import Callable, Dict, Any, Optional
 from fastapi import Request, Response
 from fastapi.responses import JSONResponse
+from starlette.middleware.base import BaseHTTPMiddleware
 import structlog
 
 from ..services.voice_router import VoiceCommandRouter
@@ -17,10 +18,11 @@ from ..utils.language_detector import LanguageDetector
 logger = structlog.get_logger(__name__)
 
 
-class VoiceRoutingMiddleware:
+class VoiceRoutingMiddleware(BaseHTTPMiddleware):
     """Middleware for voice command routing and preparation"""
     
-    def __init__(self, voice_router: VoiceCommandRouter):
+    def __init__(self, app, voice_router: VoiceCommandRouter):
+        super().__init__(app)
         self.voice_router = voice_router
         self.language_detector = LanguageDetector()
         self.stats = {
@@ -30,7 +32,7 @@ class VoiceRoutingMiddleware:
             "avg_processing_time": 0.0
         }
     
-    async def __call__(self, request: Request, call_next: Callable) -> Response:
+    async def dispatch(self, request: Request, call_next: Callable) -> Response:
         """Process request through voice routing middleware"""
         start_time = time.time()
         self.stats["total_requests"] += 1
@@ -48,8 +50,8 @@ class VoiceRoutingMiddleware:
             # Pre-process voice command if needed
             await self._preprocess_voice_request(request)
         
-        # Continue with request processing
         try:
+            # Process the request
             response = await call_next(request)
             
             # Post-process voice response if needed
@@ -57,37 +59,20 @@ class VoiceRoutingMiddleware:
                 response = await self._postprocess_voice_response(request, response)
             
             # Update processing time stats
-            processing_time = (time.time() - start_time) * 1000
+            processing_time = time.time() - start_time
             self._update_stats(processing_time, success=True)
             
             return response
             
         except Exception as e:
             self.stats["routing_errors"] += 1
-            processing_time = (time.time() - start_time) * 1000
+            processing_time = time.time() - start_time
             self._update_stats(processing_time, success=False)
-            
-            logger.exception(
-                "Voice routing middleware error",
-                error=str(e),
-                path=request.url.path,
-                method=request.method,
-                processing_time=processing_time
+            logger.error("Voice routing middleware error", error=str(e))
+            return JSONResponse(
+                status_code=500,
+                content={"error": "Voice routing processing failed"}
             )
-            
-            # Return error response for voice requests
-            if is_voice_request:
-                return JSONResponse(
-                    status_code=500,
-                    content={
-                        "error": "Voice processing failed",
-                        "message": str(e),
-                        "request_id": getattr(request.state, 'request_id', None)
-                    }
-                )
-            
-            # Re-raise for non-voice requests
-            raise e
     
     def _is_voice_request(self, request: Request) -> bool:
         """Determine if this is a voice-related request"""
@@ -230,6 +215,10 @@ class VoiceRoutingMiddleware:
                 alpha * processing_time + 
                 (1 - alpha) * self.stats["avg_processing_time"]
             )
+        
+        # Update success/error rates
+        if not success:
+            self.stats["routing_errors"] += 1
     
     def get_stats(self) -> Dict[str, Any]:
         """Get middleware statistics"""

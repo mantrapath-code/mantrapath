@@ -1,0 +1,64 @@
+# Voice Configuration for MantraPath V3
+# Voice processing and routing configuration
+
+voice:
+  # Voice processing settings
+  processing:
+    max_audio_length: 300  # seconds
+    sample_rate: 16000
+    channels: 1
+    format: "wav"
+    
+  # Voice quality settings
+  quality:
+    min_volume: 0.1
+    max_noise_level: 0.3
+    min_speech_duration: 0.5  # seconds
+    
+  # Voice routing
+  routing:
+    voice_service_url: "http://voice-service:8004"
+    timeout: 30  # seconds
+    retry_attempts: 3
+    
+  # Intent classification
+  intent:
+    confidence_threshold: 0.7
+    max_alternatives: 3
+    cultural_adaptation: true
+    
+  # Multilingual support
+  languages:
+    supported:
+      - "en"  # English
+      - "es"  # Spanish
+      - "fr"  # French
+      - "de"  # German
+      - "it"  # Italian
+      - "pt"  # Portuguese
+      - "zh"  # Chinese
+      - "ja"  # Japanese
+      - "ko"  # Korean
+      - "ar"  # Arabic
+      - "hi"  # Hindi
+      - "ru"  # Russian
+    default: "en"
+    auto_detect: true
+    
+  # Emotion detection
+  emotion:
+    enabled: true
+    confidence_threshold: 0.6
+    emotions:
+      - "joy"
+      - "sadness"
+      - "anger"
+      - "fear"
+      - "surprise"
+      - "neutral"
+      
+  # Real-time settings
+  realtime:
+    chunk_size: 1024
+    buffer_size: 4096
+    latency_target: 100  # milliseconds

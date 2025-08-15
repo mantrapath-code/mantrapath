@@ -31,7 +31,7 @@ from models.request_models import (
 )
 from shared.auth import get_current_user
 from shared.database import get_db, create_tables
-from shared.events import get_event_bus, EventChannels
+from shared.events import get_enhanced_event_bus, V3EventChannels
 from shared.redis_client import redis_client as shared_redis_client
 
 # Setup logging
@@ -80,7 +80,7 @@ async def lifespan(app: FastAPI):
         logger.info("Redis connection established")
         
         # Initialize event bus
-        event_bus = get_event_bus()
+        event_bus = get_enhanced_event_bus()
         logger.info("Event bus initialized")
         
         # Initialize translation engine
@@ -525,7 +525,7 @@ async def publish_translation_event(result, user_id: Optional[str]):
     try:
         if event_bus:
             await event_bus.publish(
-                EventChannels.TRANSLATION_COMPLETED,
+                V3EventChannels.TRANSLATION_COMPLETED,
                 {
                     "user_id": user_id,
                     "source_language": result.source_language,

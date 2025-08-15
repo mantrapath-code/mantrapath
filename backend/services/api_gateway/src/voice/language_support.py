@@ -103,17 +103,50 @@ class EnhancedLanguageDetector:
                 "patterns": [r"[\u0A00-\u0A7F]+"]
             },
             
-            # Urdu (Arabic script)
+            # Chinese
+            "zh": {
+                "script_range": (0x4E00, 0x9FFF),
+                "common_words": ["我", "很", "高兴", "是", "的", "在", "有", "不", "人", "这"],
+                "patterns": [r"[\u4E00-\u9FFF]+"],
+                "script_name": "han"
+            },
+            
+            # Arabic
+            "ar": {
+                "script_range": (0x0600, 0x06FF),
+                "common_words": ["أنا", "سعيد", "اليوم", "جيد", "في", "من", "على", "هذا"],
+                "patterns": [r"[\u0600-\u06FF]+"],
+                "script_name": "arabic"
+            },
+            
+            # Urdu (Arabic script but different words)
             "ur": {
                 "script_range": (0x0600, 0x06FF),
-                "common_words": ["ہوں", "میں", "آج", "میرا"],
-                "patterns": [r"[\u0600-\u06FF]+"]
+                "common_words": ["ہوں", "میں", "آج", "میرا", "اچھا", "خوش", "کا", "کے"],
+                "patterns": [r"[\u0600-\u06FF]+"],
+                "script_name": "arabic"
+            },
+            
+            # French
+            "fr": {
+                "script_range": (0x0000, 0x007F),
+                "common_words": ["je", "suis", "mon", "ma", "mes", "aujourd'hui", "content", "bien", "très", "mais", "avec", "pour", "dans", "sur"],
+                "patterns": [r"[a-zA-ZàâäéèêëïîôùûüÿæœçÀÂÄÉÈÊËÏÎÔÙÛÜŸÆŒÇ]+"],
+                "accented_chars": "àâäéèêëïîôùûüÿæœç"
+            },
+            
+            # Spanish
+            "es": {
+                "script_range": (0x0000, 0x007F),
+                "common_words": ["soy", "estoy", "mi", "mis", "hoy", "muy", "con", "para", "en", "de", "que", "pero"],
+                "patterns": [r"[a-zA-ZáéíóúüñÁÉÍÓÚÜÑ]+"],
+                "accented_chars": "áéíóúüñ"
             },
             
             # English
             "en": {
                 "script_range": (0x0000, 0x007F),
-                "common_words": ["the", "and", "is", "am", "my", "today", "feeling", "mood"],
+                "common_words": ["the", "and", "is", "am", "my", "today", "feeling", "mood", "very", "with", "for", "in"],
                 "patterns": [r"[a-zA-Z]+"]
             }
         }
@@ -145,9 +178,13 @@ class EnhancedLanguageDetector:
         """Fallback language detection using script and pattern analysis"""
         text_lower = text.lower().strip()
         
-        # Script-based detection for Indian languages
+        # First, check for non-Latin scripts with high accuracy
         for lang_code, lang_info in self.fallback_patterns.items():
             script_start, script_end = lang_info["script_range"]
+            
+            # Skip Latin script languages for now
+            if script_start == 0x0000 and script_end == 0x007F:
+                continue
             
             # Check if text contains characters from this script
             script_chars = sum(1 for char in text if script_start <= ord(char) <= script_end)
@@ -157,15 +194,76 @@ class EnhancedLanguageDetector:
                 script_ratio = script_chars / total_chars
                 
                 if script_ratio > 0.7:  # 70% of characters match script
-                    # Additional word-based verification
-                    word_matches = sum(1 for word in lang_info["common_words"] if word in text)
-                    confidence = min(0.95, script_ratio + (word_matches * 0.1))
-                    
-                    return LanguageDetectionResult(
-                        language=lang_code,
-                        confidence=confidence,
-                        script=f"script_{script_start:04x}_{script_end:04x}"
-                    )
+                    # For Arabic script, distinguish between Arabic and Urdu
+                    if lang_code in ["ar", "ur"] and script_ratio > 0.7:
+                        word_matches = sum(1 for word in lang_info["common_words"] if word in text)
+                        confidence = min(0.95, script_ratio + (word_matches * 0.1))
+                        
+                        # If specific words match, return that language
+                        if word_matches > 0:
+                            return LanguageDetectionResult(
+                                language=lang_code,
+                                confidence=confidence,
+                                script=f"script_{script_start:04x}_{script_end:04x}"
+                            )
+                        # If no specific words, default to Arabic for Arabic script
+                        elif lang_code == "ar":
+                            return LanguageDetectionResult(
+                                language="ar",
+                                confidence=0.8,
+                                script=f"script_{script_start:04x}_{script_end:04x}"
+                            )
+                    else:
+                        # For other scripts (Chinese, Devanagari, etc.)
+                        word_matches = sum(1 for word in lang_info["common_words"] if word in text)
+                        confidence = min(0.95, script_ratio + (word_matches * 0.1))
+                        
+                        return LanguageDetectionResult(
+                            language=lang_code,
+                            confidence=confidence,
+                            script=f"script_{script_start:04x}_{script_end:04x}"
+                        )
+        
+        # For Latin script languages, use word-based detection with improved English detection
+        latin_languages = ["en", "fr", "es"]
+        best_match = None
+        best_confidence = 0.0
+        
+        for lang_code in latin_languages:
+            lang_info = self.fallback_patterns.get(lang_code, {})
+            common_words = lang_info.get("common_words", [])
+            
+            # Count word matches
+            word_matches = sum(1 for word in common_words if word in text_lower)
+            total_words = len(text_lower.split())
+            
+            if word_matches > 0 and total_words > 0:
+                confidence = min(0.95, (word_matches / max(total_words, 3)) * 0.8 + 0.15)
+                
+                # Check for accented characters for French/Spanish
+                if lang_code in ["fr", "es"]:
+                    accented_chars = lang_info.get("accented_chars", "")
+                    has_accents = any(char in text for char in accented_chars)
+                    if has_accents:
+                        confidence += 0.15
+                
+                # English gets a boost for common English patterns
+                if lang_code == "en":
+                    english_patterns = ["I'm", "feeling", "today", "my", "the", "and", "is", "are"]
+                    pattern_matches = sum(1 for pattern in english_patterns if pattern.lower() in text_lower)
+                    if pattern_matches > 0:
+                        confidence += 0.1
+                
+                if confidence > best_confidence:
+                    best_confidence = confidence
+                    best_match = lang_code
+        
+        if best_match and best_confidence > 0.5:
+            return LanguageDetectionResult(
+                language=best_match,
+                confidence=best_confidence,
+                script="latin"
+            )
         
         # Default to English with low confidence
         return LanguageDetectionResult(

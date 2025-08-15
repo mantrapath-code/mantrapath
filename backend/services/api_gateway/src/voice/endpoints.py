@@ -363,7 +363,7 @@ async def voice_stream_websocket(websocket: WebSocket, session_id: str):
             elif message_type == "language_detection":
                 # Detect language
                 text = message.get("data", {}).get("text", "")
-                detected_lang = ml_support.detect_language(text)
+                detected_lang = await ml_support.detect_language(text)
                 cultural_context = ml_support.get_cultural_context(detected_lang)
                 
                 await ws_manager.send_message(session_id, {
