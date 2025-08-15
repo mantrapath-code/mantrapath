@@ -35,7 +35,7 @@ show_help() {
     echo "🚀 start-dev.sh"
     echo "   • Complete development environment"
     echo "   • Starts: Backend services + Frontend dev server"
-    echo "   • Ports: 8000 (gateway), 8002 (notifications), 8003 (mood), 5173 (frontend)"
+    echo "   • Ports: ${API_GATEWAY_PORT} (gateway), 8002 (notifications), 8003 (mood), ${FRONTEND_PORT} (frontend)"
     echo "   • Features: Auto-reload, health checks, browser auto-open"
     echo ""
     echo "🔧 start-backend.sh"

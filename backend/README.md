@@ -137,7 +137,7 @@ pip install -r requirements.txt
 ./start-dev.sh
 
 # Access API documentation
-# API Gateway: http://localhost:8000/docs
+# API Gateway: ${PROTOCOL}://${DOMAIN}:${API_GATEWAY_PORT}/docs
 # Individual services: http://localhost:{port}/docs
 ```
 

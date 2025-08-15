@@ -1,7 +1,9 @@
 import { useState, useEffect, useCallback } from 'react'
 import { toast } from 'sonner'
 import { apiService } from '@/services/api'
+import { JournalEntry as BackendJournalEntry } from '@/types/index'
 
+// Local interface for frontend-specific journal entry structure
 export interface JournalEntry {
   id: string
   title?: string

@@ -1,10 +1,21 @@
 /**
- * Development authentication utilities
- * Automatically creates and logs in a test user for development
+ * Development authentication utilities for MantraPath
+ * Provides automatic authentication during development
  */
 
 import { authService } from '@/services/auth'
 import { apiService } from '@/services/api'
+
+const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000'
+
+interface DevUser {
+  email: string
+  username: string
+  password: string
+  first_name: string
+  last_name: string
+  skip_verification?: boolean
+}
 
 export async function ensureDevAuthentication(): Promise<boolean> {
   // Only run in development mode
@@ -63,7 +74,7 @@ export async function ensureDevAuthentication(): Promise<boolean> {
 export async function createVerifiedTestUser(): Promise<boolean> {
   try {
     // Create user directly via backend API with verification bypassed
-    const response = await fetch('http://localhost:8000/auth/dev/create-test-user', {
+    const response = await fetch(`${API_BASE_URL}/auth/dev/create-test-user`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',

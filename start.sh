@@ -8,6 +8,23 @@ set -e
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$SCRIPT_DIR"
 
+# Load environment variables
+if [ -f "$PROJECT_ROOT/backend/.env" ]; then
+    set -a # automatically export all variables
+    source "$PROJECT_ROOT/backend/.env"
+    set +a
+else
+    # Set defaults
+    DOMAIN=${DOMAIN:-localhost}
+    PROTOCOL=${PROTOCOL:-http}
+    FRONTEND_PORT=${FRONTEND_PORT:-5173}
+    API_GATEWAY_PORT=${API_GATEWAY_PORT:-8000}
+fi
+
+# Construct URLs from environment variables
+FRONTEND_URL="${PROTOCOL}://${DOMAIN}:${FRONTEND_PORT}"
+API_GATEWAY_URL="${PROTOCOL}://${DOMAIN}:${API_GATEWAY_PORT}"
+
 # Colors for output
 GREEN='\033[0;32m'
 BLUE='\033[0;34m'
@@ -93,8 +110,8 @@ start_backend() {
     docker-compose ps
     
     echo ""
-    print_info "API Gateway: http://localhost:8000"
-    print_info "Health Check: http://localhost:8000/health"
+    print_info "API Gateway: $API_GATEWAY_URL"
+    print_info "Health Check: $API_GATEWAY_URL/health"
 }
 
 start_frontend() {
@@ -106,7 +123,7 @@ start_frontend() {
         npm install
     fi
     
-    print_info "Frontend starting at: http://localhost:5173"
+    print_info "Frontend starting at: $FRONTEND_URL"
     npm run dev
 }
 
@@ -157,7 +174,7 @@ view_status() {
         port=$(echo $service | cut -d: -f1)
         name=$(echo $service | cut -d: -f2)
         
-        if curl -s -f "http://localhost:$port/health" >/dev/null 2>&1; then
+        if curl -s -f "${PROTOCOL}://${DOMAIN}:$port/health" >/dev/null 2>&1; then
             echo -e "  ${GREEN}✅${NC} $name (port $port)"
         else
             echo -e "  ${RED}❌${NC} $name (port $port)"
@@ -205,13 +222,13 @@ show_help() {
     echo "🐳 Docker Services:"
     echo "   • PostgreSQL   - Main database (port 5432)"
     echo "   • Redis        - Cache and sessions (port 6379)"
-    echo "   • API Gateway  - http://localhost:8000"
-    echo "   • Auth Service - http://localhost:8001"
-    echo "   • Community    - http://localhost:8006"
+    echo "   • API Gateway  - $API_GATEWAY_URL"
+    echo "   • Auth Service - ${PROTOCOL}://${DOMAIN}:8001"
+    echo "   • Community    - ${PROTOCOL}://${DOMAIN}:8006"
     echo "   • [... and more]"
     echo ""
     echo "💻 Frontend:"
-    echo "   • Development server: http://localhost:5173"
+    echo "   • Development server: $FRONTEND_URL"
     echo "   • Built with Vite + React + TypeScript"
     echo ""
     echo "🔧 Useful Commands:"
@@ -256,7 +273,7 @@ first_time_setup() {
     print_info "🚀 You can now:"
     print_info "   • Start full development: ./start.sh → option 1"
     print_info "   • View service status: ./start.sh → option 4"
-    print_info "   • Access the app: http://localhost:5173 (after starting frontend)"
+    print_info "   • Access the app: $FRONTEND_URL (after starting frontend)"
     print_info ""
 }
 

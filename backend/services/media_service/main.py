@@ -1,38 +1,49 @@
 """
 Media Service - File uploads, processing, and management
+Enhanced Architecture Implementation
 """
 
-from fastapi import FastAPI, Depends, HTTPException, UploadFile, File, Form, BackgroundTasks
+from fastapi import FastAPI, Depends, HTTPException, UploadFile, File, Form, BackgroundTasks, Query
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse, StreamingResponse
+from fastapi.responses import FileResponse, StreamingResponse, JSONResponse
+from fastapi.staticfiles import StaticFiles
 from sqlalchemy.orm import Session
-from sqlalchemy import desc, and_
+from sqlalchemy import desc, and_, or_
 from typing import List, Optional, Dict, Any
 from datetime import datetime
 import uuid
 import os
-import shutil
-from pathlib import Path
-from pydantic import BaseModel, UUID4
 import magic
-from PIL import Image
-import io
-import redis
+from pathlib import Path
 
-# Import shared modules
+# Import our new architecture components
+from config.settings import settings, get_file_category, is_allowed_mime_type, get_max_size_for_type
+from models.media_models import MediaFile, MediaVariant, ContentAnalysis, MediaProcessingJob
+from models.request_models import (
+    MediaUploadRequest, MediaUploadResponse, MediaFileResponse, MediaListResponse,
+    MediaUpdateRequest, MediaSearchRequest, MediaProcessingRequest, MediaProcessingResponse,
+    HealthCheckResponse, ErrorResponse
+)
+from services.storage_service import storage_service
+from services.image_processor import image_processor
+
+# Import shared modules (keeping existing imports)
 import sys
 sys.path.append(os.path.join(os.path.dirname(__file__), '..', '..'))
 
 from shared.database import get_db
 from shared.auth import get_current_user, require_moderator
-from shared.models import MediaFile, User
 
+# Initialize FastAPI app
 app = FastAPI(
     title="MantraPath Media Service",
-    description="File uploads, processing, and management",
-    version="1.0.0"
+    description="Advanced media processing service with multi-provider storage, AI analysis, and CDN integration",
+    version="2.0.0",
+    docs_url="/docs",
+    redoc_url="/redoc"
 )
 
+# CORS middleware
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -41,523 +52,398 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Configuration
-MEDIA_ROOT = Path("/app/media")  # In Docker container
-MEDIA_ROOT.mkdir(exist_ok=True)
+# Mount static files for local storage
+if settings.primary_storage_provider == "local":
+    static_path = Path(settings.local_storage_path)
+    static_path.mkdir(exist_ok=True)
+    app.mount("/static", StaticFiles(directory=str(static_path)), name="static")
 
-ALLOWED_IMAGE_TYPES = {"image/jpeg", "image/png", "image/gif", "image/webp"}
-ALLOWED_VIDEO_TYPES = {"video/mp4", "video/webm", "video/quicktime"}
-ALLOWED_AUDIO_TYPES = {"audio/mpeg", "audio/wav", "audio/ogg"}
-ALLOWED_DOCUMENT_TYPES = {"application/pdf", "text/plain"}
-
-MAX_FILE_SIZE = 50 * 1024 * 1024  # 50MB
-MAX_IMAGE_SIZE = 10 * 1024 * 1024  # 10MB
-
-# Redis for caching
-redis_client = redis.from_url(os.getenv("REDIS_URL", "redis://localhost:6379"))
-
-# Pydantic models
-class MediaResponse(BaseModel):
-    id: UUID4
-    filename: str
-    file_path: str
-    file_size: int
-    content_type: str
-    is_processed: bool
-    is_approved: bool
-    thumbnail_path: Optional[str]
-    alt_text: Optional[str]
-    caption: Optional[str]
-    tags: List[str]
-    created_at: datetime
-
-class MediaUploadResponse(BaseModel):
-    id: UUID4
-    filename: str
-    file_size: int
-    content_type: str
-    upload_url: str
-    thumbnail_url: Optional[str]
-    status: str
-
-class ModerationRequest(BaseModel):
-    action: str  # approve, reject
-    reason: Optional[str] = None
 
 # Utility functions
-def get_file_type_category(content_type: str) -> str:
-    """Categorize file by content type"""
-    if content_type in ALLOWED_IMAGE_TYPES:
-        return "image"
-    elif content_type in ALLOWED_VIDEO_TYPES:
-        return "video"
-    elif content_type in ALLOWED_AUDIO_TYPES:
-        return "audio"
-    elif content_type in ALLOWED_DOCUMENT_TYPES:
-        return "document"
-    else:
-        return "other"
+def get_safe_filename(original_filename: str, user_id: str) -> str:
+    """Generate safe filename with user and timestamp prefix"""
+    file_ext = Path(original_filename).suffix.lower()
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    unique_id = str(uuid.uuid4())[:8]
+    return f"{user_id}_{timestamp}_{unique_id}{file_ext}"
 
-def is_allowed_file_type(content_type: str) -> bool:
-    """Check if file type is allowed"""
-    allowed_types = (
-        ALLOWED_IMAGE_TYPES | 
-        ALLOWED_VIDEO_TYPES | 
-        ALLOWED_AUDIO_TYPES | 
-        ALLOWED_DOCUMENT_TYPES
-    )
-    return content_type in allowed_types
 
-def get_safe_filename(filename: str, user_id: str) -> str:
-    """Generate safe filename with user prefix"""
-    # Remove path components and clean filename
-    safe_name = os.path.basename(filename)
-    name, ext = os.path.splitext(safe_name)
-    
-    # Create unique filename
-    timestamp = datetime.utcnow().strftime("%Y%m%d_%H%M%S")
-    unique_name = f"{user_id}_{timestamp}_{name}{ext}"
-    
-    return unique_name
-
-def create_thumbnail(image_path: Path, thumbnail_path: Path, size: tuple = (300, 300)):
-    """Create thumbnail for image"""
+def detect_file_type(file_data: bytes, filename: str) -> tuple[str, str]:
+    """Detect MIME type and file category"""
     try:
-        with Image.open(image_path) as img:
-            # Convert to RGB if necessary (for PNG with transparency)
-            if img.mode in ("RGBA", "P"):
-                img = img.convert("RGB")
-            
-            # Create thumbnail
-            img.thumbnail(size, Image.Resampling.LANCZOS)
-            img.save(thumbnail_path, "JPEG", quality=85, optimize=True)
-            return True
-    except Exception as e:
-        print(f"Error creating thumbnail: {e}")
-        return False
+        mime_type = magic.from_buffer(file_data, mime=True)
+    except Exception:
+        # Fallback to filename extension
+        ext = Path(filename).suffix.lower()
+        mime_type_map = {
+            '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.png': 'image/png',
+            '.gif': 'image/gif', '.webp': 'image/webp',
+            '.mp4': 'video/mp4', '.webm': 'video/webm', '.mov': 'video/quicktime',
+            '.mp3': 'audio/mpeg', '.wav': 'audio/wav', '.ogg': 'audio/ogg',
+            '.pdf': 'application/pdf', '.txt': 'text/plain'
+        }
+        mime_type = mime_type_map.get(ext, 'application/octet-stream')
+    
+    file_category = get_file_category(mime_type)
+    return mime_type, file_category
 
-# Media upload endpoints
+
+# Main upload endpoint
 @app.post("/api/v1/media/upload", response_model=MediaUploadResponse)
 async def upload_media(
     background_tasks: BackgroundTasks,
     file: UploadFile = File(...),
     alt_text: Optional[str] = Form(None),
     caption: Optional[str] = Form(None),
-    tags: Optional[str] = Form(None),  # Comma-separated tags
+    tags: Optional[str] = Form(None),
+    is_public: Optional[bool] = Form(False),
     db: Session = Depends(get_db),
     current_user: Dict[str, Any] = Depends(get_current_user)
 ):
-    """Upload media file"""
+    """Upload media file with enhanced processing and storage"""
     
-    # Validate file size
-    file_content = await file.read()
-    file_size = len(file_content)
-    
-    if file_size > MAX_FILE_SIZE:
+    try:
+        # Read file content
+        file_content = await file.read()
+        file_size = len(file_content)
+        
+        # Validate filename
+        if not file.filename:
+            raise HTTPException(status_code=400, detail="Filename is required")
+        
+        # Detect file type and validate
+        mime_type, file_category = detect_file_type(file_content, file.filename)
+        
+        if not is_allowed_mime_type(mime_type):
+            raise HTTPException(
+                status_code=400,
+                detail=f"File type not allowed: {mime_type}"
+            )
+        
+        # Check file size limits
+        max_size = get_max_size_for_type(file_category)
+        if file_size > max_size:
+            raise HTTPException(
+                status_code=413,
+                detail=f"File too large. Maximum size for {file_category}: {max_size / 1024 / 1024:.1f}MB"
+            )
+        
+        # Generate safe filename
+        safe_filename = get_safe_filename(file.filename, str(current_user["user_id"]))
+        
+        # Upload to storage
+        upload_result = await storage_service.upload_file(
+            file_data=file_content,
+            filename=safe_filename,
+            content_type=mime_type,
+            file_category=file_category
+        )
+        
+        if not upload_result.get("success"):
+            raise HTTPException(
+                status_code=500,
+                detail=f"Upload failed: {upload_result.get('error', 'Unknown error')}"
+            )
+        
+        # Parse tags
+        tag_list = []
+        if tags:
+            tag_list = [tag.strip() for tag in tags.split(",") if tag.strip()][:20]
+        
+        # Create database record
+        media_file = MediaFile(
+            user_id=uuid.UUID(current_user["user_id"]),
+            filename=safe_filename,
+            original_filename=file.filename,
+            file_type=file_category,
+            file_size=file_size,
+            mime_type=mime_type,
+            storage_provider=upload_result.get("provider", settings.primary_storage_provider),
+            storage_path=upload_result.get("file_path", ""),
+            processing_status="pending",
+            is_public=is_public or False,
+            file_metadata={
+                "original_filename": file.filename,
+                "upload_timestamp": datetime.now().isoformat(),
+                "tags": tag_list,
+                "alt_text": alt_text,
+                "caption": caption
+            }
+        )
+        
+        db.add(media_file)
+        db.commit()
+        db.refresh(media_file)
+        
+        # Create processing job
+        processing_job = MediaProcessingJob(
+            media_file_id=media_file.id,
+            job_type="initial_processing",
+            job_config={
+                "file_category": file_category,
+                "generate_thumbnail": True,
+                "analyze_content": True
+            },
+            priority=5
+        )
+        
+        db.add(processing_job)
+        db.commit()
+        db.refresh(processing_job)
+        
+        # Queue background processing
+        background_tasks.add_task(
+            process_media_file,
+            str(media_file.id),
+            file_content,
+            file_category,
+            mime_type
+        )
+        
+        return MediaUploadResponse(
+            id=media_file.id,
+            filename=safe_filename,
+            file_size=file_size,
+            content_type=mime_type,
+            file_type=file_category,
+            upload_url=f"/api/v1/media/{media_file.id}",
+            status="uploaded_processing",
+            processing_job_id=processing_job.id
+        )
+        
+    except HTTPException:
+        raise
+    except Exception as e:
         raise HTTPException(
-            status_code=413, 
-            detail=f"File too large. Maximum size: {MAX_FILE_SIZE / 1024 / 1024}MB"
+            status_code=500,
+            detail=f"Upload failed: {str(e)}"
         )
-    
-    # Detect content type
-    content_type = magic.from_buffer(file_content, mime=True)
-    
-    # Validate file type
-    if not is_allowed_file_type(content_type):
-        raise HTTPException(
-            status_code=400,
-            detail=f"File type not allowed: {content_type}"
-        )
-    
-    # Additional validation for images
-    if content_type in ALLOWED_IMAGE_TYPES and file_size > MAX_IMAGE_SIZE:
-        raise HTTPException(
-            status_code=413,
-            detail=f"Image too large. Maximum size: {MAX_IMAGE_SIZE / 1024 / 1024}MB"
-        )
-    
-    # Generate safe filename and path
-    safe_filename = get_safe_filename(file.filename, current_user["user_id"])
-    file_category = get_file_type_category(content_type)
-    
-    # Create category directory
-    category_dir = MEDIA_ROOT / file_category
-    category_dir.mkdir(exist_ok=True)
-    
-    file_path = category_dir / safe_filename
-    
-    # Save file
-    with open(file_path, "wb") as f:
-        f.write(file_content)
-    
-    # Parse tags
-    tag_list = []
-    if tags:
-        tag_list = [tag.strip() for tag in tags.split(",") if tag.strip()]
-    
-    # Create database record
-    media_file = MediaFile(
-        id=uuid.uuid4(),
-        user_id=current_user["user_id"],
-        filename=safe_filename,
-        file_path=str(file_path),
-        file_size=file_size,
-        content_type=content_type,
-        is_processed=False,
-        is_approved=False,  # Requires moderation
-        alt_text=alt_text,
-        caption=caption,
-        tags=tag_list
-    )
-    
-    db.add(media_file)
-    db.commit()
-    db.refresh(media_file)
-    
-    # Process file in background
-    background_tasks.add_task(
-        process_media_file, 
-        str(media_file.id), 
-        str(file_path), 
-        content_type
-    )
-    
-    return MediaUploadResponse(
-        id=media_file.id,
-        filename=safe_filename,
-        file_size=file_size,
-        content_type=content_type,
-        upload_url=f"/api/v1/media/{media_file.id}/file",
-        thumbnail_url=None,  # Will be generated during processing
-        status="uploaded_pending_approval"
-    )
 
-@app.get("/api/v1/media/", response_model=List[MediaResponse])
-async def get_user_media(
-    skip: int = 0,
-    limit: int = 20,
-    content_type: Optional[str] = None,
-    approved_only: bool = True,
-    db: Session = Depends(get_db),
-    current_user: Dict[str, Any] = Depends(get_current_user)
-):
-    """Get user's uploaded media"""
-    
-    query = db.query(MediaFile).filter(
-        MediaFile.user_id == current_user["user_id"]
-    )
-    
-    if approved_only:
-        query = query.filter(MediaFile.is_approved == True)
-    
-    if content_type:
-        query = query.filter(MediaFile.content_type.like(f"{content_type}%"))
-    
-    media_files = query.order_by(
-        desc(MediaFile.created_at)
-    ).offset(skip).limit(limit).all()
-    
-    return [
-        MediaResponse(
-            id=media.id,
-            filename=media.filename,
-            file_path=media.file_path,
-            file_size=media.file_size,
-            content_type=media.content_type,
-            is_processed=media.is_processed,
-            is_approved=media.is_approved,
-            thumbnail_path=media.thumbnail_path,
-            alt_text=media.alt_text,
-            caption=media.caption,
-            tags=media.tags or [],
-            created_at=media.created_at
-        )
-        for media in media_files
-    ]
 
-@app.get("/api/v1/media/{media_id}", response_model=MediaResponse)
-async def get_media_details(
-    media_id: UUID4,
-    db: Session = Depends(get_db),
-    current_user: Dict[str, Any] = Depends(get_current_user)
-):
-    """Get media file details"""
-    
-    media = db.query(MediaFile).filter(
-        and_(
-            MediaFile.id == media_id,
-            MediaFile.user_id == current_user["user_id"]
-        )
-    ).first()
-    
-    if not media:
-        raise HTTPException(status_code=404, detail="Media not found")
-    
-    return MediaResponse(
-        id=media.id,
-        filename=media.filename,
-        file_path=media.file_path,
-        file_size=media.file_size,
-        content_type=media.content_type,
-        is_processed=media.is_processed,
-        is_approved=media.is_approved,
-        thumbnail_path=media.thumbnail_path,
-        alt_text=media.alt_text,
-        caption=media.caption,
-        tags=media.tags or [],
-        created_at=media.created_at
-    )
-
-@app.get("/api/v1/media/{media_id}/file")
+# Get media file
+@app.get("/api/v1/media/{media_id}", response_model=MediaFileResponse)
 async def get_media_file(
-    media_id: UUID4,
+    media_id: uuid.UUID,
     db: Session = Depends(get_db),
     current_user: Optional[Dict[str, Any]] = Depends(get_current_user)
 ):
-    """Serve media file"""
+    """Get media file details"""
     
     query = db.query(MediaFile).filter(MediaFile.id == media_id)
     
-    # Allow access to approved media for any user
-    # Restrict unapproved media to owner only
+    # Access control
     if current_user:
         query = query.filter(
             or_(
-                MediaFile.is_approved == True,
+                MediaFile.is_public == True,
                 MediaFile.user_id == current_user["user_id"]
             )
         )
     else:
-        query = query.filter(MediaFile.is_approved == True)
+        query = query.filter(MediaFile.is_public == True)
     
     media = query.first()
     
     if not media:
         raise HTTPException(status_code=404, detail="Media not found")
     
-    file_path = Path(media.file_path)
-    if not file_path.exists():
-        raise HTTPException(status_code=404, detail="File not found on disk")
-    
-    return FileResponse(
-        path=str(file_path),
-        media_type=media.content_type,
-        filename=media.filename
-    )
+    return MediaFileResponse.model_validate(media)
 
-@app.get("/api/v1/media/{media_id}/thumbnail")
-async def get_media_thumbnail(
-    media_id: UUID4,
-    db: Session = Depends(get_db)
+
+# List media files
+@app.get("/api/v1/media/", response_model=MediaListResponse)
+async def list_media_files(
+    page: int = Query(1, ge=1),
+    per_page: int = Query(20, ge=1, le=100),
+    file_type: Optional[str] = Query(None),
+    is_public: Optional[bool] = Query(None),
+    db: Session = Depends(get_db),
+    current_user: Optional[Dict[str, Any]] = Depends(get_current_user)
 ):
-    """Serve media thumbnail"""
+    """List media files with pagination"""
     
-    media = db.query(MediaFile).filter(
-        and_(
-            MediaFile.id == media_id,
-            MediaFile.is_approved == True
+    query = db.query(MediaFile)
+    
+    # Apply filters
+    if current_user:
+        if is_public is not None:
+            query = query.filter(MediaFile.is_public == is_public)
+        query = query.filter(
+            or_(
+                MediaFile.is_public == True,
+                MediaFile.user_id == current_user["user_id"]
+            )
         )
-    ).first()
-    
-    if not media or not media.thumbnail_path:
-        raise HTTPException(status_code=404, detail="Thumbnail not found")
-    
-    thumbnail_path = Path(media.thumbnail_path)
-    if not thumbnail_path.exists():
-        raise HTTPException(status_code=404, detail="Thumbnail file not found")
-    
-    return FileResponse(
-        path=str(thumbnail_path),
-        media_type="image/jpeg"
-    )
-
-@app.put("/api/v1/media/{media_id}")
-async def update_media(
-    media_id: UUID4,
-    alt_text: Optional[str] = None,
-    caption: Optional[str] = None,
-    tags: Optional[str] = None,
-    db: Session = Depends(get_db),
-    current_user: Dict[str, Any] = Depends(get_current_user)
-):
-    """Update media metadata"""
-    
-    media = db.query(MediaFile).filter(
-        and_(
-            MediaFile.id == media_id,
-            MediaFile.user_id == current_user["user_id"]
-        )
-    ).first()
-    
-    if not media:
-        raise HTTPException(status_code=404, detail="Media not found")
-    
-    # Update fields
-    if alt_text is not None:
-        media.alt_text = alt_text
-    if caption is not None:
-        media.caption = caption
-    if tags is not None:
-        media.tags = [tag.strip() for tag in tags.split(",") if tag.strip()]
-    
-    db.commit()
-    
-    return {"message": "Media updated successfully"}
-
-@app.delete("/api/v1/media/{media_id}")
-async def delete_media(
-    media_id: UUID4,
-    background_tasks: BackgroundTasks,
-    db: Session = Depends(get_db),
-    current_user: Dict[str, Any] = Depends(get_current_user)
-):
-    """Delete media file"""
-    
-    media = db.query(MediaFile).filter(
-        and_(
-            MediaFile.id == media_id,
-            MediaFile.user_id == current_user["user_id"]
-        )
-    ).first()
-    
-    if not media:
-        raise HTTPException(status_code=404, detail="Media not found")
-    
-    # Delete from database
-    db.delete(media)
-    db.commit()
-    
-    # Delete files in background
-    background_tasks.add_task(
-        cleanup_media_files, 
-        media.file_path, 
-        media.thumbnail_path
-    )
-    
-    return {"message": "Media deleted successfully"}
-
-# Moderation endpoints
-@app.get("/api/v1/media/admin/pending")
-async def get_pending_media(
-    skip: int = 0,
-    limit: int = 50,
-    db: Session = Depends(get_db),
-    current_user: Dict[str, Any] = Depends(require_moderator)
-):
-    """Get media files pending approval (moderator only)"""
-    
-    media_files = db.query(MediaFile).filter(
-        MediaFile.is_approved == False
-    ).order_by(MediaFile.created_at).offset(skip).limit(limit).all()
-    
-    return [
-        {
-            "id": str(media.id),
-            "filename": media.filename,
-            "content_type": media.content_type,
-            "file_size": media.file_size,
-            "uploader_id": media.user_id,
-            "alt_text": media.alt_text,
-            "caption": media.caption,
-            "tags": media.tags,
-            "created_at": media.created_at.isoformat(),
-            "thumbnail_url": f"/api/v1/media/{media.id}/thumbnail" if media.thumbnail_path else None
-        }
-        for media in media_files
-    ]
-
-@app.post("/api/v1/media/{media_id}/moderate")
-async def moderate_media(
-    media_id: UUID4,
-    moderation: ModerationRequest,
-    db: Session = Depends(get_db),
-    current_user: Dict[str, Any] = Depends(require_moderator)
-):
-    """Moderate media file (approve/reject)"""
-    
-    media = db.query(MediaFile).filter(MediaFile.id == media_id).first()
-    
-    if not media:
-        raise HTTPException(status_code=404, detail="Media not found")
-    
-    if moderation.action == "approve":
-        media.is_approved = True
-        message = "Media approved successfully"
-    elif moderation.action == "reject":
-        # Delete rejected media
-        db.delete(media)
-        # Clean up files in background would go here
-        message = "Media rejected and deleted"
     else:
-        raise HTTPException(status_code=400, detail="Invalid moderation action")
+        query = query.filter(MediaFile.is_public == True)
     
-    db.commit()
+    if file_type:
+        query = query.filter(MediaFile.file_type == file_type)
     
-    # TODO: Send notification to user about moderation decision
+    # Get total count
+    total = query.count()
     
-    return {"message": message, "action": moderation.action}
+    # Apply pagination
+    offset = (page - 1) * per_page
+    media_files = query.order_by(desc(MediaFile.created_at)).offset(offset).limit(per_page).all()
+    
+    # Calculate pagination info
+    pages = (total + per_page - 1) // per_page
+    has_next = page < pages
+    has_prev = page > 1
+    
+    return MediaListResponse(
+        items=[MediaFileResponse.model_validate(media) for media in media_files],
+        total=total,
+        page=page,
+        per_page=per_page,
+        pages=pages,
+        has_next=has_next,
+        has_prev=has_prev
+    )
 
-# Background processing functions
-async def process_media_file(media_id: str, file_path: str, content_type: str):
+
+# Serve media file content
+@app.get("/api/v1/media/{media_id}/file")
+async def serve_media_file(
+    media_id: uuid.UUID,
+    db: Session = Depends(get_db),
+    current_user: Optional[Dict[str, Any]] = Depends(get_current_user)
+):
+    """Serve media file content"""
+    
+    query = db.query(MediaFile).filter(MediaFile.id == media_id)
+    
+    # Access control
+    if current_user:
+        query = query.filter(
+            or_(
+                MediaFile.is_public == True,
+                MediaFile.user_id == current_user["user_id"]
+            )
+        )
+    else:
+        query = query.filter(MediaFile.is_public == True)
+    
+    media = query.first()
+    
+    if not media:
+        raise HTTPException(status_code=404, detail="Media not found")
+    
+    try:
+        # Get file URL from storage provider
+        file_url = await storage_service.get_file_url(
+            file_path=media.storage_path,
+            provider_name=media.storage_provider
+        )
+        
+        # For local storage, serve the file directly
+        if media.storage_provider == "local":
+            file_path = Path(settings.local_storage_path) / media.storage_path
+            if file_path.exists():
+                return FileResponse(
+                    path=str(file_path),
+                    media_type=media.mime_type,
+                    filename=media.original_filename
+                )
+        
+        # For other providers, redirect to the signed URL
+        return JSONResponse(
+            content={"redirect_url": file_url},
+            status_code=302
+        )
+        
+    except Exception as e:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to serve file: {str(e)}"
+        )
+
+
+# Process media file (background task)
+async def process_media_file(
+    media_id: str,
+    file_content: bytes,
+    file_category: str,
+    mime_type: str
+):
     """Background task to process uploaded media"""
     
     try:
-        # Create thumbnail for images
-        if content_type in ALLOWED_IMAGE_TYPES:
-            file_path_obj = Path(file_path)
-            thumbnail_dir = file_path_obj.parent / "thumbnails"
-            thumbnail_dir.mkdir(exist_ok=True)
-            
-            thumbnail_path = thumbnail_dir / f"thumb_{file_path_obj.name}"
-            
-            if create_thumbnail(file_path_obj, thumbnail_path):
-                # Update database with thumbnail path
-                # In a real implementation, you'd get a new DB session here
-                print(f"✅ Thumbnail created for {media_id}: {thumbnail_path}")
-            else:
-                print(f"❌ Failed to create thumbnail for {media_id}")
+        # Update processing status
+        # Note: In production, you'd get a new DB session here
         
-        # Mark as processed
-        # In a real implementation, update the database here
+        if file_category == "image":
+            # Generate thumbnail
+            thumbnail_result = await image_processor.process_image(
+                image_data=file_content,
+                operation="thumbnail",
+                parameters={"size": settings.thumbnail_size}
+            )
+            
+            if thumbnail_result["success"]:
+                # Upload thumbnail to storage
+                thumbnail_upload = await storage_service.upload_file(
+                    file_data=thumbnail_result["data"],
+                    filename=f"thumb_{media_id}.jpg",
+                    content_type="image/jpeg",
+                    file_category="thumbnails"
+                )
+                
+                print(f"✅ Thumbnail generated for {media_id}")
+            
+            # Analyze image
+            analysis_result = await image_processor.analyze_image(file_content)
+            if analysis_result["success"]:
+                print(f"✅ Image analysis completed for {media_id}")
+        
         print(f"✅ Media processing completed for {media_id}")
     
     except Exception as e:
         print(f"❌ Error processing media {media_id}: {e}")
 
-async def cleanup_media_files(file_path: str, thumbnail_path: Optional[str] = None):
-    """Background task to clean up deleted media files"""
-    
-    try:
-        # Delete main file
-        if os.path.exists(file_path):
-            os.remove(file_path)
-            print(f"🗑️ Deleted file: {file_path}")
-        
-        # Delete thumbnail
-        if thumbnail_path and os.path.exists(thumbnail_path):
-            os.remove(thumbnail_path)
-            print(f"🗑️ Deleted thumbnail: {thumbnail_path}")
-    
-    except Exception as e:
-        print(f"❌ Error cleaning up files: {e}")
 
-# Health check
-@app.get("/health")
+# Health check endpoint
+@app.get("/health", response_model=HealthCheckResponse)
 async def health_check():
     """Service health check"""
     
-    # Check disk space
-    disk_usage = shutil.disk_usage(MEDIA_ROOT)
-    free_space_gb = disk_usage.free / (1024**3)
-    
-    return {
-        "status": "healthy",
-        "service": "media_service",
-        "timestamp": datetime.utcnow().isoformat(),
-        "media_root": str(MEDIA_ROOT),
-        "free_space_gb": round(free_space_gb, 2)
-    }
+    try:
+        # Check storage providers
+        storage_health = storage_service.health_check()
+        
+        # Check disk space (for local storage)
+        disk_space = {"free_gb": 0.0, "used_gb": 0.0}
+        if settings.primary_storage_provider == "local":
+            import shutil
+            usage = shutil.disk_usage(settings.local_storage_path)
+            disk_space = {
+                "free_gb": round(usage.free / (1024**3), 2),
+                "used_gb": round((usage.total - usage.free) / (1024**3), 2)
+            }
+        
+        return HealthCheckResponse(
+            status="healthy",
+            service="media_service",
+            timestamp=datetime.now(),
+            storage_providers=storage_health,
+            processing_queues={"background_tasks": 0},  # Placeholder
+            database="connected",  # Placeholder
+            disk_space=disk_space
+        )
+        
+    except Exception as e:
+        raise HTTPException(
+            status_code=503,
+            detail=f"Health check failed: {str(e)}"
+        )
+
 
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run(app, host="0.0.0.0", port=8009)
+    uvicorn.run(
+        app, 
+        host=settings.service_host, 
+        port=settings.service_port,
+        reload=True if os.getenv("ENVIRONMENT") == "development" else False
+    )

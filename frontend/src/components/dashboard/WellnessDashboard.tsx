@@ -4,10 +4,12 @@ import { Progress } from "@/components/ui/progress"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { Trophy, Heart, BookOpen, Users, Target, Brain, Palette, ChartLine, Share } from "@phosphor-icons/react"
+import { Trophy, Heart, BookOpen, Users, Target, Brain, Palette, ChartLine, Share, Broadcast } from "@phosphor-icons/react"
 import { useUserStats, useWellness } from "@/hooks/useWellness"
 import { useJournal } from "@/hooks/useJournal"
 import { useMoodBasedTheme } from "@/hooks/useMoodTheme"
+import { useRealtimeInsights } from "@/hooks/useRealtimeInsights"
+import { MoodQuickEntry } from "@/components/mood"
 
 import { motion, AnimatePresence } from "framer-motion"
 import { toast } from "sonner"
@@ -17,6 +19,9 @@ export function WellnessDashboard() {
   const { entries } = useJournal()
   const { stats, loading: statsLoading, error: statsError } = useUserStats()
   const { currentTheme, availableThemes, applyTheme, autoApplyMoodTheme, getCurrentMood, isThemeChanging } = useMoodBasedTheme()
+  
+  // E4: Real-time insights integration
+  const { insights: realtimeInsights, isConnected: isWebSocketConnected, connectionError } = useRealtimeInsights()
   
   const [moodTrend, setMoodTrend] = useState<'improving' | 'declining' | 'stable'>('stable')
   
@@ -103,10 +108,25 @@ export function WellnessDashboard() {
         <Card className="bg-gradient-to-r from-primary/5 to-accent/5">
           <CardHeader>
             <div className="flex items-center justify-between">
-              <CardTitle className="flex items-center gap-2">
-                <Target className="text-primary" size={24} />
-                Your Wellness Journey
-              </CardTitle>
+              <div className="flex items-center gap-3">
+                <CardTitle className="flex items-center gap-2">
+                  <Target className="text-primary" size={24} />
+                  Your Wellness Journey
+                </CardTitle>
+                {/* E4: Real-time status indicator */}
+                <div className="flex items-center gap-1 text-xs text-muted-foreground">
+                  <Broadcast 
+                    className={`h-3 w-3 ${isWebSocketConnected ? 'text-green-500' : 'text-red-500'}`}
+                    weight={isWebSocketConnected ? 'fill' : 'regular'}
+                  />
+                  <span className={isWebSocketConnected ? 'text-green-600' : 'text-red-500'}>
+                    {isWebSocketConnected ? 'Live' : 'Offline'}
+                  </span>
+                  {connectionError && (
+                    <span className="text-amber-500 ml-1" title={connectionError}>⚠️</span>
+                  )}
+                </div>
+              </div>
               <div className="flex items-center gap-2">
                 <Button
                   variant="outline"
@@ -200,18 +220,23 @@ export function WellnessDashboard() {
         </TabsList>
         
         <TabsContent value="overview" className="space-y-6">
-          {/* Enhanced Stats Grid */}
+          {/* Enhanced Stats Grid with Real-time Updates */}
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
             <motion.div
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ delay: 0.1 }}
             >
-              <Card className="text-center">
+              <Card className="text-center relative">
                 <CardContent className="p-4">
                   <Heart className="mx-auto text-red-500 mb-2" size={24} />
-                  <div className="text-2xl font-bold">{stats?.moodStreak || 0}</div>
+                  <div className="text-2xl font-bold">
+                    {realtimeInsights.moodStreak || stats?.moodStreak || 0}
+                  </div>
                   <div className="text-xs text-muted-foreground">Day Mood Streak</div>
+                  {realtimeInsights.lastUpdated && (
+                    <div className="absolute top-1 right-1 w-2 h-2 bg-green-500 rounded-full animate-pulse" title="Live updates" />
+                  )}
                 </CardContent>
               </Card>
             </motion.div>
@@ -221,11 +246,16 @@ export function WellnessDashboard() {
               animate={{ opacity: 1, y: 0 }}
               transition={{ delay: 0.2 }}
             >
-              <Card className="text-center">
+              <Card className="text-center relative">
                 <CardContent className="p-4">
                   <BookOpen className="mx-auto text-blue-500 mb-2" size={24} />
-                  <div className="text-2xl font-bold">{entries.length}</div>
+                  <div className="text-2xl font-bold">
+                    {realtimeInsights.journalEntries || entries.length}
+                  </div>
                   <div className="text-xs text-muted-foreground">Journal Entries</div>
+                  {realtimeInsights.lastUpdated && (
+                    <div className="absolute top-1 right-1 w-2 h-2 bg-green-500 rounded-full animate-pulse" title="Live updates" />
+                  )}
                 </CardContent>
               </Card>
             </motion.div>
@@ -235,11 +265,16 @@ export function WellnessDashboard() {
               animate={{ opacity: 1, y: 0 }}
               transition={{ delay: 0.3 }}
             >
-              <Card className="text-center">
+              <Card className="text-center relative">
                 <CardContent className="p-4">
-                  <Users className="mx-auto text-green-500 mb-2" size={24} />
-                  <div className="text-2xl font-bold">{stats?.communityContributions || 0}</div>
-                  <div className="text-xs text-muted-foreground">Community Posts</div>
+                  <Target className="mx-auto text-purple-500 mb-2" size={24} />
+                  <div className="text-2xl font-bold">
+                    {realtimeInsights.daysTracked || 0}
+                  </div>
+                  <div className="text-xs text-muted-foreground">Days Tracked</div>
+                  {realtimeInsights.lastUpdated && (
+                    <div className="absolute top-1 right-1 w-2 h-2 bg-green-500 rounded-full animate-pulse" title="Live updates" />
+                  )}
                 </CardContent>
               </Card>
             </motion.div>
@@ -249,11 +284,16 @@ export function WellnessDashboard() {
               animate={{ opacity: 1, y: 0 }}
               transition={{ delay: 0.4 }}
             >
-              <Card className="text-center">
+              <Card className="text-center relative">
                 <CardContent className="p-4">
                   <Trophy className="mx-auto text-yellow-500 mb-2" size={24} />
-                  <div className="text-2xl font-bold">{stats?.badges?.length || 0}</div>
-                  <div className="text-xs text-muted-foreground">Badges Earned</div>
+                  <div className="text-2xl font-bold">
+                    {realtimeInsights.engagementLevel || stats?.badges?.length || 0}
+                  </div>
+                  <div className="text-xs text-muted-foreground">Engagement Level</div>
+                  {realtimeInsights.lastUpdated && (
+                    <div className="absolute top-1 right-1 w-2 h-2 bg-green-500 rounded-full animate-pulse" title="Live updates" />
+                  )}
                 </CardContent>
               </Card>
             </motion.div>
@@ -261,18 +301,20 @@ export function WellnessDashboard() {
 
           {/* Enhanced Mood Analytics Grid */}
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-            {/* Mood Timeline - Enhanced */}
+            {/* E4: Real-time Mood Tracking */}
             <motion.div 
               className="lg:col-span-2"
               initial={{ opacity: 0, x: -20 }}
               animate={{ opacity: 1, x: 0 }}
               transition={{ delay: 0.5 }}
             >
-              {/* Mood tracking temporarily disabled - service under maintenance */}
-              <div className="bg-card p-6 rounded-lg border">
-                <h3 className="text-lg font-medium mb-2">Wellness Overview</h3>
-                <p className="text-muted-foreground">Your wellness journey continues. Check back soon for enhanced mood insights.</p>
-              </div>
+              <MoodQuickEntry 
+                onEntryAdded={(moodData) => {
+                  toast.success('Real-time update sent! 🚀', {
+                    description: 'Your dashboard will update automatically'
+                  })
+                }}
+              />
             </motion.div>
 
             {/* Sidebar Widgets */}

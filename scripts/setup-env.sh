@@ -85,7 +85,7 @@ prompt_with_default "Redis Port:" "6379" REDIS_PORT
 
 echo ""
 echo -e "${BLUE}=== Application Configuration ===${NC}"
-prompt_with_default "Frontend URL:" "http://localhost:3000" APP_URL
+prompt_with_default "Frontend URL:" "http://localhost:5173" APP_URL
 prompt_with_default "Backend Port:" "8000" BACKEND_PORT
 
 echo ""

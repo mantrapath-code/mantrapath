@@ -34,7 +34,7 @@ import { communityApi } from "@/services/api"
 import { useCommunityData } from "@/hooks/useCommunityData"
 import { EnhancedChallengeCard } from "./EnhancedChallengeCard"
 import { EnhancedEventCard } from "./EnhancedEventCard"
-import { formatRelativeTime as formatTime } from "@/utils/timeFormat"
+import { formatRelativeTime as formatTime } from "@/utils/timeUtils"
 import { useAuth } from "@/hooks/useAuth"
 import { getUserDisplayName, getUserInitials } from "@/utils/userDisplay"
 import type { CommunityStats } from "@/hooks/useCommunityData"
@@ -1045,7 +1045,7 @@ function ChallengesSection({
       </div>
 
       {/* Challenge Cards Grid */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 sm:gap-6">
+      <div className="">
         <AnimatePresence>
           {filteredChallenges.map((challenge) => (
             <motion.div

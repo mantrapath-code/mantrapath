@@ -1,4 +1,25 @@
 #!/usr/bin/env python3
+import os
+import requests
+from dotenv import load_dotenv
+
+# Load environment
+load_dotenv()
+domain = os.getenv('DOMAIN', 'localhost')
+protocol = os.getenv('PROTOCOL', 'http')
+
+def test_chatbot_service():
+    print("🧪 Testing chatbot service directly...")
+    
+    # Test health endpoint
+    try:
+        response = requests.get(f"{protocol}://{domain}:8004/health")
+        print(f"✅ Health check: {response.status_code}")
+        print(f"   Response: {response.json()}")
+    except Exception as e:
+        print(f"❌ Health check failed: {e}")
+    
+    # Test status endpointn3
 """
 Test script for chatbot service
 """

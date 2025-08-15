@@ -3,18 +3,18 @@ services:
   postgres:
     image: postgres:15
     environment:
-      POSTGRES_DB: mantrapath
-      POSTGRES_USER: mantrapath
-      POSTGRES_PASSWORD: mantrapath123
+      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
     volumes:
       - postgres_data:/var/lib/postgresql/data
       - ./database/init.sql:/docker-entrypoint-initdb.d/init.sql
     ports:
-      - "5432:5432"
+      - "${POSTGRES_PORT}:5432"
     networks:
       - mantrapath-network
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U mantrapath -d mantrapath"]
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
       interval: 30s
       timeout: 10s
       retries: 5
@@ -24,7 +24,7 @@ services:
   redis:
     image: redis:7-alpine
     ports:
-      - "6379:6379"
+      - "${REDIS_PORT}:6379"
     networks:
       - mantrapath-network
     healthcheck:
@@ -34,53 +34,48 @@ services:
       retries: 5
       start_period: 30s
 
-  # API Gateway
+  # API Gateway - New Modular Implementation
   api-gateway:
     build:
-      context: .
-      dockerfile: services/api_gateway/Dockerfile
+      context: ./services/api_gateway
+      dockerfile: Dockerfile
     ports:
       - "8000:8000"
     env_file:
       - .env
     environment:
-      - DATABASE_URL=postgresql://mantrapath:mantrapath123@postgres:5432/mantrapath
-      - REDIS_URL=redis://redis:6379
-      - AUTH_SERVICE_URL=http://auth-service:8001
-      - PROFILE_SERVICE_URL=http://profile-service:8002
-      - MOOD_SERVICE_URL=http://mood-service:8003
-      - CHATBOT_SERVICE_URL=http://chatbot-service:8004
-      - CONTENT_SERVICE_URL=http://content-service:8005
-      - COMMUNITY_SERVICE_URL=http://community-service:8006
-      - NOTIFICATION_SERVICE_URL=http://notification-service:8007
-      - ML_SERVICE_URL=http://ml-service:8008
-      - MEDIA_SERVICE_URL=http://media-service:8009
+      # Gateway Configuration
+      - GATEWAY_ENVIRONMENT=development
+      - GATEWAY_DEBUG=true
+      - GATEWAY_HOST=0.0.0.0
+      - GATEWAY_PORT=${API_GATEWAY_PORT}
+      - GATEWAY_REDIS_URL=redis://redis:6379
+      
+      # Service URLs
+      - SERVICE_AUTH_SERVICE_URL=http://auth-service:${AUTH_SERVICE_PORT}
+      - SERVICE_PROFILE_SERVICE_URL=http://profile-service:${PROFILE_SERVICE_PORT}
+      - SERVICE_MOOD_SERVICE_URL=http://mood-service:${MOOD_SERVICE_PORT}
+      - SERVICE_CHATBOT_SERVICE_URL=http://chatbot-service:${CHATBOT_SERVICE_PORT}
+      - SERVICE_CONTENT_SERVICE_URL=http://content-service:${CONTENT_SERVICE_PORT}
+      - SERVICE_COMMUNITY_SERVICE_URL=http://community-service:${COMMUNITY_SERVICE_PORT}
+      - SERVICE_NOTIFICATION_SERVICE_URL=http://notification-service:${NOTIFICATION_SERVICE_PORT}
+      - SERVICE_ML_SERVICE_URL=http://ml-service:${ML_SERVICE_PORT}
+      - SERVICE_MEDIA_SERVICE_URL=http://media-service:${MEDIA_SERVICE_PORT}
+      - SERVICE_TRANSLATION_SERVICE_URL=http://translation-service:${TRANSLATION_SERVICE_PORT}
+      - SERVICE_ACTION_ORCHESTRATOR_URL=http://action-orchestrator:${ACTION_ORCHESTRATOR_PORT}
+      - SERVICE_VOICE_SERVICE_URL=http://voice-service:8011
     depends_on:
-      postgres:
-        condition: service_healthy
       redis:
         condition: service_healthy
-      auth-service:
-        condition: service_started
-      profile-service:
-        condition: service_started
-      mood-service:
-        condition: service_started
-      chatbot-service:
-        condition: service_started
-      content-service:
-        condition: service_started
-      community-service:
-        condition: service_started
-      notification-service:
-        condition: service_started
-      ml-service:
-        condition: service_started
-      media-service:
-        condition: service_started
     networks:
       - mantrapath-network
     restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:${API_GATEWAY_PORT}/health/live"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
 
   # Auth Service
   auth-service:
@@ -88,20 +83,19 @@ services:
       context: .
       dockerfile: services/auth_service/Dockerfile
     ports:
-      - "8001:8001"
+      - "${AUTH_SERVICE_PORT}:${AUTH_SERVICE_PORT}"
     env_file:
       - .env
     environment:
-      - DATABASE_URL=postgresql://mantrapath:mantrapath123@postgres:5432/mantrapath
-      - REDIS_URL=redis://redis:6379
-      - JWT_SECRET_KEY=${JWT_SECRET_KEY:-your-super-secret-jwt-key-change-in-production}
-      # Email configuration will be loaded from .env file
+      - DATABASE_URL=${DATABASE_URL}
+      - REDIS_URL=${REDIS_URL}
+      - JWT_SECRET_KEY=${JWT_SECRET_KEY}
       - SMTP_SERVER=${SMTP_SERVER}
       - SMTP_PORT=${SMTP_PORT}
       - SMTP_USERNAME=${SMTP_USERNAME}
       - SMTP_PASSWORD=${SMTP_PASSWORD}
       - FROM_EMAIL=${FROM_EMAIL}
-      - APP_URL=${APP_URL:-http://localhost:5173}
+      - APP_URL=${APP_URL}
     depends_on:
       postgres:
         condition: service_healthy
@@ -322,6 +316,116 @@ services:
     networks:
       - mantrapath-network
     restart: unless-stopped
+
+  # Translation Service
+  translation-service:
+    build:
+      context: .
+      dockerfile: services/translation_service/Dockerfile
+    ports:
+      - "8010:8010"
+    env_file:
+      - .env
+    environment:
+      - DATABASE_URL=postgresql://mantrapath:mantrapath123@postgres:5432/mantrapath
+      - REDIS_URL=redis://redis:6379
+      - JWT_SECRET_KEY=${JWT_SECRET_KEY:-your-super-secret-jwt-key-change-in-production}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - mantrapath-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8010/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+
+  # Voice Service
+  voice-service:
+    build:
+      context: .
+      dockerfile: services/voice_service/Dockerfile
+    ports:
+      - "8011:8011"
+    env_file:
+      - .env
+    environment:
+      - DATABASE_URL=postgresql://mantrapath:mantrapath123@postgres:5432/mantrapath
+      - REDIS_URL=redis://redis:6379
+      - JWT_SECRET_KEY=${JWT_SECRET_KEY:-your-super-secret-jwt-key-change-in-production}
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - ELEVENLABS_API_KEY=${ELEVENLABS_API_KEY}
+      - AUTH_SERVICE_URL=http://auth-service:8001
+      - PROFILE_SERVICE_URL=http://profile-service:8002
+      - CONTENT_SERVICE_URL=http://content-service:8005
+      - COMMUNITY_SERVICE_URL=http://community-service:8006
+      - TRANSLATION_SERVICE_URL=http://translation-service:8010
+      - NOTIFICATION_SERVICE_URL=http://notification-service:8007
+      - MEDIA_SERVICE_URL=http://media-service:8009
+      - MOOD_SERVICE_URL=http://mood-service:8003
+      - API_GATEWAY_URL=http://api-gateway:8000
+      - ACTION_ORCHESTRATOR_URL=http://action-orchestrator:8012
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - mantrapath-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8011/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+
+  # Action Orchestrator Service
+  action-orchestrator:
+    build:
+      context: .
+      dockerfile: services/action_orchestrator/Dockerfile
+    ports:
+      - "8012:8012"
+    env_file:
+      - .env
+    environment:
+      - DATABASE_URL=postgresql://mantrapath:mantrapath123@postgres:5432/mantrapath
+      - REDIS_URL=redis://redis:6379
+      - JWT_SECRET_KEY=${JWT_SECRET_KEY:-your-super-secret-jwt-key-change-in-production}
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - ORCHESTRATOR_PORT=8012
+      - AUTH_SERVICE_URL=http://auth-service:8001
+      - PROFILE_SERVICE_URL=http://profile-service:8002
+      - MOOD_SERVICE_URL=http://mood-service:8003
+      - CHATBOT_SERVICE_URL=http://chatbot-service:8004
+      - CONTENT_SERVICE_URL=http://content-service:8005
+      - COMMUNITY_SERVICE_URL=http://community-service:8006
+      - NOTIFICATION_SERVICE_URL=http://notification-service:8007
+      - ML_SERVICE_URL=http://ml-service:8008
+      - MEDIA_SERVICE_URL=http://media-service:8009
+      - TRANSLATION_SERVICE_URL=http://translation-service:8010
+      - VOICE_SERVICE_URL=http://voice-service:8011
+      - API_GATEWAY_URL=http://api-gateway:8000
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - mantrapath-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8012/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
 
 volumes:
   postgres_data:

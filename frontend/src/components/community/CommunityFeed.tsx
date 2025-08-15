@@ -19,7 +19,7 @@ import { communityApi } from "@/services/api"
 import { useAuth } from "@/hooks/useAuth"
 import { useWebSocket } from "@/hooks/useWebSocket"
 import { getUserDisplayName, getUserInitials } from "@/utils/userDisplay"
-import { formatRelativeTime } from "@/utils/timeFormat"
+import { formatRelativeTime } from "@/utils/timeUtils"
 
 
 interface FeedItem {

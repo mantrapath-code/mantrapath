@@ -150,8 +150,8 @@ quick_setup() {
     start_services
     
     print_status "✅ Setup complete!"
-    print_status "Frontend will be available at: http://localhost:5173"
-    print_status "Backend API will be available at: http://localhost:8000"
+    print_status "Frontend will be available at: ${PROTOCOL}://${DOMAIN}:${FRONTEND_PORT}"
+    print_status "Backend API will be available at: ${PROTOCOL}://${DOMAIN}:${API_GATEWAY_PORT}"
     print_status ""
     print_status "To start frontend: $0 frontend"
     print_status "To view logs: $0 logs [service-name]"

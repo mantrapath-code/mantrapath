@@ -1,5 +1,4 @@
-@import 'tailwindcss';
-@import "tw-animate-css";
+/* Base component styles - imported by main.css */
 
 @layer base {
   * {

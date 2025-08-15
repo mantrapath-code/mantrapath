@@ -19,7 +19,7 @@ import { motion, AnimatePresence } from 'framer-motion'
 import { useWebSocket } from '@/hooks/useWebSocket'
 import { notificationApi } from '@/services/api'
 import { SmartNotificationScheduler } from './SmartNotificationScheduler'
-import { formatRelativeTime } from '@/utils/timeFormat'
+import { formatRelativeTime } from '@/utils/timeUtils'
 import { useAuth } from '@/hooks/useAuth'
 
 interface Notification {

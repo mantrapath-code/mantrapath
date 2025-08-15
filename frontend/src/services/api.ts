@@ -339,16 +339,36 @@ class ApiService {
   }
 
   async getCelebrationStats() {
-    return this.request<{
-      total_celebrations: number
-      by_type: Record<string, number>
-      by_level: Record<string, number>
-      recent_achievements: Array<{
-        title: string
-        level: string
-        date: string
-      }>
-    }>('/api/v1/mood/celebration-stats')
+    // Updated: use achievements summary endpoint (original mood celebration-stats endpoint does not exist)
+    const response = await this.request<{
+      success: boolean
+      data: any
+      celebration_stats?: {
+        total_celebrations: number
+        by_type: Record<string, number>
+        by_level: Record<string, number>
+        latest_achievement?: { title: string; level: string; date: string }
+      }
+    }>('/api/v1/achievements/summary')
+
+    const stats = response.celebration_stats || {
+      total_celebrations: 0,
+      by_type: {},
+      by_level: {}
+    }
+
+    return {
+      total_celebrations: stats.total_celebrations || 0,
+      by_type: stats.by_type || {},
+      by_level: stats.by_level || {},
+      recent_achievements: stats.latest_achievement ? [
+        {
+          title: stats.latest_achievement.title,
+          level: stats.latest_achievement.level,
+          date: stats.latest_achievement.date
+        }
+      ] : []
+    }
   }
 
   // Generic request method for ML service

@@ -1,5 +1,7 @@
 // Authentication service for managing tokens and user state
 
+const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000'
+
 interface LoginResponse {
   access_token: string
   refresh_token: string
@@ -67,7 +69,7 @@ class AuthService {
 
   // Register a new user
   async register(email: string, username: string, password: string): Promise<LoginResponse> {
-    const response = await fetch('http://localhost:8000/register', {
+    const response = await fetch(`${API_BASE_URL}/register`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -90,7 +92,7 @@ class AuthService {
 
   // Login with email and password
   async login(email: string, password: string): Promise<LoginResponse> {
-    const response = await fetch('http://localhost:8000/login', {
+    const response = await fetch(`${API_BASE_URL}/login`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -126,7 +128,7 @@ class AuthService {
     if (!refreshToken) return null
 
     try {
-      const response = await fetch('http://localhost:8000/refresh-token', {
+      const response = await fetch(`${API_BASE_URL}/refresh-token`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

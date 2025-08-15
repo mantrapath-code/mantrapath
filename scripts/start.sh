@@ -18,6 +18,25 @@ NC='\033[0m' # No Color
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 BACKEND_DIR="$PROJECT_ROOT/backend"
+
+# Load environment variables
+if [ -f "$BACKEND_DIR/.env" ]; then
+    set -a # automatically export all variables
+    source "$BACKEND_DIR/.env"
+    set +a
+    echo -e "${GREEN}✅ Loaded environment from $BACKEND_DIR/.env${NC}"
+else
+    echo -e "${YELLOW}⚠️ Warning: .env file not found at $BACKEND_DIR/.env${NC}"
+    # Set defaults
+    DOMAIN=${DOMAIN:-localhost}
+    PROTOCOL=${PROTOCOL:-http}
+    FRONTEND_PORT=${FRONTEND_PORT:-5173}
+    API_GATEWAY_PORT=${API_GATEWAY_PORT:-8000}
+fi
+
+# Construct URLs from environment variables
+FRONTEND_URL="${PROTOCOL}://${DOMAIN}:${FRONTEND_PORT}"
+API_GATEWAY_URL="${PROTOCOL}://${DOMAIN}:${API_GATEWAY_PORT}"
 FRONTEND_DIR="$PROJECT_ROOT/frontend"
 
 # Service status tracking
@@ -191,8 +210,8 @@ wait_for_port 8001 "Auth Service"
 wait_for_port 8003 "Mood Service"
 
 # Check health of main services
-check_service_health "http://localhost:8000/health" "API Gateway"
-check_service_health "http://localhost:8003/health" "Mood Service"
+check_service_health "${PROTOCOL}://${DOMAIN}:${API_GATEWAY_PORT}/health" "API Gateway"
+check_service_health "${PROTOCOL}://${DOMAIN}:8003/health" "Mood Service"
 
 # Start frontend
 echo -e "${PURPLE}🎨 Starting frontend...${NC}"
@@ -209,11 +228,9 @@ echo -e "${BLUE}🌐 Starting frontend development server...${NC}"
 npm run dev &
 FRONTEND_PID=$!
 
-# Wait for frontend (Vite usually starts on 5173, but could be 3000)
-if wait_for_port 5173 "Frontend (port 5173)"; then
-    echo -e "${GREEN}✅ Frontend started on port 5173${NC}"
-elif wait_for_port 3000 "Frontend (port 3000)"; then
-    echo -e "${GREEN}✅ Frontend started on port 3000${NC}"
+# Wait for frontend
+if wait_for_port $FRONTEND_PORT "Frontend"; then
+    echo -e "${GREEN}✅ Frontend started on port $FRONTEND_PORT${NC}"
 else
     echo -e "${YELLOW}⚠️  Frontend may be starting, check manually${NC}"
 fi
@@ -223,26 +240,22 @@ echo ""
 echo -e "${GREEN}🎉 All services started successfully!${NC}"
 echo ""
 echo -e "${CYAN}=== Service Status ===${NC}"
-echo -e "${GREEN}✅ PostgreSQL${NC}     - localhost:5432"
-echo -e "${GREEN}✅ Redis${NC}          - localhost:6379"
-echo -e "${GREEN}✅ API Gateway${NC}    - http://localhost:8000"
-echo -e "${GREEN}✅ Auth Service${NC}   - http://localhost:8001"
-echo -e "${GREEN}✅ Mood Service${NC}   - http://localhost:8003"
-if port_in_use 5173; then
-    echo -e "${GREEN}✅ Frontend${NC}       - http://localhost:5173"
-elif port_in_use 3000; then
-    echo -e "${GREEN}✅ Frontend${NC}       - http://localhost:3000"
+echo -e "${GREEN}✅ PostgreSQL${NC}     - ${DOMAIN}:5432"
+echo -e "${GREEN}✅ Redis${NC}          - ${DOMAIN}:${REDIS_PORT}"
+echo -e "${GREEN}✅ API Gateway${NC}    - $API_GATEWAY_URL"
+echo -e "${GREEN}✅ Auth Service${NC}   - ${PROTOCOL}://${DOMAIN}:8001"
+echo -e "${GREEN}✅ Mood Service${NC}   - ${PROTOCOL}://${DOMAIN}:8003"
+if port_in_use $FRONTEND_PORT; then
+    echo -e "${GREEN}✅ Frontend${NC}       - $FRONTEND_URL"
 fi
 echo ""
 echo -e "${CYAN}=== Quick Links ===${NC}"
-if port_in_use 5173; then
-    echo -e "${BLUE}🌐 Application:${NC}    http://localhost:5173"
-elif port_in_use 3000; then
-    echo -e "${BLUE}🌐 Application:${NC}    http://localhost:3000"
+if port_in_use $FRONTEND_PORT; then
+    echo -e "${BLUE}🌐 Application:${NC}    $FRONTEND_URL"
 fi
-echo -e "${BLUE}📊 API Gateway:${NC}    http://localhost:8000/docs"
-echo -e "${BLUE}🧠 Mood Service:${NC}   http://localhost:8003/docs"
-echo -e "${BLUE}🔍 Health Check:${NC}    http://localhost:8000/health"
+echo -e "${BLUE}📊 API Gateway:${NC}    $API_GATEWAY_URL/docs"
+echo -e "${BLUE}🧠 Mood Service:${NC}   ${PROTOCOL}://${DOMAIN}:8003/docs"
+echo -e "${BLUE}🔍 Health Check:${NC}    $API_GATEWAY_URL/health"
 echo ""
 echo -e "${CYAN}=== Useful Commands ===${NC}"
 echo -e "${YELLOW}View Logs:${NC}        ./scripts/logs.sh"

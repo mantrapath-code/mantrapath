@@ -1,25 +1,35 @@
+# MantraPath API Gateway Dockerfile
 FROM python:3.11-slim
 
+# Set working directory
 WORKDIR /app
 
-# Install system dependencies including curl for health checks
+# Install system dependencies
 RUN apt-get update && apt-get install -y \
+    gcc \
     curl \
     && rm -rf /var/lib/apt/lists/*
 
-# Copy service-specific requirements first
-COPY services/api_gateway/requirements.txt /app/requirements.txt
+# Copy requirements first for better caching
+COPY requirements.txt .
+
+# Install Python dependencies
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Copy shared modules to make them importable
-COPY shared /app/shared
+# Copy source code
+COPY src/ ./src/
+COPY config/ ./config/
 
-# Copy the service files directly to the app directory
-COPY services/api_gateway /app/
+# Create non-root user
+RUN useradd --create-home --shell /bin/bash app && chown -R app:app /app
+USER app
 
-# Add the app directory to Python path
-ENV PYTHONPATH=/app
-
+# Expose port
 EXPOSE 8000
 
-CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000"]
+# Health check
+HEALTHCHECK --interval=30s --timeout=10s --start-period=30s --retries=3 \
+    CMD curl -f http://localhost:8000/health/live || exit 1
+
+# Run the application
+CMD ["python", "-m", "uvicorn", "src.main:app", "--host", "0.0.0.0", "--port", "8000"]

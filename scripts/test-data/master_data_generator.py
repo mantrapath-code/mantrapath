@@ -173,7 +173,7 @@ class MasterDataGenerator:
         if successful == total:
             print("🎉 All test data generated successfully!")
             print("\n💡 Next steps:")
-            print("   • Visit http://localhost:5173 to see the insights")
+            print(f"   • Visit {os.getenv('PROTOCOL', 'http')}://{os.getenv('DOMAIN', 'localhost')}:{os.getenv('FRONTEND_PORT', '5173')} to see the insights")
             print("   • Check 'Best Moments' section for real data")
             print("   • Look for populated mood streaks and energy peaks")
         else:

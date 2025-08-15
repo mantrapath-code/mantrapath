@@ -34,7 +34,9 @@ cd mantrapath
 ./start.sh logs         # View service logs
 ./start.sh stop         # Stop all services
 ```
-./mantrapath stop       # Stop all services
+```bash
+psql -h ${DOMAIN} -U mantrapath -d mantrapath -f backend/database/init.sql
+```
 ./mantrapath status     # Check service status
 ./mantrapath logs       # View service logs
 ./mantrapath clean      # Clean up containers and volumes
@@ -379,17 +381,17 @@ docker-compose up --build
 ```
 
 **Services will start on:**
-- **API Gateway**: http://localhost:8000
-- **Auth Service**: http://localhost:8001
-- **Profile Service**: http://localhost:8002
-- **Mood Service**: http://localhost:8003
-- **Chatbot Service**: http://localhost:8004
-- **Content Service**: http://localhost:8005
-- **Community Service**: http://localhost:8006
-- **Notification Service**: http://localhost:8007
-- **Media Service**: http://localhost:8008
-- **PostgreSQL**: localhost:5432
-- **Redis**: localhost:6379
+- **API Gateway**: ${PROTOCOL}://${DOMAIN}:${API_GATEWAY_PORT}
+- **Auth Service**: ${PROTOCOL}://${DOMAIN}:8001
+- **Profile Service**: ${PROTOCOL}://${DOMAIN}:8002
+- **Mood Service**: ${PROTOCOL}://${DOMAIN}:8003
+- **Chatbot Service**: ${PROTOCOL}://${DOMAIN}:8004
+- **Content Service**: ${PROTOCOL}://${DOMAIN}:8005
+- **Community Service**: ${PROTOCOL}://${DOMAIN}:8006
+- **Notification Service**: ${PROTOCOL}://${DOMAIN}:8007
+- **Media Service**: ${PROTOCOL}://${DOMAIN}:8008
+- **PostgreSQL**: ${DOMAIN}:${DB_PORT}
+- **Redis**: ${DOMAIN}:${REDIS_PORT}
 
 ### 4. Start Frontend
 
@@ -399,7 +401,7 @@ npm install
 npm run dev
 ```
 
-**Frontend available at**: http://localhost:5174
+**Frontend available at**: ${PROTOCOL}://${DOMAIN}:${FRONTEND_PORT}
 
 ### 5. Alternative: Quick Development Start
 
@@ -1248,8 +1250,8 @@ GET  /api/status       # Service status dashboard
 python backend/scripts/test_backend.py
 
 # Test specific service
-curl http://localhost:8000/health
-curl http://localhost:8001/health
+curl ${PROTOCOL}://${DOMAIN}:${API_GATEWAY_PORT}/health
+curl ${PROTOCOL}://${DOMAIN}:8001/health
 ```
 
 ### Frontend Testing
@@ -1321,8 +1323,8 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 ## 🔗 Links
 
 - **[GitHub Repository](https://github.com/ssharmasachin/mantrapath-holistic)**
-- **[Live Demo](http://localhost:5174)** (after setup)
-- **[API Documentation](http://localhost:8000/docs)** (Swagger UI)
+- **[Live Demo](${PROTOCOL}://${DOMAIN}:${FRONTEND_PORT})** (after setup)
+- **[API Documentation](${PROTOCOL}://${DOMAIN}:${API_GATEWAY_PORT}/docs)** (Swagger UI)
 - **[Issues](https://github.com/ssharmasachin/mantrapath-holistic/issues)**
 - **[Project Board](https://github.com/ssharmasachin/mantrapath-holistic/projects)**
 

@@ -4,7 +4,8 @@
 echo "⚡ Starting MantraPath Quick Demo..."
 
 # Kill any existing processes
-lsof -ti:3000,8000 | xargs kill -9 2>/dev/null || true
+# Kill existing processes (archived script - use main start.sh)
+lsof -ti:${FRONTEND_PORT},${API_GATEWAY_PORT} | xargs kill -9 2>/dev/null || true
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
@@ -130,7 +131,7 @@ fi
 
 # Start frontend
 echo "🎨 Starting demo frontend..."
-npm run dev -- --port 3000 &
+npm run dev -- --port ${FRONTEND_PORT} &
 FRONTEND_PID=$!
 
 # Wait and check
@@ -138,7 +139,7 @@ sleep 5
 
 echo ""
 echo "🎉 MantraPath Demo is ready!"
-echo "🌐 Open: http://localhost:3000"
+echo "🌐 Open: ${PROTOCOL}://${DOMAIN}:${FRONTEND_PORT}"
 echo ""
 echo "🔥 Demo features:"
 echo "   • Smart notification scheduler with mock AI patterns"
@@ -157,7 +158,7 @@ echo "🛑 Press Ctrl+C to stop demo"
 # Auto-open browser
 if command -v open &> /dev/null; then
     sleep 3
-    open http://localhost:3000
+    open ${PROTOCOL}://${DOMAIN}:${FRONTEND_PORT}
 fi
 
 # Cleanup on exit

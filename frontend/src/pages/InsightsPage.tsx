@@ -1,5 +1,5 @@
 /**
- * Insights Page - Analytics and insights from journal and community data
+ * Insights Page - Real analytics and insights from backend data
  */
 
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
@@ -10,14 +10,65 @@ import {
   ChartLine,
   Target,
   TrendUp,
-  ArrowLeft
+  ArrowLeft,
+  Spinner
 } from '@phosphor-icons/react'
+import { useComprehensiveInsights } from '@/hooks/useComprehensiveInsights'
 
 interface InsightsPageProps {
   onBack?: () => void
 }
 
 export function InsightsPage({ onBack }: InsightsPageProps) {
+  const { 
+    insights, 
+    unifiedData, 
+    loading, 
+    error, 
+    refresh, 
+    refreshUnified, 
+    isUsingUnifiedEndpoint 
+  } = useComprehensiveInsights()
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center min-h-[400px]">
+        <div className="text-center space-y-4">
+          <Spinner className="h-8 w-8 animate-spin mx-auto" />
+          <p className="text-muted-foreground">
+            {isUsingUnifiedEndpoint 
+              ? 'Loading unified insights from ML service...' 
+              : 'Loading insights...'}
+          </p>
+        </div>
+      </div>
+    )
+  }
+
+  if (error) {
+    return (
+      <div className="flex items-center justify-center min-h-[400px]">
+        <div className="text-center space-y-4">
+          <p className="text-red-500">Failed to load insights: {error}</p>
+          <div className="space-x-2">
+            <Button onClick={refresh} variant="outline">
+              Try Again
+            </Button>
+            {isUsingUnifiedEndpoint && (
+              <Button onClick={refreshUnified} variant="outline">
+                Refresh Unified
+              </Button>
+            )}
+          </div>
+        </div>
+      </div>
+    )
+  }
+
+  const dashboard = insights?.dashboard
+  const metadata = insights?.metadata
+  const recommendedActions = insights?.recommendedActions || []
+
   return (
     <div className="space-y-6">
       {onBack && (
@@ -36,8 +87,28 @@ export function InsightsPage({ onBack }: InsightsPageProps) {
         <div>
           <h1 className="text-3xl font-bold">Insights & Analytics</h1>
           <p className="text-muted-foreground mt-2">
-            Discover patterns and insights from your wellness journey
+            {(metadata?.insightCount ?? 0) > 0 
+              ? `Discover patterns and insights from your wellness journey (${metadata?.insightCount ?? 0} insights available)`
+              : 'Start tracking your mood to see personalized insights'}
           </p>
+          {/* Show data source info */}
+          {isUsingUnifiedEndpoint && unifiedData && (
+            <div className="mt-2 text-xs text-muted-foreground bg-blue-50 dark:bg-blue-950 px-3 py-1 rounded-md inline-block">
+              🤖 AI-Powered Unified Insights
+              {unifiedData.cache_info?.hit ? ' • Cached' : ' • Fresh'}
+              {unifiedData.version && ` • ${unifiedData.version}`}
+            </div>
+          )}
+        </div>
+        <div className="flex space-x-2">
+          <Button onClick={refresh} variant="outline" size="sm">
+            Refresh
+          </Button>
+          {isUsingUnifiedEndpoint && (
+            <Button onClick={refreshUnified} variant="outline" size="sm">
+              🔄 AI Refresh
+            </Button>
+          )}
         </div>
       </motion.div>
 
@@ -51,14 +122,16 @@ export function InsightsPage({ onBack }: InsightsPageProps) {
           <Card>
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
               <CardTitle className="text-sm font-medium">
-                Journal Insights
+                Insights Available
               </CardTitle>
               <Brain className="h-4 w-4 text-muted-foreground" />
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold">12</div>
+              <div className="text-2xl font-bold">
+                {recommendedActions.length || 0}
+              </div>
               <p className="text-xs text-muted-foreground">
-                Key patterns identified
+                Personalized recommendations
               </p>
             </CardContent>
           </Card>
@@ -72,14 +145,17 @@ export function InsightsPage({ onBack }: InsightsPageProps) {
           <Card>
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
               <CardTitle className="text-sm font-medium">
-                Growth Trends
+                Weekly Score
               </CardTitle>
               <TrendUp className="h-4 w-4 text-muted-foreground" />
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold">+23%</div>
+              <div className="text-2xl font-bold">
+                {dashboard?.weeklySummary?.currentWeekScore || 0}
+              </div>
               <p className="text-xs text-muted-foreground">
-                Wellness improvement
+                {dashboard?.weeklySummary?.trend === 'improving' ? '↗ Improving' :
+                 dashboard?.weeklySummary?.trend === 'declining' ? '↘ Declining' : '→ Stable'}
               </p>
             </CardContent>
           </Card>
@@ -93,14 +169,16 @@ export function InsightsPage({ onBack }: InsightsPageProps) {
           <Card>
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
               <CardTitle className="text-sm font-medium">
-                Goals Progress
+                Days Tracked
               </CardTitle>
               <Target className="h-4 w-4 text-muted-foreground" />
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold">8/10</div>
+              <div className="text-2xl font-bold">
+                {dashboard?.weeklySummary?.daysTracked || 0}
+              </div>
               <p className="text-xs text-muted-foreground">
-                Goals achieved
+                This week
               </p>
             </CardContent>
           </Card>
@@ -114,14 +192,16 @@ export function InsightsPage({ onBack }: InsightsPageProps) {
           <Card>
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
               <CardTitle className="text-sm font-medium">
-                Analytics Score
+                Data Quality
               </CardTitle>
               <ChartLine className="h-4 w-4 text-muted-foreground" />
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold">94</div>
+              <div className="text-2xl font-bold">
+                {metadata?.dataQuality || 0}%
+              </div>
               <p className="text-xs text-muted-foreground">
-                Wellness index
+                Insight confidence
               </p>
             </CardContent>
           </Card>
@@ -141,10 +221,17 @@ export function InsightsPage({ onBack }: InsightsPageProps) {
           </CardHeader>
           <CardContent>
             <div className="space-y-4">
-              <p className="text-sm text-muted-foreground">
-                Your wellness patterns show consistent improvement during weekdays,
-                with peak performance on Tuesdays and Wednesdays.
-              </p>
+              {dashboard?.topHighlights?.bestDay ? (
+                <div className="space-y-2">
+                  <p className="text-sm font-medium">Best Day: {dashboard.topHighlights.bestDay}</p>
+                  <p className="text-sm font-medium">Energy Peak: {dashboard.topHighlights.energyPeak}</p>
+                  <p className="text-sm font-medium">Mood Streak: {dashboard.topHighlights.moodStreak} days</p>
+                </div>
+              ) : (
+                <p className="text-sm text-muted-foreground">
+                  Track your mood for a few more days to see weekly patterns and insights.
+                </p>
+              )}
             </div>
           </CardContent>
         </Card>
@@ -155,14 +242,52 @@ export function InsightsPage({ onBack }: InsightsPageProps) {
           </CardHeader>
           <CardContent>
             <div className="space-y-4">
-              <p className="text-sm text-muted-foreground">
-                Community interactions and journaling frequency correlate with
-                most active days for self-care practices.
-              </p>
+              {(dashboard?.weeklySummary?.achievements?.length ?? 0) > 0 ? (
+                <div className="space-y-2">
+                  <p className="text-sm font-medium">Recent Achievements:</p>
+                  <ul className="text-sm text-muted-foreground space-y-1">
+                    {dashboard?.weeklySummary?.achievements?.map((achievement, index) => (
+                      <li key={index}>• {achievement}</li>
+                    ))}
+                  </ul>
+                </div>
+              ) : (
+                <p className="text-sm text-muted-foreground">
+                  Continue tracking your wellness journey to unlock engagement insights and achievements.
+                </p>
+              )}
             </div>
           </CardContent>
         </Card>
       </motion.div>
+
+      {/* Recommendations */}
+      {recommendedActions.length > 0 && (
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.6 }}
+        >
+          <Card>
+            <CardHeader>
+              <CardTitle>Personalized Recommendations</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="space-y-4">
+                {recommendedActions.slice(0, 3).map((action, index) => (
+                  <div key={action.id} className="border-l-4 border-blue-500 pl-4">
+                    <h4 className="font-medium">{action.title}</h4>
+                    <p className="text-sm text-muted-foreground">{action.description}</p>
+                    <p className="text-xs text-blue-600 mt-1">
+                      {action.estimatedTime} • {action.expectedBenefit}
+                    </p>
+                  </div>
+                ))}
+              </div>
+            </CardContent>
+          </Card>
+        </motion.div>
+      )}
     </div>
   )
 }

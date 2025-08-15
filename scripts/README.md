@@ -102,10 +102,10 @@ docker-compose up -d  # Starts ALL services
 ### ✅ Correct Port Configuration
 ```bash
 # Before: Hardcoded wrong port
-wait_for_port 3000 "Frontend" 
+wait_for_port ${FRONTEND_PORT} "Frontend" 
 
 # After: Vite's actual port
-wait_for_port 5173 "Frontend"
+wait_for_port ${FRONTEND_PORT} "Frontend"
 ```
 
 ### ✅ Complete Health Monitoring
@@ -149,7 +149,7 @@ All scripts have been thoroughly tested:
 
 After running `./scripts/start.sh`, access:
 
-- **🌐 Application**: http://localhost:5173 (Vite dev server)
+- **🌐 Application**: ${PROTOCOL}://${DOMAIN}:${FRONTEND_PORT} (Vite dev server)
 - **📊 API Gateway**: http://localhost:8000/docs (Swagger docs)
 - **🧠 Mood Service**: http://localhost:8003/docs (Mood API docs)
 - **🔍 Health Check**: http://localhost:8000/health (System health)

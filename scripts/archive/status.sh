@@ -113,14 +113,15 @@ echo ""
 # Check Frontend Services
 echo -e "${CYAN}=== Frontend Services ===${NC}"
 
-if port_in_use 3000; then
-    health_status=""
-    if check_endpoint "http://localhost:3000"; then
+# Fix hardcoded references - use environment variables when available
+if port_in_use ${FRONTEND_PORT:-3000}; then
+    echo "✅ Frontend detected"
+    if check_endpoint "${PROTOCOL:-http}://${DOMAIN:-localhost}:${FRONTEND_PORT:-3000}"; then
         health_status=" ${GREEN}(responding)${NC}"
     else
         health_status=" ${RED}(not responding)${NC}"
     fi
-    echo -e "${GREEN}✅ Frontend${NC}       - localhost:3000$health_status"
+    echo -e "${GREEN}✅ Frontend${NC}       - ${DOMAIN:-localhost}:${FRONTEND_PORT:-3000}$health_status"
 elif port_in_use 5173; then
     health_status=""
     if check_endpoint "http://localhost:5173"; then

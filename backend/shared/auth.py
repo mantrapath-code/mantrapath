@@ -63,7 +63,7 @@ def send_verification_email(email: str, token: str, username: str) -> bool:
         
         if not smtp_username or not smtp_password:
             # For development/testing - print verification link to console
-            verification_url = f"{app_url}/verify-email?token={token}"
+            verification_url = f"{app_url}/?token={token}"
             print("\n" + "="*80)
             print("🔐 EMAIL VERIFICATION REQUIRED")
             print("="*80)
@@ -77,7 +77,7 @@ def send_verification_email(email: str, token: str, username: str) -> bool:
             return False  # Return False to allow proper verification flow testing
         
         # Create verification URL
-        verification_url = f"{app_url}/verify-email?token={token}"
+        verification_url = f"{app_url}/?token={token}"
         
         # Create email content
         subject = "Welcome to MantraPath - Verify Your Email"

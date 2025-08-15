@@ -11,6 +11,49 @@
 
 import { apiService } from './api'
 
+// Updated interface to match our backend response format
+export interface UnifiedInsightsResponse {
+  user_id: string
+  timestamp: string
+  aggregated_insights: {
+    mood: {
+      current_score: number
+      average_score: number
+      total_entries: number
+      trend: 'improving' | 'stable' | 'declining'
+      weekly_summary: {
+        days_tracked: number
+        best_day: string
+        mood_variance: number
+      }
+    }
+    predictions: {
+      next_day_mood: number
+      confidence: number
+      recommendations: string[]
+    }
+    patterns: {
+      time_of_day: Array<{
+        hour: number
+        average_mood: number
+        frequency: number
+      }>
+      day_of_week: Array<{
+        day: string
+        average_mood: number
+        activity_count: number
+      }>
+    }
+  }
+  cache_info: {
+    hit: boolean
+    ttl_seconds: number
+    last_updated: string
+  }
+  version: string
+}
+
+// Legacy interface for backward compatibility
 export interface ComprehensiveInsights {
   dashboard: InsightDashboard
   detailedAnalysis: DetailedAnalysis
@@ -816,6 +859,180 @@ export class UnifiedInsightService {
   // Clear cache method
   clearCache() {
     this.cache.clear()
+  }
+
+  /**
+   * Get unified insights from the ML service backend
+   * This is the new endpoint that aggregates all insights server-side
+   */
+  async getUnifiedInsights(forceRefresh: boolean = false): Promise<UnifiedInsightsResponse> {
+    try {
+      // Use the ML service URL directly for the unified insights endpoint
+      const mlServiceUrl = import.meta.env.VITE_ML_SERVICE_URL || 'http://localhost:8008'
+      const token = localStorage.getItem('mantrapath_token')
+      
+      if (!token) {
+        throw new Error('Authentication token not found')
+      }
+
+      const url = `${mlServiceUrl}/api/v1/insights/unified${forceRefresh ? '?force_refresh=true' : ''}`
+      
+      const response = await fetch(url, {
+        method: 'GET',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'X-Insight-Version': 'v1',
+          'Content-Type': 'application/json'
+        }
+      })
+
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}: ${response.statusText}`)
+      }
+
+      const data = await response.json()
+      return data
+    } catch (error) {
+      console.error('Failed to fetch unified insights:', error)
+      throw new Error('Failed to load unified insights from server')
+    }
+  }
+
+  /**
+   * Transform unified insights response to legacy format for backward compatibility
+   */
+  transformToLegacyFormat(unifiedResponse: UnifiedInsightsResponse): ComprehensiveInsights {
+    const { aggregated_insights, timestamp, cache_info } = unifiedResponse
+    const { mood, predictions } = aggregated_insights
+
+    // Create a basic transformation that matches the existing interface structure
+    return {
+      dashboard: {
+        weeklySummary: {
+          currentWeekScore: mood.current_score,
+          trend: mood.trend,
+          daysTracked: mood.weekly_summary?.days_tracked || mood.total_entries,
+          achievements: [`${mood.total_entries} mood entries tracked`]
+        },
+        currentStatus: {
+          moodScore: mood.current_score,
+          energyLevel: Math.round(mood.current_score * 0.8),
+          stressLevel: Math.max(0, Math.round((10 - mood.current_score) * 0.7)),
+          lastUpdated: new Date(timestamp)
+        },
+        topHighlights: {
+          bestDay: mood.weekly_summary?.best_day || 'Today',
+          energyPeak: 'Morning',
+          dominantMood: mood.current_score > 7 ? 'Positive' : mood.current_score > 4 ? 'Neutral' : 'Low',
+          moodStreak: mood.total_entries
+        }
+      },
+      detailedAnalysis: {
+        patterns: {
+          timeOfDay: [],
+          dayOfWeek: [],
+          triggers: [],
+          boosters: []
+        },
+        correlations: {
+          activities: [],
+          weather: [],
+          sleep: [],
+          social: []
+        },
+        predictions: {
+          upcomingChallenges: [],
+          opportunityWindows: [],
+          moodForecast: []
+        }
+      },
+      recommendedActions: predictions.recommendations.slice(0, 5).map((rec, index) => ({
+        id: `unified_action_${index}`,
+        priority: 'medium' as const,
+        title: rec,
+        description: `AI-powered recommendation: ${rec}`,
+        category: 'mood_boost' as const,
+        source: 'ai' as const,
+        specificActions: [rec],
+        estimatedTime: '15 minutes',
+        expectedBenefit: 'Improved mood and well-being',
+        optimalTiming: 'anytime',
+        confidence: predictions.confidence
+      })),
+      progressTracking: {
+        trends: {
+          mood: { 
+            current: mood.current_score, 
+            change: mood.current_score - mood.average_score,
+            direction: mood.current_score > mood.average_score ? 'up' : mood.current_score < mood.average_score ? 'down' : 'stable',
+            weeklyAverage: mood.average_score
+          },
+          energy: { 
+            current: mood.current_score * 0.8, 
+            change: 0,
+            direction: 'stable' as const,
+            weeklyAverage: mood.average_score * 0.8
+          },
+          stress: { 
+            current: Math.max(0, (10 - mood.current_score) * 0.7), 
+            change: 0,
+            direction: 'stable' as const,
+            weeklyAverage: Math.max(0, (10 - mood.average_score) * 0.7)
+          },
+          overall: { 
+            current: mood.current_score, 
+            change: mood.current_score - mood.average_score,
+            direction: mood.current_score > mood.average_score ? 'up' : mood.current_score < mood.average_score ? 'down' : 'stable',
+            weeklyAverage: mood.average_score
+          }
+        },
+        goals: [],
+        comparisons: {
+          thisWeek: {
+            averageMood: mood.current_score,
+            moodVariability: 0.5,
+            bestDay: 'Today',
+            challengingDay: 'Yesterday',
+            keyActivities: ['mood_tracking']
+          },
+          lastWeek: {
+            averageMood: mood.average_score,
+            moodVariability: 0.5,
+            bestDay: 'Monday',
+            challengingDay: 'Friday',
+            keyActivities: ['mood_tracking']
+          },
+          thisMonth: {
+            averageMood: mood.current_score,
+            moodVariability: 0.5,
+            bestDay: 'Today',
+            challengingDay: 'Last week',
+            keyActivities: ['mood_tracking']
+          },
+          lastMonth: {
+            averageMood: mood.average_score,
+            moodVariability: 0.5,
+            bestDay: 'Beginning of month',
+            challengingDay: 'Mid month',
+            keyActivities: ['mood_tracking']
+          }
+        },
+        successPatterns: []
+      },
+      metadata: {
+        lastUpdated: new Date(timestamp),
+        dataQuality: Math.round(predictions.confidence * 100),
+        confidenceScore: predictions.confidence,
+        insightCount: predictions.recommendations.length,
+        sourceDistribution: {
+          personalized: 0,
+          patterns: 0,
+          weather: 0,
+          ml: predictions.recommendations.length,
+          community: 0
+        }
+      }
+    }
   }
 }
 

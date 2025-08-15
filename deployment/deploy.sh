@@ -43,7 +43,7 @@ events {
 
 http {
     upstream frontend {
-        server frontend:3000;
+        server frontend:5173;
     }
 
     upstream api_gateway {
@@ -56,7 +56,7 @@ http {
 
     server {
         listen 80;
-        server_name localhost;
+        server_name ${DOMAIN};  # Configure domain from environment
 
         # Security headers
         add_header X-Frame-Options "SAMEORIGIN" always;
@@ -168,10 +168,10 @@ docker-compose up -d prometheus grafana
 echo "✅ MantraPath deployment completed!"
 echo ""
 echo "🌐 Application URLs:"
-echo "   Frontend: http://localhost"
-echo "   API Gateway: http://localhost:8000"
-echo "   Grafana Dashboard: http://localhost:3001 (admin/mantrapath123)"
-echo "   Prometheus: http://localhost:9090"
+echo "   Frontend: ${PROTOCOL}://${DOMAIN}"
+echo "   API Gateway: ${PROTOCOL}://${DOMAIN}:${API_GATEWAY_PORT}"
+echo "   Grafana Dashboard: ${PROTOCOL}://${DOMAIN}:3001 (admin/mantrapath123)"
+echo "   Prometheus: ${PROTOCOL}://${DOMAIN}:9090"
 echo ""
 echo "📋 Service Status:"
 docker-compose ps

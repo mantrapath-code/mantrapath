@@ -19,6 +19,7 @@ Version: 2.0.0 (Intelligent Engine)
 
 import asyncio
 import logging
+import os
 import sys
 from datetime import datetime
 from typing import List, Optional
@@ -87,7 +88,10 @@ app = FastAPI(
 # Configure CORS for frontend integration
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:5173", "http://localhost:3000"],  # Frontend URLs
+    allow_origins=[
+        os.getenv("FRONTEND_URL", "http://localhost:5173"),
+        os.getenv("API_GATEWAY_URL", "http://localhost:8000")
+    ],  # Frontend URLs
     allow_credentials=True,
     allow_methods=["GET", "POST", "PUT", "DELETE"],
     allow_headers=["*"],

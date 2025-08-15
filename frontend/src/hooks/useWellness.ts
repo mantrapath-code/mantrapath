@@ -2,7 +2,9 @@ import { useState, useEffect, useCallback } from 'react'
 import { toast } from 'sonner'
 import { apiService } from '@/services/api'
 import { useAuth } from '@/hooks/useAuth'
+import { MoodEntry as BackendMoodEntry } from '@/types/index'
 
+// Local interface for frontend-specific mood entry structure
 export interface MoodEntry {
   id: string
   mood: number
