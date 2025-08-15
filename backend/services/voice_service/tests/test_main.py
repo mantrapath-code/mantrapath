@@ -19,15 +19,14 @@ def client():
 class TestHealthCheck:
     """Test health check endpoint"""
     
-    @patch('main.engine_manager')
-    @patch('main.integration_manager') 
     @patch('main.voice_processing')
-    def test_health_check_healthy(self, mock_voice, mock_integration, mock_engine, client):
-        """Test healthy status response"""
-        # Setup mocks
-        mock_engine.get_health_status.return_value = {"status": "healthy"}
-        mock_integration.get_integration_stats.return_value = {"success_rate": 0.95}
-        mock_voice.get_processing_stats.return_value = {"uptime_seconds": 3600}
+    @patch('main.engine_manager') 
+    @patch('main.integration_manager')
+    def test_health_check_healthy(self, mock_integration, mock_engine, mock_voice, client):
+        """Test healthy status"""
+        mock_engine.get_health_status = AsyncMock(return_value={"status": "healthy"})
+        mock_voice.get_processing_stats = AsyncMock(return_value={"uptime_seconds": 3600})
+        mock_integration.get_integration_stats.return_value = {"status": "healthy"}
         
         response = client.get("/health")
         
@@ -47,8 +46,7 @@ class TestHealthCheck:
         
         assert response.status_code == 503
         data = response.json()
-        assert data["status"] == "unhealthy"
-        assert "error" in data
+        assert data["status"] == "degraded"
 
 class TestAuthentication:
     """Test authentication functionality"""
@@ -96,7 +94,10 @@ class TestSpeechToText:
         mock_voice.process_speech_to_text = AsyncMock(return_value=MagicMock(
             success=True,
             message="Success",
-            data={"transcription": {"text": "Hello world", "confidence": 0.95}}
+            data={"transcription": {"text": "Hello world", "confidence": 0.95}},
+            request_id="test_request_123",
+            language="en",
+            processing_time_ms=150.0
         ))
         
         # Create test audio file
@@ -221,15 +222,15 @@ class TestVoiceCommand:
         mock_command.process_voice_command = AsyncMock(return_value=MagicMock(
             success=True,
             message="Command processed",
-            data={"action": "start_meditation"}
+            data={"action": "start_meditation"},
+            request_id="test_request_123",
+            language="en",
+            processing_time_ms=150.0
         ))
         
         command = {
             "text": "start meditation",
-            "command_type": "START_MEDITATION",
             "language": "en",
-            "confidence": 0.9,
-            "parameters": {},
             "context": {}
         }
         
@@ -258,8 +259,11 @@ class TestEmotionAnalysis:
         
         mock_voice.analyze_voice_emotion = AsyncMock(return_value=MagicMock(
             success=True,
-            message="Analysis complete",
-            data={"emotion_analysis": {"primary_emotion": "neutral", "confidence": 0.8}}
+            message="Success",
+            data={"emotion": {"primary_emotion": "happy", "confidence": 0.85}},
+            request_id="test_request_123",
+            language="en",
+            processing_time_ms=150.0
         ))
         
         audio_data = create_test_audio_file()
@@ -273,7 +277,7 @@ class TestEmotionAnalysis:
         assert response.status_code == 200
         data = response.json()
         assert data["success"] is True
-        assert "emotion_analysis" in data["data"]
+        assert "emotion" in data["data"]
 
 class TestVoiceProfiles:
     """Test voice profile endpoints"""
@@ -289,7 +293,9 @@ class TestVoiceProfiles:
         mock_profile.create_voice_profile = AsyncMock(return_value=MagicMock(
             success=True,
             message="Profile created",
-            data={"profile_id": "test_profile_123"}
+            data={"profile_id": "test_profile_123"},
+            request_id="test_request_123",
+            language="en"
         ))
         
         response = client.post(

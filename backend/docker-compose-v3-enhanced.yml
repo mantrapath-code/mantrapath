@@ -1,0 +1,494 @@
+version: '3.8'
+
+services:
+  # Database
+  postgres:
+    image: postgres:15
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-mantrapath}
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./database/init.sql:/docker-entrypoint-initdb.d/init.sql
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
+    networks:
+      - mantrapath-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-postgres} -d ${POSTGRES_DB:-mantrapath}"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 30s
+
+  # Redis for caching and real-time features
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "${REDIS_PORT:-6379}:6379"
+    volumes:
+      - redis_data:/data
+    networks:
+      - mantrapath-network
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 30s
+    command: redis-server --appendonly yes --maxmemory 512mb --maxmemory-policy allkeys-lru
+
+  # NATS for real-time messaging and WebSocket clustering
+  nats:
+    image: nats:2.10-alpine
+    ports:
+      - "4222:4222"
+      - "8222:8222"
+      - "6222:6222"
+    networks:
+      - mantrapath-network
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:8222/healthz"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 10s
+    command: [
+      "--cluster_name", "mantrapath-cluster",
+      "--http_port", "8222",
+      "--port", "4222",
+      "--jetstream"
+    ]
+
+  # API Gateway V3 Enhanced - Main service
+  api-gateway-v3:
+    build:
+      context: ./services/api_gateway
+      dockerfile: Dockerfile.v3
+    ports:
+      - "8000:8000"
+      - "8001:8001"  # WebSocket port
+      - "9090:9090"  # Metrics port
+    env_file:
+      - .env
+    environment:
+      # V3 Enhanced Configuration
+      - GATEWAY_VERSION=v3_enhanced
+      - GATEWAY_ENVIRONMENT=${ENVIRONMENT:-development}
+      - GATEWAY_DEBUG=${DEBUG:-true}
+      - GATEWAY_HOST=0.0.0.0
+      - GATEWAY_PORT=8000
+      - WEBSOCKET_PORT=8001
+      - METRICS_PORT=9090
+      
+      # Voice Features
+      - VOICE_ROUTING_ENABLED=true
+      - VOICE_COMMAND_TIMEOUT=5000
+      - VOICE_CONFIDENCE_THRESHOLD=0.7
+      - SUPPORTED_LANGUAGES=en,hi,es,fr,de,it,pt,ru,ja,zh,ko,ar,bn,ta,te,gu,mr,pa,ur,ml,kn,as
+      - VOICE_SERVICE_URL=http://voice-service:8004
+      
+      # AI Context
+      - AI_CONTEXT_ENABLED=true
+      - AI_CONTEXT_CACHE_TTL=300
+      - AI_CONTEXT_MAX_SIZE=1024
+      - ML_SERVICE_URL=http://ml-service:8006
+      
+      # Cultural Intelligence
+      - CULTURAL_ADAPTATION_ENABLED=true
+      - CULTURAL_CONTEXT_CACHE_TTL=600
+      - DEFAULT_CULTURE=neutral
+      - CULTURAL_FALLBACK_ENABLED=true
+      - TRANSLATION_SERVICE_URL=http://translation-service:8005
+      
+      # WebSocket Enhanced
+      - WEBSOCKET_MAX_CONNECTIONS=10000
+      - WEBSOCKET_HEARTBEAT_INTERVAL=30
+      - WEBSOCKET_VOICE_STREAMING=true
+      - WEBSOCKET_CLUSTERING_ENABLED=true
+      - NATS_URL=nats://nats:4222
+      
+      # Performance
+      - CONTEXT_CACHE_SIZE=10000
+      - CONNECTION_POOL_SIZE=100
+      - RESPONSE_CACHE_TTL=60
+      - PERFORMANCE_MONITORING=true
+      
+      # Database & Cache
+      - DATABASE_URL=postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@postgres:5432/${POSTGRES_DB:-mantrapath}
+      - REDIS_URL=redis://redis:6379/0
+      - REDIS_CONTEXT_DB=1
+      - REDIS_CACHE_DB=2
+      
+      # Service Discovery
+      - SERVICE_DISCOVERY_ENABLED=true
+      - AUTH_SERVICE_URL=http://auth-service:8001
+      - CHATBOT_SERVICE_URL=http://chatbot-service:8002
+      - CONTENT_SERVICE_URL=http://content-service:8003
+      - MOOD_SERVICE_URL=http://mood-service:8007
+      - PROFILE_SERVICE_URL=http://profile-service:8008
+      - COMMUNITY_SERVICE_URL=http://community-service:8009
+      - NOTIFICATION_SERVICE_URL=http://notification-service:8010
+      
+      # Monitoring
+      - PROMETHEUS_ENABLED=true
+      - LOG_LEVEL=${LOG_LEVEL:-INFO}
+      - STRUCTURED_LOGGING=true
+    volumes:
+      - ./services/api_gateway/config:/app/config:ro
+      - ./services/api_gateway/logs:/app/logs
+      - ./services/api_gateway/cache:/app/cache
+    networks:
+      - mantrapath-network
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      nats:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/api/v3/health/enhanced"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 60s
+    restart: unless-stopped
+
+  # Translation Service - Enhanced for V3
+  translation-service:
+    build:
+      context: ./services/translation_service
+      dockerfile: Dockerfile
+    ports:
+      - "8005:8005"
+    env_file:
+      - .env
+    environment:
+      - TRANSLATION_PORT=8005
+      - TRANSLATION_DEBUG=${DEBUG:-true}
+      - REDIS_URL=redis://redis:6379/2
+      - DATABASE_URL=postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@postgres:5432/${POSTGRES_DB:-mantrapath}
+      - PYTHONPATH=/app
+      - CULTURAL_ADAPTATION_ENABLED=true
+      - LANGUAGE_DETECTION_ENABLED=true
+      - REAL_TIME_TRANSLATION=true
+    volumes:
+      - ./services/translation_service/models:/app/models
+      - ./services/translation_service/cache:/app/cache
+      - translation_models:/app/models_cache
+    networks:
+      - mantrapath-network
+    depends_on:
+      redis:
+        condition: service_healthy
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8005/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 90s
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          memory: 1G
+        reservations:
+          memory: 512M
+
+  # Voice Service - Enhanced for V3
+  voice-service:
+    build:
+      context: ./services/voice_service
+      dockerfile: Dockerfile
+    ports:
+      - "8004:8004"
+    env_file:
+      - .env
+    environment:
+      - VOICE_PORT=8004
+      - VOICE_DEBUG=${DEBUG:-true}
+      - REDIS_URL=redis://redis:6379/3
+      - DATABASE_URL=postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@postgres:5432/${POSTGRES_DB:-mantrapath}
+      - WHISPER_MODEL_SIZE=base
+      - VOICE_ACTIVITY_DETECTION=true
+      - REAL_TIME_PROCESSING=true
+      - INTENT_CLASSIFICATION_ENABLED=true
+      - MULTILINGUAL_SUPPORT=true
+      - PYTHONPATH=/app
+    volumes:
+      - ./services/voice_service/models:/app/models
+      - voice_models:/app/models_cache
+      - ./services/voice_service/audio_cache:/app/audio_cache
+    networks:
+      - mantrapath-network
+    depends_on:
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8004/health"]
+      interval: 30s
+      timeout: 15s
+      retries: 5
+      start_period: 120s
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          memory: 3G
+        reservations:
+          memory: 1.5G
+
+  # ML Service - Enhanced for V3 AI Context
+  ml-service:
+    build:
+      context: ./services/ml_service
+      dockerfile: Dockerfile
+    ports:
+      - "8006:8006"
+    env_file:
+      - .env
+    environment:
+      - ML_PORT=8006
+      - ML_DEBUG=${DEBUG:-true}
+      - REDIS_URL=redis://redis:6379/4
+      - DATABASE_URL=postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@postgres:5432/${POSTGRES_DB:-mantrapath}
+      - MODEL_CACHE_SIZE=1000
+      - AI_CONTEXT_ENABLED=true
+      - CULTURAL_ADAPTATION_ENABLED=true
+      - REAL_TIME_PREDICTIONS=true
+      - USER_MODELING_ENABLED=true
+      - PYTHONPATH=/app
+    volumes:
+      - ./services/ml_service/models:/app/models
+      - ml_models:/app/models_cache
+      - ./services/ml_service/data:/app/data
+    networks:
+      - mantrapath-network
+    depends_on:
+      redis:
+        condition: service_healthy
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8006/health"]
+      interval: 30s
+      timeout: 15s
+      retries: 5
+      start_period: 180s
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          memory: 6G
+        reservations:
+          memory: 3G
+
+  # Enhanced Core Services for V3 Integration
+  auth-service:
+    build:
+      context: ./services/auth_service
+      dockerfile: Dockerfile
+    ports:
+      - "8001:8001"
+    env_file:
+      - .env
+    environment:
+      - AUTH_PORT=8001
+      - DATABASE_URL=postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@postgres:5432/${POSTGRES_DB:-mantrapath}
+      - REDIS_URL=redis://redis:6379/5
+      - JWT_SECRET_KEY=${JWT_SECRET_KEY:-your-super-secret-jwt-key}
+      - CULTURAL_CONTEXT_ENABLED=true
+      - VOICE_AUTH_ENABLED=true
+      - PYTHONPATH=/app
+    networks:
+      - mantrapath-network
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8001/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 30s
+    restart: unless-stopped
+
+  chatbot-service:
+    build:
+      context: ./services/chatbot_service
+      dockerfile: Dockerfile
+    ports:
+      - "8002:8002"
+    env_file:
+      - .env
+    environment:
+      - CHATBOT_PORT=8002
+      - DATABASE_URL=postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@postgres:5432/${POSTGRES_DB:-mantrapath}
+      - REDIS_URL=redis://redis:6379/6
+      - AI_CONTEXT_ENABLED=true
+      - VOICE_INTEGRATION=true
+      - CULTURAL_AWARENESS=true
+      - MULTILINGUAL_SUPPORT=true
+      - PYTHONPATH=/app
+    networks:
+      - mantrapath-network
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8002/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 45s
+    restart: unless-stopped
+
+  content-service:
+    build:
+      context: ./services/content_service
+      dockerfile: Dockerfile
+    ports:
+      - "8003:8003"
+    env_file:
+      - .env
+    environment:
+      - CONTENT_PORT=8003
+      - DATABASE_URL=postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@postgres:5432/${POSTGRES_DB:-mantrapath}
+      - REDIS_URL=redis://redis:6379/7
+      - AI_RECOMMENDATIONS=true
+      - CULTURAL_CONTENT=true
+      - VOICE_COMMANDS=true
+      - PYTHONPATH=/app
+    networks:
+      - mantrapath-network
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8003/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 45s
+    restart: unless-stopped
+
+  mood-service:
+    build:
+      context: ./services/mood_service
+      dockerfile: Dockerfile
+    ports:
+      - "8007:8007"
+    env_file:
+      - .env
+    environment:
+      - MOOD_PORT=8007
+      - DATABASE_URL=postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@postgres:5432/${POSTGRES_DB:-mantrapath}
+      - REDIS_URL=redis://redis:6379/8
+      - AI_INSIGHTS=true
+      - VOICE_MOOD_TRACKING=true
+      - CULTURAL_CONTEXT=true
+      - PYTHONPATH=/app
+    networks:
+      - mantrapath-network
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8007/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 30s
+    restart: unless-stopped
+
+  # Monitoring Stack
+  prometheus:
+    image: prom/prometheus:latest
+    ports:
+      - "9091:9090"
+    volumes:
+      - ./monitoring/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus_data:/prometheus
+    networks:
+      - mantrapath-network
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--web.console.libraries=/etc/prometheus/console_libraries'
+      - '--web.console.templates=/etc/prometheus/consoles'
+      - '--storage.tsdb.retention.time=200h'
+      - '--web.enable-lifecycle'
+    restart: unless-stopped
+
+  grafana:
+    image: grafana/grafana:latest
+    ports:
+      - "3000:3000"
+    environment:
+      - GF_SECURITY_ADMIN_PASSWORD=${GRAFANA_PASSWORD:-admin}
+      - GF_INSTALL_PLUGINS=grafana-clock-panel,grafana-simple-json-datasource
+    volumes:
+      - grafana_data:/var/lib/grafana
+      - ./monitoring/grafana/dashboards:/etc/grafana/provisioning/dashboards:ro
+      - ./monitoring/grafana/datasources:/etc/grafana/provisioning/datasources:ro
+    networks:
+      - mantrapath-network
+    depends_on:
+      - prometheus
+    restart: unless-stopped
+
+  # Nginx Load Balancer for V3 API Gateway clustering
+  nginx:
+    image: nginx:alpine
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx/nginx-v3.conf:/etc/nginx/nginx.conf:ro
+      - ./nginx/ssl:/etc/nginx/ssl:ro
+    networks:
+      - mantrapath-network
+    depends_on:
+      - api-gateway-v3
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:80/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 15s
+    restart: unless-stopped
+
+networks:
+  mantrapath-network:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.20.0.0/16
+
+volumes:
+  postgres_data:
+    driver: local
+  redis_data:
+    driver: local
+  voice_models:
+    driver: local
+  ml_models:
+    driver: local
+  translation_models:
+    driver: local
+  prometheus_data:
+    driver: local
+  grafana_data:
+    driver: local

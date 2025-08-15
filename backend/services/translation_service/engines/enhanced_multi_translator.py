@@ -7,6 +7,8 @@ import asyncio
 from typing import Dict, List, Optional, Any, Tuple
 import time
 from statistics import mean
+from datetime import datetime
+from engines.base_translator import BaseTranslator, TranslationResult
 
 logger = logging.getLogger(__name__)
 
@@ -16,10 +18,12 @@ from .indic_translator import IndicTranslator
 from .local_translator import LocalTranslator
 from .cultural_adaptation import CulturalAdaptationService
 
-class EnhancedMultiTranslator:
+class EnhancedMultiTranslator(BaseTranslator):
     """Enhanced multi-translator engine combining multiple translation services"""
     
-    def __init__(self):
+    def __init__(self, name: str = "enhanced_multi", config: Dict[str, Any] = None):
+        super().__init__(name, config or {})
+        
         self.engines = {}
         self.engine_priorities = {
             'indic': 1,      # Highest priority for Indian languages
@@ -27,11 +31,16 @@ class EnhancedMultiTranslator:
             'argos': 3,      # Offline backup
             'local': 4       # Fallback
         }
-        self.is_initialized = False
         
         # Indian language codes for specialized routing
         self.indian_languages = {
             'hi', 'bn', 'ta', 'te', 'ml', 'kn', 'gu', 'or', 'pa', 'as', 'mr', 'ur'
+        }
+        
+        # Set supported languages (union of all engine languages)
+        self.supported_languages = {
+            'en', 'es', 'fr', 'de', 'hi', 'bn', 'ta', 'te', 'ml', 'kn', 'gu', 
+            'or', 'pa', 'as', 'mr', 'ur', 'zh', 'ja', 'ko', 'ru', 'ar', 'pt', 'it'
         }
         
     async def initialize(self) -> bool:
@@ -72,10 +81,11 @@ class EnhancedMultiTranslator:
     async def translate(
         self,
         text: str,
+        source_language: str,
         target_language: str,
-        source_language: str = "en",
+        domain: Optional[str] = None,
         context: Optional[Dict[str, Any]] = None
-    ) -> Dict[str, Any]:
+    ) -> TranslationResult:
         """
         Translate text using multiple engines and select best result
         """
@@ -111,11 +121,22 @@ class EnhancedMultiTranslator:
         
         best_result = self._select_best_translation(translation_results, source_language, target_language)
         
-        # Add metadata
-        processing_time = (time.time() - start_time) * 1000
-        best_result['processing_time_ms'] = processing_time
-        best_result['engines_used'] = [r['engine'] for r in translation_results]
-        best_result['total_candidates'] = len(translation_results)
+        # Convert to TranslationResult if it's not already
+        if isinstance(best_result, dict):
+            processing_time = (time.time() - start_time) * 1000
+            return TranslationResult(
+                translated_text=best_result.get('translated_text', ''),
+                source_language=source_language,
+                target_language=target_language,
+                confidence_score=best_result.get('confidence_score', 0.8),
+                engine_name=self.name,
+                processing_time_ms=int(processing_time),
+                metadata={
+                    'engines_used': [r.get('engine', '') for r in translation_results],
+                    'total_candidates': len(translation_results),
+                    'best_engine': best_result.get('engine', '')
+                }
+            )
         
         return best_result
     
@@ -236,7 +257,7 @@ class EnhancedMultiTranslator:
         total_score = base_score + engine_bonus
         return min(total_score, 1.0)
     
-    async def detect_language(self, text: str) -> Dict[str, Any]:
+    async def detect_language(self, text: str) -> Tuple[str, float]:
         """Detect language using the best available engine"""
         
         if not self.is_initialized:
@@ -253,18 +274,16 @@ class EnhancedMultiTranslator:
                         engine.detect_language(text),
                         timeout=5.0
                     )
-                    result['primary_engine'] = engine_name
-                    return result
+                    if isinstance(result, tuple):
+                        return result
+                    elif isinstance(result, dict):
+                        return (result.get('language', 'en'), result.get('confidence', 0.5))
                 except Exception as e:
                     logger.warning(f"Language detection failed for {engine_name}: {str(e)}")
                     continue
         
         # Fallback detection
-        return {
-            'language': 'en',
-            'confidence': 0.3,
-            'primary_engine': 'fallback'
-        }
+        return ('en', 0.3)
     
     async def health_check(self) -> Dict[str, Any]:
         """Check health of all translation engines"""
@@ -301,72 +320,55 @@ class EnhancedMultiTranslator:
             'supported_engines': list(self.engines.keys())
         }
     
-    async def get_supported_languages(self) -> Dict[str, List[str]]:
-        """Get supported languages for each engine"""
-        
-        if not self.is_initialized:
-            await self.initialize()
-        
-        languages_by_engine = {}
-        
-        for engine_name, engine in self.engines.items():
-            try:
-                if hasattr(engine, 'get_supported_languages'):
-                    languages = await engine.get_supported_languages()
-                    languages_by_engine[engine_name] = languages
-                elif hasattr(engine, 'supported_languages'):
-                    languages_by_engine[engine_name] = list(engine.supported_languages.keys())
-                else:
-                    languages_by_engine[engine_name] = ['en']  # Default
-                    
-            except Exception as e:
-                logger.warning(f"Could not get languages for {engine_name}: {str(e)}")
-                languages_by_engine[engine_name] = []
-        
-        # Combine all unique languages
-        all_languages = set()
-        for langs in languages_by_engine.values():
-            all_languages.update(langs)
-        
-        return {
-            'all_supported': sorted(list(all_languages)),
-            'by_engine': languages_by_engine,
-            'indian_languages': sorted(list(self.indian_languages))
-        }
+    def get_supported_languages(self) -> List[str]:
+        """Get list of supported language codes"""
+        return list(self.supported_languages)
     
     async def translate_batch(
         self,
-        requests: List[Dict[str, Any]],
-        max_concurrent: int = 5
-    ) -> List[Dict[str, Any]]:
+        texts: List[str],
+        source_language: str,
+        target_language: str,
+        domain: Optional[str] = None,
+        context: Optional[Dict[str, Any]] = None
+    ) -> List[TranslationResult]:
         """Translate multiple texts concurrently"""
         
-        semaphore = asyncio.Semaphore(max_concurrent)
+        results = []
+        for text in texts:
+            result = await self.translate(text, source_language, target_language, domain, context)
+            results.append(result)
         
-        async def translate_single(request):
-            async with semaphore:
-                return await self.translate(
-                    text=request.get('text', ''),
-                    target_language=request.get('target_language', 'en'),
-                    source_language=request.get('source_language', 'en'),
-                    context=request.get('context')
-                )
+        return results
+    
+    def supports_language_pair(self, source: str, target: str) -> bool:
+        """Check if the engine supports the given language pair"""
+        return source in self.supported_languages and target in self.supported_languages
+    
+    async def get_quality_score(
+        self,
+        original_text: str,
+        translated_text: str,
+        source_language: str,
+        target_language: str
+    ) -> float:
+        """Calculate quality score for a translation"""
+        if not translated_text or translated_text == original_text:
+            return 0.5
         
-        tasks = [translate_single(req) for req in requests]
-        results = await asyncio.gather(*tasks, return_exceptions=True)
+        # Base score from text analysis
+        base_score = 0.8
         
-        # Convert exceptions to error dictionaries
-        processed_results = []
-        for i, result in enumerate(results):
-            if isinstance(result, Exception):
-                processed_results.append({
-                    'error': str(result),
-                    'request_index': i,
-                    'status': 'failed'
-                })
-            else:
-                result['request_index'] = i
-                result['status'] = 'success'
-                processed_results.append(result)
+        # Adjust based on language pair support
+        if source_language in self.indian_languages or target_language in self.indian_languages:
+            base_score += 0.1  # Bonus for Indian languages (our specialty)
         
-        return processed_results
+        return min(base_score, 1.0)
+    
+    def is_indian_language(self, language_code: str) -> bool:
+        """Check if language is an Indian language"""
+        return language_code in self.indian_languages
+    
+    def get_engine_priority(self, engine_name: str) -> int:
+        """Get priority for an engine"""
+        return self.engine_priorities.get(engine_name, 999)

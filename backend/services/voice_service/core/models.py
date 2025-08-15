@@ -105,6 +105,7 @@ class VoiceCommand(BaseModel):
     service: Optional[str] = Field(None, description="Target service name")
     action: Optional[str] = Field(None, description="Specific action to perform")
     confidence: Optional[float] = Field(None, description="Recognition confidence", ge=0.0, le=1.0)
+    parameters: Optional[Dict[str, Any]] = Field(default_factory=dict, description="Command parameters")
     user_context: Optional[Dict[str, Any]] = Field(default_factory=dict, description="User context data")
     context: Optional[Dict[str, Any]] = Field(default_factory=dict, description="Command context data")
 
@@ -142,6 +143,9 @@ class AudioData(BaseModel):
     channels: int = Field(default=1, description="Number of audio channels")
     duration: Optional[float] = Field(None, description="Duration in seconds")
     file_size: Optional[int] = Field(None, description="File size in bytes")
+    processing_time_ms: Optional[float] = Field(None, description="Processing time in milliseconds")
+    request_id: Optional[str] = Field(None, description="Request ID for tracking")
+    engine_used: Optional[str] = Field(None, description="Engine used for processing")
 
 class EmotionAnalysis(BaseModel):
     """Voice emotion analysis result"""

@@ -198,11 +198,11 @@ class TestActionOrchestratorComprehensive:
         
         step = WorkflowStep(
             actions=[action],
-            execution_order=1
+            parallel_execution=False
         )
-        
+
         assert len(step.actions) == 1
-        assert step.execution_order == 1
+        assert not step.parallel_execution
         assert step.actions[0].service_name == "journal_service"
     
     async def test_orchestration_request_creation(self):

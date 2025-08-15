@@ -84,7 +84,7 @@ class VoiceProcessingService:
                 success=True,
                 message="Speech successfully converted to text",
                 data={
-                    "transcription": result.dict(),
+                    "transcription": result.model_dump(),
                     "processing_time_ms": processing_time,
                     "engine_used": getattr(result, 'engine_used', 'unknown')
                 },
@@ -187,7 +187,7 @@ class VoiceProcessingService:
                 success=True,
                 message="Voice emotion analysis completed",
                 data={
-                    "emotion_analysis": emotion_analysis.dict(),
+                    "emotion_analysis": emotion_analysis.model_dump(),
                     "processing_time_ms": processing_time
                 },
                 request_id=request_id,

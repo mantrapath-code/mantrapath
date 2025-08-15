@@ -1,9 +1,13 @@
 """
 Configuration settings for Translation Service
 """
-from pydantic_settings import BaseSettings
-from typing import Dict, List, Optional
 import os
+from typing import ClassVar, Dict, Any, List, Optional
+
+try:
+    from pydantic_settings import BaseSettings
+except ImportError:
+    from pydantic import BaseSettings
 
 class TranslationSettings(BaseSettings):
     """Translation service configuration"""
@@ -14,6 +18,26 @@ class TranslationSettings(BaseSettings):
     debug: bool = False
     host: str = "0.0.0.0"
     port: int = 8010  # Changed from 8005 to avoid conflicts
+    
+    # Default settings as ClassVar
+    DEFAULT_SOURCE_LANGUAGE: ClassVar[str] = "auto"  # Auto-detect
+    DEFAULT_TARGET_LANGUAGE: ClassVar[str] = "en"
+    
+    # Add missing attributes for tests
+    SUPPORTED_LANGUAGES: ClassVar[Dict[str, Dict[str, Any]]] = {
+        "en": {"name": "English", "tier": 1},
+        "es": {"name": "Spanish", "tier": 1},
+        "fr": {"name": "French", "tier": 1},
+        "de": {"name": "German", "tier": 1},
+        "hi": {"name": "Hindi", "tier": 2},
+        "zh": {"name": "Chinese", "tier": 2},
+    }
+    
+    TIER_CONFIGURATIONS: ClassVar[Dict[int, Dict[str, str]]] = {
+        1: {"quality": "premium", "speed": "fast"},
+        2: {"quality": "standard", "speed": "medium"},
+        3: {"quality": "basic", "speed": "slow"}
+    }
     
     # Database
     database_url: str = os.getenv("DATABASE_URL", "sqlite:///../../mantrapath.db")

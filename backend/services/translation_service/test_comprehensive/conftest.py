@@ -7,12 +7,18 @@ import os
 import sys
 from unittest.mock import AsyncMock, MagicMock, patch
 from typing import Dict, Any
+import sys
+import os
+from pathlib import Path
 import json
 import tempfile
 
-# Add the service directory to Python path
-sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
-sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(__file__)), '..', '..', '..'))
+# Add the translation service directory and backend directory to Python path
+current_dir = Path(__file__).parent
+service_dir = current_dir.parent
+backend_dir = service_dir.parent.parent
+sys.path.insert(0, str(service_dir))
+sys.path.insert(0, str(backend_dir))
 
 # Test configuration
 TEST_CONFIG = {

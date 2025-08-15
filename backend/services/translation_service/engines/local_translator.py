@@ -7,6 +7,7 @@ Uses lightweight transformer models for common language pairs
 import asyncio
 import json
 import logging
+import time
 from typing import List, Dict, Optional, Any, Tuple
 from pathlib import Path
 import pickle
@@ -14,7 +15,7 @@ import hashlib
 
 # Simple rule-based translation for common meditation terms
 # In production, this would use actual transformer models
-from engines.base_translator import BaseTranslator
+from .base_translator import BaseTranslator, TranslationResult
 from config.settings import SUPPORTED_LANGUAGES
 
 logger = logging.getLogger(__name__)
@@ -22,7 +23,9 @@ logger = logging.getLogger(__name__)
 class LocalTranslator(BaseTranslator):
     """Local translation using pre-trained models and dictionaries"""
     
-    def __init__(self):
+    def __init__(self, name: str = "local", config: Dict[str, Any] = None):
+        super().__init__(name, config or {})
+        
         self.models_path = Path("models")
         self.models_path.mkdir(exist_ok=True)
         
@@ -34,6 +37,9 @@ class LocalTranslator(BaseTranslator):
         
         # Cache for frequent translations
         self.translation_cache = {}
+        
+        # Set supported languages based on glossary
+        self.supported_languages = set(['en', 'es', 'fr', 'de', 'hi', 'zh'])
         
         logger.info("Local translator initialized")
     
@@ -163,8 +169,9 @@ class LocalTranslator(BaseTranslator):
     async def translate(
         self,
         text: str,
+        source_language: str,
         target_language: str,
-        source_language: Optional[str] = None,
+        domain: Optional[str] = None,
         context: Optional[Dict[str, Any]] = None
     ) -> Dict[str, Any]:
         """
@@ -194,43 +201,71 @@ class LocalTranslator(BaseTranslator):
             text, translated_text, source_language, target_language, context
         )
         
-        result = {
-            'translated_text': translated_text,
-            'source_language': source_language,
-            'target_language': target_language,
-            'confidence_score': confidence,
-            'engine': 'local',
-            'metadata': {
-                'model_type': 'dictionary_based',
-                'has_cultural_adaptation': bool(context and context.get('domain') == 'meditation'),
-                'from_cache': False
+        start_time = time.time()
+        return TranslationResult(
+            translated_text=translated_text,
+            source_language=source_language,
+            target_language=target_language,
+            confidence_score=confidence,
+            engine="local",
+            processing_time_ms=int((time.time() - start_time) * 1000),
+            quality_score=confidence,
+            cache_hit=False,
+            cultural_notes=[],
+            custom_terms_used=[],
+            metadata={
+                "model_type": "dictionary_based",
+                "has_cultural_adaptation": bool(context and context.get('domain') == 'meditation'),
+                "from_cache": False
             }
+        )
+        
+        # Store the result in cache (as dict for caching)
+        cache_entry = {
+            "translated_text": translated_text,
+            "confidence_score": confidence,
+            "timestamp": time.time()
         }
+        self.translation_cache[cache_key] = cache_entry
         
-        # Cache the result
-        self.translation_cache[cache_key] = result.copy()
-        
-        return result
+        return TranslationResult(
+            translated_text=translated_text,
+            source_language=source_language,
+            target_language=target_language,
+            confidence_score=confidence,
+            engine="local",
+            processing_time_ms=int((time.time() - start_time) * 1000),
+            quality_score=confidence,
+            cache_hit=False,
+            cultural_notes=[],
+            custom_terms_used=[],
+            metadata={
+                "model_type": "dictionary_based",
+                "has_cultural_adaptation": bool(context and context.get('domain') == 'meditation'),
+                "from_cache": False
+            }
+        )
     
     async def translate_batch(
         self,
         texts: List[str],
+        source_language: str,
         target_language: str,
-        source_language: Optional[str] = None,
+        domain: Optional[str] = None,
         context: Optional[Dict[str, Any]] = None
-    ) -> List[Dict[str, Any]]:
+    ) -> List[TranslationResult]:
         """
         Translate multiple texts
         """
         results = []
         
         for text in texts:
-            result = await self.translate(text, target_language, source_language, context)
+            result = await self.translate(text, source_language, target_language, domain, context)
             results.append(result)
         
         return results
     
-    async def detect_language(self, text: str) -> Dict[str, Any]:
+    async def detect_language(self, text: str) -> Tuple[str, float]:
         """
         Simple language detection using pattern matching
         """
@@ -238,12 +273,7 @@ class LocalTranslator(BaseTranslator):
         words = text_lower.split()
         
         if not words:
-            return {
-                'language': 'unknown',
-                'confidence': 0.0,
-                'engine': 'local',
-                'is_reliable': False
-            }
+            return ('unknown', 0.0)
         
         language_scores = {}
         
@@ -262,26 +292,15 @@ class LocalTranslator(BaseTranslator):
             best_lang = max(language_scores.keys(), key=lambda k: language_scores[k])
             best_score = language_scores[best_lang]
             
-            return {
-                'language': best_lang,
-                'confidence': min(best_score * 2, 1.0),  # Scale to 0-1
-                'engine': 'local',
-                'is_reliable': best_score > 0.1,
-                'scores': language_scores
-            }
+            return (best_lang, min(best_score * 2, 1.0))  # Scale to 0-1
         
-        return {
-            'language': 'en',  # Default to English
-            'confidence': 0.5,
-            'engine': 'local',
-            'is_reliable': False
-        }
+        return ('en', 0.5)  # Default to English
     
-    async def get_supported_languages(self) -> List[str]:
+    def get_supported_languages(self) -> List[str]:
         """
         Get list of supported languages
         """
-        return list(SUPPORTED_LANGUAGES.keys())
+        return list(self.supported_languages)
     
     async def _translate_text(
         self,
@@ -424,16 +443,17 @@ class LocalTranslator(BaseTranslator):
     async def initialize(self) -> bool:
         """Initialize the local translator"""
         try:
+            self.is_initialized = True
             logger.info("Local translator initialized successfully")
             return True
         except Exception as e:
             logger.error(f"Failed to initialize local translator: {e}")
+            self.is_initialized = False
             return False
     
     def supports_language_pair(self, source: str, target: str) -> bool:
         """Check if language pair is supported"""
-        supported_langs = list(SUPPORTED_LANGUAGES.keys())
-        return source in supported_langs and target in supported_langs
+        return source in self.supported_languages and target in self.supported_languages
     
     async def get_quality_score(
         self,
@@ -450,9 +470,10 @@ class LocalTranslator(BaseTranslator):
     async def health_check(self) -> Dict[str, Any]:
         """Health check for local translator"""
         return {
-            "name": "local",
-            "status": "healthy",
-            "supported_languages": len(list(SUPPORTED_LANGUAGES.keys())),
+            "name": self.name,
+            "status": "healthy" if self.is_initialized else "not_initialized",
+            "supported_languages_count": len(self.supported_languages),
+            "timestamp": datetime.utcnow().isoformat(),
             "features": ["meditation_glossary", "offline_mode"]
         }
     

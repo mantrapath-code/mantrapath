@@ -13,16 +13,26 @@ class TranslationResult:
         source_language: str,
         target_language: str,
         confidence_score: float,
-        engine_name: str,
-        processing_time_ms: int,
+        engine: str = None,
+        engine_name: str = None,
+        processing_time_ms: int = 0,
+        quality_score: float = None,
+        cache_hit: bool = False,
+        cultural_notes: List[str] = None,
+        custom_terms_used: List[str] = None,
         metadata: Optional[Dict[str, Any]] = None
     ):
         self.translated_text = translated_text
         self.source_language = source_language
         self.target_language = target_language
         self.confidence_score = confidence_score
-        self.engine_name = engine_name
+        self.engine = engine or engine_name or "unknown"
+        self.engine_name = engine or engine_name or "unknown"
         self.processing_time_ms = processing_time_ms
+        self.quality_score = quality_score or confidence_score
+        self.cache_hit = cache_hit
+        self.cultural_notes = cultural_notes or []
+        self.custom_terms_used = custom_terms_used or []
         self.metadata = metadata or {}
         self.timestamp = datetime.utcnow()
 

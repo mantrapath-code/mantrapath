@@ -218,7 +218,8 @@ class VoiceCommandProcessor:
                     command_type=pattern.command_type,
                     language=language,
                     confidence=pattern.confidence_threshold,
-                    user_context=parameters,
+                    parameters=parameters,
+                    user_context={},
                     context=context or {}
                 )
         
@@ -257,7 +258,7 @@ class VoiceCommandProcessor:
             message="Starting meditation session",
             data={
                 "action": "start_meditation",
-                "command": command.dict(),
+                "command": command.model_dump(),
                 "next_steps": "Redirecting to meditation player"
             }
         )
@@ -275,7 +276,7 @@ class VoiceCommandProcessor:
             message="Stopping meditation session",
             data={
                 "action": "stop_meditation",
-                "command": command.dict()
+                "command": command.model_dump()
             }
         )
     
@@ -292,7 +293,7 @@ class VoiceCommandProcessor:
             message="Pausing meditation session",
             data={
                 "action": "pause_meditation",
-                "command": command.dict()
+                "command": command.model_dump()
             }
         )
     
@@ -309,7 +310,7 @@ class VoiceCommandProcessor:
             message="Resuming meditation session",
             data={
                 "action": "resume_meditation",
-                "command": command.dict()
+                "command": command.model_dump()
             }
         )
     
@@ -326,7 +327,7 @@ class VoiceCommandProcessor:
             message="Starting guided meditation",
             data={
                 "action": "guided_meditation",
-                "command": command.dict(),
+                "command": command.model_dump(),
                 "next_steps": "Redirecting to guided meditation selection"
             }
         )
@@ -344,7 +345,7 @@ class VoiceCommandProcessor:
             message="Starting music playback",
             data={
                 "action": "play_music",
-                "command": command.dict()
+                "command": command.model_dump()
             }
         )
     
@@ -361,7 +362,7 @@ class VoiceCommandProcessor:
             message="Stopping music playback",
             data={
                 "action": "stop_music",
-                "command": command.dict()
+                "command": command.model_dump()
             }
         )
     
@@ -378,7 +379,7 @@ class VoiceCommandProcessor:
             message="Pausing music playback",
             data={
                 "action": "pause_music",
-                "command": command.dict()
+                "command": command.model_dump()
             }
         )
     
@@ -395,7 +396,7 @@ class VoiceCommandProcessor:
             message="Resuming music playback",
             data={
                 "action": "resume_music",
-                "command": command.dict()
+                "command": command.model_dump()
             }
         )
     
@@ -415,7 +416,7 @@ class VoiceCommandProcessor:
             data={
                 "action": "volume_control",
                 "direction": direction,
-                "command": command.dict()
+                "command": command.model_dump()
             }
         )
     
@@ -433,7 +434,7 @@ class VoiceCommandProcessor:
             data={
                 "action": "navigate",
                 "destination": "home",
-                "command": command.dict()
+                "command": command.model_dump()
             }
         )
     
@@ -451,7 +452,7 @@ class VoiceCommandProcessor:
             data={
                 "action": "navigate",
                 "destination": "profile",
-                "command": command.dict()
+                "command": command.model_dump()
             }
         )
     
@@ -469,7 +470,7 @@ class VoiceCommandProcessor:
             data={
                 "action": "navigate",
                 "destination": "settings",
-                "command": command.dict()
+                "command": command.model_dump()
             }
         )
     
@@ -489,7 +490,7 @@ class VoiceCommandProcessor:
             data={
                 "action": "search",
                 "query": query,
-                "command": command.dict()
+                "command": command.model_dump()
             }
         )
     
@@ -506,7 +507,7 @@ class VoiceCommandProcessor:
             message="Bookmarking current content",
             data={
                 "action": "bookmark",
-                "command": command.dict()
+                "command": command.model_dump()
             }
         )
     
@@ -526,7 +527,7 @@ class VoiceCommandProcessor:
             data={
                 "action": "help",
                 "help_text": help_text,
-                "command": command.dict()
+                "command": command.model_dump()
             }
         )
     
@@ -543,7 +544,7 @@ class VoiceCommandProcessor:
             message="Logging out",
             data={
                 "action": "logout",
-                "command": command.dict()
+                "command": command.model_dump()
             }
         )
     
@@ -560,7 +561,7 @@ class VoiceCommandProcessor:
             message="Processing custom command",
             data={
                 "action": "custom",
-                "command": command.dict()
+                "command": command.model_dump()
             }
         )
     

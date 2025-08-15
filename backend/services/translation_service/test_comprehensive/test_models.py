@@ -7,15 +7,13 @@ from datetime import datetime
 from typing import List, Optional
 
 from models.request_models import (
-    TranslationRequest, TranslationResponse, VoiceTranslationRequest,
-    VoiceTranslationResponse, BatchTranslationRequest, BatchTranslationResponse,
-    LanguageDetectionRequest, LanguageDetectionResponse, TranslationFeedbackRequest,
-    CustomGlossaryRequest, SupportedLanguagesResponse, TranslationStatsResponse,
-    HealthCheckResponse, ErrorResponse, LanguageInfo, TranslationEngine
+    TranslationEngine, Priority, TranslationStatus,
+    LanguageDetectionRequest, LanguageDetectionResponse
 )
 from models.translation_models import (
-    TranslationResult, TranslationMetadata, CulturalAdaptation,
-    QualityMetrics, CacheInfo, ServiceHealth
+    TranslationRequest as DBTranslationRequest,
+    TranslationCache, LanguageDetectionResult,
+    CustomGlossary, TranslationFeedback
 )
 
 
@@ -44,6 +42,25 @@ class TestRequestModels:
         assert request.cultural_adaptation is True
         assert request.use_custom_glossary is True
         assert request.use_cache is True
+    
+    def test_translation_engine_enum(self):
+        """Test translation engine enum"""
+        assert TranslationEngine.GOOGLE == "google"
+        assert TranslationEngine.MICROSOFT == "microsoft"
+        assert TranslationEngine.LOCAL == "local"
+        assert TranslationEngine.AUTO == "auto"
+    
+    def test_language_detection_request_valid(self):
+        """Test valid language detection request"""
+        request = LanguageDetectionRequest(
+            text="Hello world",
+            engines=["langdetect"],
+            include_alternatives=True
+        )
+        
+        assert request.text == "Hello world"
+        assert request.engines == ["langdetect"]
+        assert request.include_alternatives is True
     
     def test_translation_request_minimal(self):
         """Test minimal translation request"""

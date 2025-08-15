@@ -18,6 +18,7 @@ from src.registry import ServiceRegistry
 from src.routing import RequestRouter, LoadBalancerFactory, RequestProxy
 from src.middleware import RateLimiter, get_client_identifier, CircuitBreaker
 from src.health import HealthChecker
+from src.voice.endpoints import voice_api
 
 # Configure logging
 logging.basicConfig(
@@ -71,6 +72,9 @@ app.add_middleware(
     allow_methods=gateway_config.cors_methods,
     allow_headers=gateway_config.cors_headers,
 )
+
+# Include voice API routes
+app.include_router(voice_api)
 
 # Health check endpoints
 @app.get("/health")

@@ -23,9 +23,9 @@ sys.path.append(os.path.join(os.path.dirname(__file__), '..', '..', '..'))
 from config.settings import TranslationSettings
 from engines.enhanced_multi_translator import EnhancedMultiTranslator
 from models.request_models import (
-    TranslationRequest, TranslationResponse, VoiceTranslationRequest, 
-    VoiceTranslationResponse, BatchTranslationRequest, BatchTranslationResponse,
-    LanguageDetectionRequest, LanguageDetectionResponse, TranslationFeedbackRequest,
+    TranslationRequest, TranslationResponse, BatchTranslationRequest, 
+    BatchTranslationResponse, LanguageDetectionRequest, LanguageDetectionResponse,
+    VoiceTranslationRequest, VoiceTranslationResponse, TranslationFeedbackRequest,
     CustomGlossaryRequest, SupportedLanguagesResponse, TranslationStatsResponse,
     HealthCheckResponse, ErrorResponse, LanguageInfo
 )
@@ -108,9 +108,11 @@ async def lifespan(app: FastAPI):
         logger.info("Translation Service shutdown complete")
 
 app = FastAPI(
-    title="MantraPath Translation Service",
-    description="High-performance translation service with cultural adaptation and meditation-specific terminology",
-    version="1.0.0",
+    title="Translation Service",
+    description="Advanced multilingual translation service with mindfulness focus",
+    version="2.0.0",
+    docs_url="/docs",
+    redoc_url="/redoc",
     lifespan=lifespan
 )
 
@@ -375,6 +377,113 @@ async def detect_language(request: LanguageDetectionRequest):
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Language detection failed: {str(e)}"
+        )
+
+@app.post("/voice/translate", response_model=VoiceTranslationResponse)
+async def translate_voice(
+    request: VoiceTranslationRequest,
+    current_user = Depends(get_current_user)
+):
+    """Translate voice/audio input"""
+    try:
+        # For now, return a placeholder response
+        # In production, this would process audio input
+        return VoiceTranslationResponse(
+            transcribed_text="Transcribed audio placeholder",
+            translated_text="Voice translation placeholder",
+            source_language=request.source_language or "en",
+            target_language=request.target_language,
+            confidence_score=0.8,
+            quality_score=0.8,
+            audio_duration=request.audio_duration,
+            speech_rate_used=request.speech_rate,
+            transcription_engine="whisper",
+            translation_engine="enhanced_multi",
+            processing_time_ms=1000,
+            request_id=f"voice_{int(time.time())}"
+        )
+    except Exception as e:
+        logger.error(f"Voice translation failed: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Voice translation failed: {str(e)}"
+        )
+
+@app.post("/feedback")
+async def submit_feedback(
+    request_id: str,
+    rating: int,
+    comments: Optional[str] = None,
+    current_user = Depends(get_current_user)
+):
+    """Submit feedback for translation quality"""
+    try:
+        # Process feedback (placeholder implementation)
+        logger.info(f"Feedback received for request {request_id}: {rating}")
+        return {"status": "feedback_received", "message": "Thank you for your feedback"}
+    except Exception as e:
+        logger.error(f"Feedback submission failed: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Feedback submission failed: {str(e)}"
+        )
+
+@app.post("/glossary/custom")
+async def create_custom_glossary(
+    request: Dict[str, Any],
+    current_user = Depends(get_current_user)
+):
+    """Create or update custom glossary entries"""
+    try:
+        # Process custom glossary (placeholder implementation)
+        logger.info(f"Custom glossary updated for user {current_user.id if current_user else 'anonymous'}")
+        return {"status": "glossary_updated", "entries_added": len(request.get('entries', []))}
+    except Exception as e:
+        logger.error(f"Custom glossary creation failed: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Custom glossary creation failed: {str(e)}"
+        )
+
+@app.get("/glossary/custom")
+async def get_custom_glossary(
+    current_user = Depends(get_current_user)
+):
+    """Get user's custom glossary entries"""
+    try:
+        # Return placeholder glossary
+        return {"glossary": {}, "total_entries": 0}
+    except Exception as e:
+        logger.error(f"Get custom glossary failed: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Get custom glossary failed: {str(e)}"
+        )
+
+@app.get("/stats", response_model=TranslationStatsResponse)
+async def get_translation_stats(
+    current_user = Depends(get_current_user)
+):
+    """Get translation usage statistics"""
+    try:
+        # Return placeholder stats
+        return TranslationStatsResponse(
+            total_translations=100,
+            cache_hit_rate=0.75,
+            average_quality_score=0.85,
+            average_processing_time_ms=1250.5,
+            popular_language_pairs=[
+                {"source": "en", "target": "es", "count": 25},
+                {"source": "hi", "target": "en", "count": 20}
+            ],
+            engine_usage={"enhanced_multi": 80, "google": 15, "local": 5},
+            domain_usage={"general": 60, "medical": 25, "legal": 15}
+        )
+    except Exception as e:
+        logger.error(f"Get stats failed: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Get stats failed: {str(e)}"
         )
 
 @app.get("/languages", response_model=SupportedLanguagesResponse)

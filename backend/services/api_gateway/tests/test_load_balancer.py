@@ -2,15 +2,20 @@
 Test Load Balancer functionality
 """
 import pytest
+import sys
+import os
 
-from ..src.routing.load_balancer import (
+# Add src to path for imports
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), '../src'))
+
+from routing.load_balancer import (
     RoundRobinLoadBalancer,
     WeightedLoadBalancer,
     RandomLoadBalancer,
     LoadBalancerFactory
 )
-from ..src.core.models import ServiceInstance, ServiceStatus
-from ..src.core.config import LoadBalancingStrategy
+from core.models import ServiceInstance, ServiceStatus
+from core.config import LoadBalancingStrategy
 
 class TestLoadBalancers:
     """Test different load balancing strategies"""

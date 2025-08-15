@@ -3,8 +3,13 @@ Test API Gateway endpoints and integration
 """
 import pytest
 from fastapi.testclient import TestClient
+import sys
+import os
 
-from ..src.main import app
+# Add src to path for imports
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), '../src'))
+
+from main import app
 
 class TestGatewayEndpoints:
     """Test gateway endpoints"""

@@ -35,13 +35,13 @@ class TranslationRequest(Base):
     # Context and metadata
     domain = Column(String, nullable=True)  # mindfulness, buddhist, etc.
     context_type = Column(String, nullable=True)  # meditation, journal, chat, etc.
-    cultural_adaptation = Column(Boolean, default=False)
-    voice_translation = Column(Boolean, default=False)
+    cultural_adaptation = Column(Boolean, default=False, nullable=False)
+    voice_translation = Column(Boolean, default=False, nullable=False)
     
     # Status tracking
-    status = Column(String, default="pending")  # pending, completed, failed, cached
+    status = Column(String, default="pending", nullable=False)  # pending, completed, failed, cached
     error_message = Column(Text, nullable=True)
-    cache_hit = Column(Boolean, default=False)
+    cache_hit = Column(Boolean, default=False, nullable=False)
     
     # Timestamps
     created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
@@ -72,14 +72,14 @@ class TranslationCache(Base):
     translation_engine = Column(String, nullable=False)
     
     # Cache metadata
-    hit_count = Column(Integer, default=1)
-    last_accessed = Column(DateTime, default=lambda: datetime.now(timezone.utc))
+    hit_count = Column(Integer, default=1, nullable=False)
+    last_accessed = Column(DateTime, default=lambda: datetime.now(timezone.utc), nullable=False)
     expires_at = Column(DateTime, nullable=False)
-    priority = Column(String, default="normal")  # critical, high, normal, low
+    priority = Column(String, default="normal", nullable=False)  # critical, high, normal, low
     
     # Quality tracking
     user_feedback_score = Column(Float, nullable=True)  # 1-5 user rating
-    error_reports = Column(Integer, default=0)
+    error_reports = Column(Integer, default=0, nullable=False)
     improvement_suggestions = Column(JSON, nullable=True)
     
     # Timestamps
@@ -111,7 +111,7 @@ class LanguageDetectionResult(Base):
     
     # Verification
     user_confirmed_language = Column(String, nullable=True)
-    correction_needed = Column(Boolean, default=False)
+    correction_needed = Column(Boolean, default=False, nullable=False)
     
     # Performance
     processing_time_ms = Column(Integer, nullable=True)
@@ -148,10 +148,10 @@ class CustomGlossary(Base):
     pronunciation = Column(String, nullable=True)  # IPA or phonetic
     
     # Quality and usage
-    confidence_score = Column(Float, default=1.0)
-    usage_frequency = Column(Integer, default=0)
-    user_verified = Column(Boolean, default=False)
-    expert_reviewed = Column(Boolean, default=False)
+    confidence_score = Column(Float, default=1.0, nullable=False)
+    usage_frequency = Column(Integer, default=0, nullable=False)
+    user_verified = Column(Boolean, default=False, nullable=False)
+    expert_reviewed = Column(Boolean, default=False, nullable=False)
     
     # Relationships
     created_by = Column(String, ForeignKey("users.id"), nullable=True)
@@ -188,7 +188,7 @@ class TranslationFeedback(Base):
     reported_issues = Column(JSON, nullable=True)  # [issue_type, ...]
     
     # Context
-    feedback_type = Column(String, default="rating")  # rating, correction, report
+    feedback_type = Column(String, default="rating", nullable=False)  # rating, correction, report
     
     # Timestamps
     created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
@@ -219,14 +219,14 @@ class OfflineTranslationCache(Base):
     quality_score = Column(Float, nullable=False)
     
     # Offline-specific metadata
-    priority_level = Column(String, default="medium")  # critical, high, medium, low
-    download_count = Column(Integer, default=0)
-    last_synced = Column(DateTime, default=lambda: datetime.now(timezone.utc))
+    priority_level = Column(String, default="medium", nullable=False)  # critical, high, medium, low
+    download_count = Column(Integer, default=0, nullable=False)
+    last_synced = Column(DateTime, default=lambda: datetime.now(timezone.utc), nullable=False)
     size_bytes = Column(Integer, nullable=False)
     
     # Expiry and maintenance
     expires_at = Column(DateTime, nullable=True)  # None for permanent cache
-    auto_renewable = Column(Boolean, default=True)
+    auto_renewable = Column(Boolean, default=True, nullable=False)
     
     # Timestamps
     created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))

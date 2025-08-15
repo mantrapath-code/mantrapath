@@ -271,9 +271,10 @@ class TestVoiceProcessingService:
         success = await voice_service.close_processing_session("nonexistent")
         assert success is False
 
-    def test_get_processing_stats(self, voice_service):
+    @pytest.mark.asyncio
+    async def test_get_processing_stats(self, voice_service):
         """Test getting processing statistics"""
-        stats = voice_service.get_processing_stats()
+        stats = await voice_service.get_processing_stats()
         
         assert isinstance(stats, dict)
         assert "uptime_seconds" in stats
@@ -283,6 +284,7 @@ class TestVoiceProcessingService:
         assert "success_rate" in stats
         assert "languages_processed" in stats
         assert "active_sessions" in stats
+        assert "engine_status" in stats
 
     @pytest.mark.asyncio
     async def test_get_supported_features(self, voice_service):
@@ -359,7 +361,7 @@ class TestVoiceProcessingService:
         self, voice_service, sample_audio_data, sample_stt_request
     ):
         """Test that stats are updated on successful processing"""
-        initial_stats = voice_service.get_processing_stats()
+        initial_stats = await voice_service.get_processing_stats()
         initial_total = initial_stats["total_requests"]
         initial_successful = initial_stats["successful_requests"]
         
@@ -369,7 +371,7 @@ class TestVoiceProcessingService:
                 request=sample_stt_request
             )
         
-        updated_stats = voice_service.get_processing_stats()
+        updated_stats = await voice_service.get_processing_stats()
         assert updated_stats["total_requests"] == initial_total + 1
         assert updated_stats["successful_requests"] == initial_successful + 1
 
@@ -378,7 +380,7 @@ class TestVoiceProcessingService:
         self, voice_service, sample_audio_data, sample_stt_request, mock_engine_manager
     ):
         """Test that stats are updated on failed processing"""
-        initial_stats = voice_service.get_processing_stats()
+        initial_stats = await voice_service.get_processing_stats()
         initial_failed = initial_stats["failed_requests"]
         
         mock_engine_manager.transcribe_audio.side_effect = Exception("Processing failed")
@@ -390,5 +392,5 @@ class TestVoiceProcessingService:
                     request=sample_stt_request
                 )
         
-        updated_stats = voice_service.get_processing_stats()
+        updated_stats = await voice_service.get_processing_stats()
         assert updated_stats["failed_requests"] == initial_failed + 1

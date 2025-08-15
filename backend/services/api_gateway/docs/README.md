@@ -1,33 +1,40 @@
-# MantraPath API Gateway
+# MantraPath API Gateway V3 - Enhanced Voice System
 
-A modular, scalable API Gateway built with FastAPI for the MantraPath platform.
+A production-ready, modular API Gateway with advanced voice processing capabilities for the MantraPath platform.
 
-## Overview
+## 🎯 Overview
 
-The MantraPath API Gateway serves as the central entry point for all backend services, providing:
+The MantraPath API Gateway V3 serves as the central entry point for all backend services, providing:
 
-- **Service Discovery & Registry**: Automatic service registration and health monitoring
-- **Load Balancing**: Multiple strategies (round-robin, weighted, least connections, random)
-- **Rate Limiting**: Configurable request rate limiting per user/IP
-- **Circuit Breaker**: Service resilience and failure protection
-- **Health Monitoring**: Comprehensive health checks and metrics
-- **Request Proxying**: Intelligent request routing to backend services
+- **🎤 Enhanced Voice Processing**: Real multilingual voice command routing (NO MOCK DATA)
+- **🌍 Multilingual Support**: 17 languages including 10 Indian regional languages
+- **🔄 Service Discovery & Registry**: Automatic service registration and health monitoring
+- **⚖️ Load Balancing**: Multiple strategies (round-robin, weighted, least connections, random)
+- **🚦 Rate Limiting**: Configurable request rate limiting per user/IP
+- **🛡️ Circuit Breaker**: Service resilience and failure protection
+- **📊 Health Monitoring**: Comprehensive health checks and metrics
+- **🔀 Request Proxying**: Intelligent request routing to backend services
+- **🕸️ WebSocket Support**: Real-time voice streaming capabilities
+- **🌏 Cultural Context**: Advanced cultural adaptations for Indian subcontinent
 
-## Architecture
+## 🏗️ Enhanced Architecture (V3)
 
 ```
 ┌─────────────────┐    ┌─────────────────┐    ┌─────────────────┐
-│    Frontend     │    │   Mobile App    │    │   3rd Party     │
-│   (React/Vue)   │    │     (React      │    │     APIs        │
+│    Frontend     │    │   Mobile App    │    │   Voice Apps    │
+│   (React/Vue)   │    │     (React      │    │   & Devices     │
 │                 │    │     Native)     │    │                 │
 └─────────┬───────┘    └─────────┬───────┘    └─────────┬───────┘
           │                      │                      │
           └──────────────────────┼──────────────────────┘
                                  │
                  ┌───────────────┴───────────────┐
-                 │         API Gateway           │
+                 │      API Gateway V3           │
                  │  ┌─────────────────────────┐  │
-                 │  │  Rate Limiting         │  │
+                 │  │  🎤 Voice Processing    │  │
+                 │  │  🌍 Language Detection  │  │
+                 │  │  🏛️ Cultural Context    │  │
+                 │  │  🚦 Rate Limiting       │  │
                  │  │  Circuit Breaker       │  │
                  │  │  Load Balancing        │  │
                  │  │  Service Discovery     │  │

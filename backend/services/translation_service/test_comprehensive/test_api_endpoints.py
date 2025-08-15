@@ -8,6 +8,15 @@ import json
 import time
 from datetime import datetime
 
+# Mock the shared.auth module before importing main
+import sys
+from unittest.mock import MagicMock
+
+# Create mock for shared.auth
+mock_auth = MagicMock()
+mock_auth.get_current_user = MagicMock(return_value={"user_id": "test_user", "username": "test"})
+sys.modules['shared.auth'] = mock_auth
+
 from main import app
 
 
