@@ -9,7 +9,7 @@ import { useUserStats, useWellness } from "@/hooks/useWellness"
 import { useJournal } from "@/hooks/useJournal"
 import { useMoodBasedTheme } from "@/hooks/useMoodTheme"
 import { useRealtimeInsights } from "@/hooks/useRealtimeInsights"
-import { MoodQuickEntry } from "@/components/mood"
+import { MoodQuickEntry, EnhancedMoodTracker, EmotionalWeatherWidget, VoiceMoodEntry, CulturalMoodAdapter } from "@/components/mood"
 
 import { motion, AnimatePresence } from "framer-motion"
 import { toast } from "sonner"
@@ -308,11 +308,17 @@ export function WellnessDashboard() {
               animate={{ opacity: 1, x: 0 }}
               transition={{ delay: 0.5 }}
             >
-              <MoodQuickEntry 
-                onEntryAdded={(moodData) => {
-                  toast.success('Real-time update sent! 🚀', {
-                    description: 'Your dashboard will update automatically'
+              <EnhancedMoodTracker 
+                enableRealtime={isWebSocketConnected}
+                showEmotionalWeather={true}
+                enableVoice={true}
+                onMoodEntryAdded={(moodData) => {
+                  toast.success('Enhanced mood tracking completed! 🚀', {
+                    description: 'Your insights will update automatically'
                   })
+                }}
+                onCulturalContextChange={(context) => {
+                  console.log('Cultural context updated:', context)
                 }}
               />
             </motion.div>

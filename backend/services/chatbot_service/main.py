@@ -7,6 +7,7 @@ import asyncio
 import logging
 import os
 import sys
+import json
 from datetime import datetime
 from typing import List, Optional, Dict, Any, Union
 from contextlib import asynccontextmanager
@@ -27,6 +28,13 @@ from shared.models import ChatSession, ChatMessage, Base
 from shared.auth import get_current_user
 # Event bus imports for BK-004
 from shared.events import get_enhanced_event_bus, V3EventChannels
+
+# Enhanced chatbot service imports
+from src.services.enhanced_chatbot_service import (
+    EnhancedChatbotService, 
+    ChatContext, 
+    EnhancedChatResponse
+)
 
 # Configure logging
 logging.basicConfig(
@@ -67,6 +75,8 @@ class ChatbotService:
         self.redis_client = None
         # BK-004: Event bus reference
         self.event_bus = None
+        # Enhanced service integration
+        self.enhanced_service = None
         
     async def initialize(self):
         """Initialize chatbot service"""
@@ -77,6 +87,13 @@ class ChatbotService:
             logger.info("Agent Redis connected successfully")
         except Exception as e:
             logger.warning(f"Agent Redis not available: {e}")
+            
+        # Initialize Enhanced Chatbot Service
+        try:
+            self.enhanced_service = EnhancedChatbotService(base_chatbot_service=self)
+            logger.info("Enhanced Chatbot Service initialized with Action Orchestrator integration")
+        except Exception as e:
+            logger.error(f"Failed to initialize Enhanced Chatbot Service: {e}")
             
         # BK-004: Initialize enhanced event bus and subscribe to events
         try:
@@ -682,25 +699,346 @@ async def chat_endpoint(
         # Save interaction in background
         background_tasks.add_task(
             save_chat_interaction,
-            session_id=session_id,
-            user_message=request.message,
-            ai_response=response.response,
-            user_id=user_id,
-            response_metadata={
+            session_id,
+            request.message,
+            response.response,
+            user_id,
+            {
                 "source": response.source,
-                "intervention_type": response.intervention_type,
-                "crisis_detected": response.crisis_detected,
-                "confidence_score": response.confidence_score
+                "confidence": response.confidence_score,
+                "tone": response.tone,
+                "intervention_type": response.intervention_type
             },
-            db=db
+            db
         )
         
-        logger.info(f"Generated response for user {user_id} using {response.source}")
         return response
         
     except Exception as e:
-        logger.error(f"Error in chat endpoint: {e}")
-        raise HTTPException(status_code=500, detail="Failed to generate response")
+        logger.error(f"Chat error: {e}")
+        raise HTTPException(status_code=500, detail="Chat processing failed")
+
+@app.post("/api/chatbot/enhanced/chat")
+async def enhanced_chat_endpoint(
+    request: ChatRequest,
+    background_tasks: BackgroundTasks,
+    db: Session = Depends(get_db),
+    current_user: dict = Depends(get_current_user)
+):
+    """Enhanced chat endpoint with Action Orchestrator integration"""
+    try:
+        user_id = current_user["user_id"]
+        logger.info(f"Processing enhanced chat request for user {user_id}")
+        
+        if not chatbot_service.enhanced_service:
+            # Fallback to regular chat if enhanced service not available
+            return await chat_endpoint(request, background_tasks, db, current_user)
+        
+        # Get or create session
+        session_id = request.session_id
+        if not session_id:
+            new_session = ChatSession(
+                user_id=user_id,
+                title=f"Enhanced Chat - {datetime.utcnow().strftime('%Y-%m-%d %H:%M')}",
+                session_type="enhanced_ai_support",
+                is_active=True,
+                created_at=datetime.utcnow()
+            )
+            db.add(new_session)
+            db.commit()
+            db.refresh(new_session)
+            session_id = str(new_session.id)
+        else:
+            # Ensure session exists
+            existing_session = db.query(ChatSession).filter(ChatSession.id == session_id).first()
+            if not existing_session:
+                new_session = ChatSession(
+                    id=session_id,
+                    user_id=user_id,
+                    title=f"Enhanced Chat - {datetime.utcnow().strftime('%Y-%m-%d %H:%M')}",
+                    session_type="enhanced_ai_support",
+                    is_active=True,
+                    created_at=datetime.utcnow()
+                )
+                db.add(new_session)
+                db.commit()
+                db.refresh(new_session)
+        
+        # Get conversation history and build context
+        conversation_history = await get_conversation_history(session_id, db)
+        
+        # Get user's cultural context (you may want to get this from user profile)
+        cultural_preferences = {
+            "language": "en",  # Default to English, could be retrieved from user profile
+            "communication_style": "casual",
+            "timezone": "UTC"
+        }
+        
+        # Get recent mood context if available
+        mood_context = None
+        if chatbot_service.redis_client:
+            try:
+                mood_data = await chatbot_service.redis_client.hget(f"chatbot:context:{user_id}", "last_mood")
+                if mood_data:
+                    mood_context = json.loads(mood_data)
+            except Exception as e:
+                logger.warning(f"Could not retrieve mood context: {e}")
+        
+        # Build enhanced chat context
+        chat_context = ChatContext(
+            user_id=user_id,
+            session_id=session_id,
+            language=cultural_preferences.get("language", "en"),
+            cultural_preferences=cultural_preferences,
+            conversation_history=conversation_history,
+            mood_context=mood_context,
+            recent_actions=[]  # Could be populated from recent user actions
+        )
+        
+        # Get JWT token from request headers
+        jwt_token = None
+        # You might need to extract this from the current_user or request headers
+        
+        # Process message with enhanced service
+        enhanced_response = await chatbot_service.enhanced_service.process_message(
+            message=request.message,
+            context=chat_context,
+            jwt_token=jwt_token
+        )
+        
+        # Convert enhanced response to standard ChatResponse format
+        response = ChatResponse(
+            response=enhanced_response.response,
+            session_id=session_id,
+            message_type=enhanced_response.message_type,
+            tone="supportive",
+            intervention_type="enhanced_support",
+            crisis_detected=False,
+            confidence_score=enhanced_response.intent.confidence if enhanced_response.intent else 0.8,
+            source="enhanced_orchestrator"
+        )
+        
+        # Save interaction with enhanced metadata
+        background_tasks.add_task(
+            save_enhanced_chat_interaction,
+            session_id,
+            request.message,
+            enhanced_response,
+            user_id,
+            db
+        )
+        
+        return response
+        
+    except Exception as e:
+        logger.error(f"Chat error: {e}")
+        raise HTTPException(status_code=500, detail="Chat processing failed")
+
+@app.post("/api/chatbot/enhanced/chat")
+async def enhanced_chat_endpoint(
+    request: ChatRequest,
+    background_tasks: BackgroundTasks,
+    db: Session = Depends(get_db),
+    current_user: dict = Depends(get_current_user)
+):
+    """Enhanced chat endpoint with Action Orchestrator integration"""
+    try:
+        user_id = current_user["user_id"]
+        logger.info(f"Processing enhanced chat request for user {user_id}")
+        
+        if not chatbot_service.enhanced_service:
+            # Fallback to regular chat if enhanced service not available
+            return await chat_endpoint(request, background_tasks, db, current_user)
+        
+        # Get or create session
+        session_id = request.session_id
+        if not session_id:
+            new_session = ChatSession(
+                user_id=user_id,
+                title=f"Enhanced Chat - {datetime.utcnow().strftime('%Y-%m-%d %H:%M')}",
+                session_type="enhanced_ai_support",
+                is_active=True,
+                created_at=datetime.utcnow()
+            )
+            db.add(new_session)
+            db.commit()
+            db.refresh(new_session)
+            session_id = str(new_session.id)
+        else:
+            # Ensure session exists
+            existing_session = db.query(ChatSession).filter(ChatSession.id == session_id).first()
+            if not existing_session:
+                new_session = ChatSession(
+                    id=session_id,
+                    user_id=user_id,
+                    title=f"Enhanced Chat - {datetime.utcnow().strftime('%Y-%m-%d %H:%M')}",
+                    session_type="enhanced_ai_support",
+                    is_active=True,
+                    created_at=datetime.utcnow()
+                )
+                db.add(new_session)
+                db.commit()
+                db.refresh(new_session)
+        
+        # Get conversation history and build context
+        conversation_history = await get_conversation_history(session_id, db)
+        
+        # Get user's cultural context (you may want to get this from user profile)
+        cultural_preferences = {
+            "language": "en",  # Default to English, could be retrieved from user profile
+            "communication_style": "casual",
+            "timezone": "UTC"
+        }
+        
+        # Get recent mood context if available
+        mood_context = None
+        if chatbot_service.redis_client:
+            try:
+                mood_data = await chatbot_service.redis_client.hget(f"chatbot:context:{user_id}", "last_mood")
+                if mood_data:
+                    mood_context = json.loads(mood_data)
+            except Exception as e:
+                logger.warning(f"Could not retrieve mood context: {e}")
+        
+        # Build enhanced chat context
+        chat_context = ChatContext(
+            user_id=user_id,
+            session_id=session_id,
+            language=cultural_preferences.get("language", "en"),
+            cultural_preferences=cultural_preferences,
+            conversation_history=conversation_history,
+            mood_context=mood_context,
+            recent_actions=[]  # Could be populated from recent user actions
+        )
+        
+        # Get JWT token from request headers (if needed)
+        jwt_token = None
+        
+        # Process message with enhanced service
+        enhanced_response = await chatbot_service.enhanced_service.process_message(
+            message=request.message,
+            context=chat_context,
+            jwt_token=jwt_token
+        )
+        
+        # Convert enhanced response to standard ChatResponse format
+        response = ChatResponse(
+            response=enhanced_response.response,
+            session_id=session_id,
+            message_type=enhanced_response.message_type,
+            tone="supportive",
+            intervention_type="enhanced_support",
+            crisis_detected=False,
+            confidence_score=enhanced_response.intent.confidence if enhanced_response.intent else 0.8,
+            source="enhanced_orchestrator"
+        )
+        
+        # Save interaction with enhanced metadata
+        background_tasks.add_task(
+            save_enhanced_chat_interaction,
+            session_id,
+            request.message,
+            enhanced_response,
+            user_id,
+            db
+        )
+        
+        return response
+        
+    except Exception as e:
+        logger.error(f"Enhanced chat error: {e}")
+        # Fallback to regular chat on error
+        try:
+            return await chat_endpoint(request, background_tasks, db, current_user)
+        except Exception as fallback_error:
+            logger.error(f"Fallback chat also failed: {fallback_error}")
+            raise HTTPException(status_code=500, detail="Enhanced chat processing failed")
+
+async def save_enhanced_chat_interaction(
+    session_id: str,
+    user_message: str,
+    enhanced_response: EnhancedChatResponse,
+    user_id: str,
+    db: Session
+):
+    """Save enhanced chat interaction with additional metadata"""
+    try:
+        # Save user message
+        user_msg = ChatMessage(
+            session_id=session_id,
+            sender="user",
+            content=user_message,
+            message_type="text",
+            created_at=datetime.utcnow()
+        )
+        db.add(user_msg)
+        
+        # Save AI response with enhanced metadata
+        ai_msg = ChatMessage(
+            session_id=session_id,
+            sender="assistant",
+            content=enhanced_response.response,
+            message_type=enhanced_response.message_type,
+            metadata={
+                "intent": enhanced_response.intent.__dict__ if enhanced_response.intent else None,
+                "orchestration_metadata": enhanced_response.orchestration_metadata,
+                "suggested_actions": enhanced_response.suggested_actions,
+                "mood_insights": enhanced_response.mood_insights,
+                "cultural_adaptations": enhanced_response.cultural_adaptations
+            },
+            created_at=datetime.utcnow()
+        )
+        db.add(ai_msg)
+        
+        db.commit()
+        logger.info(f"Enhanced chat interaction saved for session {session_id}")
+        
+    except Exception as e:
+        logger.error(f"Error saving enhanced chat interaction: {e}")
+        db.rollback()
+
+async def save_enhanced_chat_interaction(
+    session_id: str,
+    user_message: str,
+    enhanced_response: EnhancedChatResponse,
+    user_id: str,
+    db: Session
+):
+    """Save enhanced chat interaction with additional metadata"""
+    try:
+        # Save user message
+        user_msg = ChatMessage(
+            session_id=session_id,
+            sender="user",
+            content=user_message,
+            message_type="text",
+            created_at=datetime.utcnow()
+        )
+        db.add(user_msg)
+        
+        # Save AI response with enhanced metadata
+        ai_msg = ChatMessage(
+            session_id=session_id,
+            sender="assistant",
+            content=enhanced_response.response,
+            message_type=enhanced_response.message_type,
+            metadata={
+                "intent": enhanced_response.intent.__dict__ if enhanced_response.intent else None,
+                "orchestration_metadata": enhanced_response.orchestration_metadata,
+                "suggested_actions": enhanced_response.suggested_actions,
+                "mood_insights": enhanced_response.mood_insights,
+                "cultural_adaptations": enhanced_response.cultural_adaptations
+            },
+            created_at=datetime.utcnow()
+        )
+        db.add(ai_msg)
+        
+        db.commit()
+        logger.info(f"Enhanced chat interaction saved for session {session_id}")
+        
+    except Exception as e:
+        logger.error(f"Error saving enhanced chat interaction: {e}")
+        db.rollback()
 
 @app.get("/api/chatbot/status")
 async def chatbot_status():

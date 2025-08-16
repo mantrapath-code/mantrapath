@@ -695,9 +695,9 @@ export function CommunityFeed() {
                     <span className="text-xs ml-1">Live</span>
                   </div>
                 ) : (
-                  <div className="flex items-center text-blue-600">
+                  <div className="flex items-center text-gray-500">
                     <WifiHigh size={16} />
-                    <span className="text-xs ml-1">Demo Mode</span>
+                    <span className="text-xs ml-1">Offline</span>
                   </div>
                 )}
               </div>

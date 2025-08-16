@@ -20,7 +20,7 @@ class RequestRouter:
                 path_pattern=r"^/auth/.*",
                 methods=[HTTPMethod.GET, HTTPMethod.POST, HTTPMethod.PUT, HTTPMethod.DELETE],
                 service_name="auth",
-                strip_prefix=False,
+                strip_prefix=True,  # Strip /auth prefix
                 timeout=30,
                 retries=3,
                 auth_required=False  # Auth endpoints don't require auth
@@ -58,6 +58,74 @@ class RequestRouter:
                 path_pattern=r"^/users/.*",
                 methods=[HTTPMethod.GET, HTTPMethod.PUT],
                 service_name="profile",
+                strip_prefix=False,
+                timeout=30,
+                retries=2,
+                auth_required=True
+            ),
+            # API profiles route
+            RouteRule(
+                path_pattern=r"^/api/profiles/.*",
+                methods=[HTTPMethod.GET, HTTPMethod.PUT],
+                service_name="profile",
+                strip_prefix=False,
+                timeout=30,
+                retries=2,
+                auth_required=True
+            ),
+            # User stats routes
+            RouteRule(
+                path_pattern=r"^/user/stats/?$",
+                methods=[HTTPMethod.GET],
+                service_name="profile",
+                strip_prefix=False,
+                timeout=30,
+                retries=2,
+                auth_required=True
+            ),
+            # Notifications routes with different patterns
+            RouteRule(
+                path_pattern=r"^/notify/.*",
+                methods=[HTTPMethod.GET, HTTPMethod.POST, HTTPMethod.PUT, HTTPMethod.DELETE],
+                service_name="notification",
+                strip_prefix=False,
+                timeout=30,
+                retries=2,
+                auth_required=True
+            ),
+            
+            # Action Orchestrator Service Routes
+            RouteRule(
+                path_pattern=r"^/api/v1/orchestrate.*",
+                methods=[HTTPMethod.POST],
+                service_name="action-orchestrator",
+                strip_prefix=False,
+                timeout=60,
+                retries=2,
+                auth_required=True
+            ),
+            RouteRule(
+                path_pattern=r"^/api/v1/workflow/.*",
+                methods=[HTTPMethod.GET, HTTPMethod.POST, HTTPMethod.PUT, HTTPMethod.DELETE],
+                service_name="action-orchestrator",
+                strip_prefix=False,
+                timeout=30,
+                retries=2,
+                auth_required=True
+            ),
+            RouteRule(
+                path_pattern=r"^/api/v1/intents.*",
+                methods=[HTTPMethod.GET],
+                service_name="action-orchestrator",
+                strip_prefix=False,
+                timeout=30,
+                retries=2,
+                auth_required=True
+            ),
+            RouteRule(
+                path_pattern=r"^/api/v1/cultural-contexts.*",
+                methods=[HTTPMethod.GET],
+                service_name="action-orchestrator",
                 strip_prefix=False,
                 timeout=30,
                 retries=2,
@@ -107,6 +175,17 @@ class RequestRouter:
             # Chatbot Service Routes
             RouteRule(
                 path_pattern=r"^/chat/.*",
+                methods=[HTTPMethod.GET, HTTPMethod.POST, HTTPMethod.PUT, HTTPMethod.DELETE],
+                service_name="chatbot",
+                strip_prefix=False,
+                timeout=60,  # Longer timeout for AI processing
+                retries=1,   # Fewer retries for AI calls
+                auth_required=True
+            ),
+            
+            # Chatbot Service API Routes
+            RouteRule(
+                path_pattern=r"^/api/chatbot/.*",
                 methods=[HTTPMethod.GET, HTTPMethod.POST, HTTPMethod.PUT, HTTPMethod.DELETE],
                 service_name="chatbot",
                 strip_prefix=False,
@@ -195,10 +274,10 @@ class RequestRouter:
                 path_pattern=r"^/voice/.*",
                 methods=[HTTPMethod.GET, HTTPMethod.POST],
                 service_name="voice",
-                strip_prefix=False,
+                strip_prefix=True,  # Strip /voice prefix before forwarding to voice service
                 timeout=60,  # Longer timeout for voice processing
                 retries=1,
-                auth_required=True
+                auth_required=True  # Re-enabled
             ),
         ]
         

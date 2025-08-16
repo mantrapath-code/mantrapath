@@ -1,11 +1,12 @@
 /**
  * Enhanced API service for MantraPath
- * Removes all mock data dependencies and focuses on real backend integration
- * with comprehensive error handling and user-friendly messaging
+ * Production-ready service with proper authentication integration
+ * No mock data or bypass logic - all requests go to real backend
  */
 
 import { processApiError } from '../utils/errorHandling'
 import { notificationService } from './notifications'
+import { getAuthToken } from '../utils/auth'
 
 const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000'
 const ML_SERVICE_URL = import.meta.env.VITE_ML_SERVICE_URL || 'http://localhost:8008'
@@ -26,13 +27,13 @@ class ApiService {
   constructor(baseUrl: string = API_BASE_URL, mlServiceUrl: string = ML_SERVICE_URL) {
     this.baseUrl = baseUrl
     this.mlServiceUrl = mlServiceUrl
-    this.token = localStorage.getItem('mantrapath_token')
+    this.token = getAuthToken()
     this.checkBackendAvailability()
   }
 
   // Refresh token from localStorage (useful when token is updated by auth service)
   refreshToken() {
-    this.token = localStorage.getItem('mantrapath_token')
+    this.token = getAuthToken()
   }
 
   private async checkBackendAvailability(): Promise<boolean> {
@@ -143,7 +144,21 @@ class ApiService {
 
     const contentType = response.headers.get('content-type')
     if (contentType && contentType.includes('application/json')) {
-      return response.json()
+      const jsonResponse = await response.json()
+      
+      // Check if this is a gateway-wrapped response
+      if (jsonResponse.body && typeof jsonResponse.body === 'string' && jsonResponse.status_code !== undefined) {
+        // This is a gateway response, unwrap the body
+        try {
+          return JSON.parse(jsonResponse.body)
+        } catch (parseError) {
+          console.warn('Failed to parse gateway body, returning raw body:', parseError)
+          return jsonResponse.body
+        }
+      }
+      
+      // Regular JSON response
+      return jsonResponse
     }
 
     return response.text() as any
@@ -166,10 +181,14 @@ class ApiService {
 
     const url = `${this.baseUrl}${endpoint}`
     
+    // For FormData uploads, don't include default JSON headers
+    const isFormData = options.body instanceof FormData
+    const defaultHeaders = isFormData ? {} : this.getHeaders()
+    
     const config: RequestInit = {
       ...options,
       headers: {
-        ...this.getHeaders(),
+        ...defaultHeaders,
         ...options.headers,
       },
     }
@@ -218,12 +237,18 @@ class ApiService {
     first_name: string
     last_name: string
   }) {
-    const response = await this.request<{message: string, user_id: string, verification_required: boolean}>('/register', {
+    const response = await this.request<{
+      message: string
+      user_id: string
+      verification_required: boolean
+      access_token?: string
+      refresh_token?: string
+      token_type?: string
+    }>('/register', {
       method: 'POST',
       body: JSON.stringify(userData),
     })
 
-    // Don't store tokens since verification is required
     return response
   }
 
@@ -1155,24 +1180,44 @@ class ApiService {
   }
 
   async getMyProfileStats() {
-    // Get mood entries count and average
-    const moodEntries = await this.getMoodEntries(100) // Use max allowed limit for stats
-    const daysActive = new Set(moodEntries.map((entry: any) => 
-      new Date(entry.created_at).toDateString()
-    )).size
-    
-    const avgMoodScore = moodEntries.length > 0 
-      ? moodEntries.reduce((sum: number, entry: any) => sum + entry.mood_score, 0) / moodEntries.length
-      : 0
+    try {
+      // Get mood entries count and average
+      const moodEntries = await this.getMoodEntries(100) // Use max allowed limit for stats
+      
+      // Ensure moodEntries is an array before using array methods
+      if (!Array.isArray(moodEntries)) {
+        console.warn('getMoodEntries returned non-array data:', moodEntries)
+        return {
+          daysActive: 0,
+          avgMoodScore: 0,
+          totalEntries: 0,
+          moodTrend: 'stable' as const
+        }
+      }
+      
+      const daysActive = new Set(moodEntries.map((entry: any) => 
+        new Date(entry.created_at).toDateString()
+      )).size
+      
+      const avgMoodScore = moodEntries.length > 0 
+        ? moodEntries.reduce((sum: number, entry: any) => sum + entry.mood_score, 0) / moodEntries.length
+        : 0
 
-    return {
-      daysActive,
-      moodEntries: moodEntries.length,
-      avgMoodScore: Number(avgMoodScore.toFixed(1))
+      return {
+        daysActive,
+        moodEntries: moodEntries.length,
+        avgMoodScore: Number(avgMoodScore.toFixed(1))
+      }
+    } catch (error) {
+      console.error('Error fetching profile stats:', error)
+      return {
+        daysActive: 0,
+        avgMoodScore: 0,
+        totalEntries: 0,
+        moodTrend: 'stable' as const
+      }
     }
-  }
-
-  // Chatbot
+  }  // Chatbot
   async chatWithBot(message: string, sessionId?: string) {
     return this.request<{
       response: string
@@ -1189,6 +1234,56 @@ class ApiService {
         cycles: number
       }
     }>('/api/chatbot/chat/intelligent', {
+      method: 'POST',
+      body: JSON.stringify({
+        message,
+        session_id: sessionId,
+        user_context_refresh: false
+      }),
+    })
+  }
+
+  // Enhanced chatbot with Action Orchestrator integration
+  async chatWithBotEnhanced(message: string, sessionId?: string) {
+    return this.request<{
+      response: string
+      session_id: string
+      message_type: string
+      tone: string
+      intervention_type: string
+      crisis_detected: boolean
+      confidence_score: number
+      source: string
+      intent?: {
+        intent_type: string
+        confidence: number
+        entities: any[]
+      }
+      orchestration_metadata?: {
+        workflow_id: string
+        execution_time_ms: number
+        services_involved: string[]
+        success_rate: number
+      }
+      suggested_actions?: Array<{
+        action: string
+        label: string
+        description: string
+        confidence: number
+      }>
+      mood_insights?: any
+      cultural_adaptations?: any
+      breathing_exercise?: {
+        name: string
+        description: string
+        steps: Array<{
+          action: string
+          duration: number
+          instruction: string
+        }>
+        cycles: number
+      }
+    }>('/api/chatbot/enhanced/chat', {
       method: 'POST',
       body: JSON.stringify({
         message,
@@ -1302,6 +1397,112 @@ class ApiService {
         pattern_type: patternType,
         pattern_data: patternData
       })
+    })
+  }
+
+  // Voice Service API Methods
+  async textToSpeech(text: string, language: string = 'en', voice: string = 'default') {
+    return this.request('/voice/tts', {
+      method: 'POST',
+      body: JSON.stringify({
+        text,
+        language,
+        voice,
+        format: 'mp3'
+      })
+    })
+  }
+
+  async speechToText(audioBlob: Blob, language: string = 'auto') {
+    const formData = new FormData()
+    // Use correct filename based on blob type
+    const filename = audioBlob.type.includes('webm') ? 'audio.webm' : 'audio.wav'
+    formData.append('file', audioBlob, filename)  // Changed from 'audio' to 'file'
+    formData.append('language', language)
+    
+    // For FormData uploads, we need to exclude Content-Type to let browser set multipart boundary
+    const headers: HeadersInit = {}
+    if (this.token) {
+      headers.Authorization = `Bearer ${this.token}`
+    }
+    
+    return this.request('/voice/stt', {
+      method: 'POST',
+      body: formData,
+      headers
+    })
+  }
+
+  async analyzeVoiceEmotion(audioBlob: Blob) {
+    const formData = new FormData()
+    formData.append('file', audioBlob, 'audio.wav')  // Changed from 'audio' to 'file'
+    
+    return this.request('/voice/emotion-analysis', {
+      method: 'POST',
+      body: formData
+    })
+  }
+
+  async processVoiceCommand(audioBlob: Blob, context?: string) {
+    const formData = new FormData()
+    formData.append('audio', audioBlob, 'audio.wav')
+    if (context) {
+      formData.append('context', context)
+    }
+    
+    return this.request('/voice/voice-command', {
+      method: 'POST',
+      body: formData
+    })
+  }
+
+  // Translation Service API Methods
+  async detectLanguage(text: string) {
+    return this.request('/translate/detect-language', {
+      method: 'POST',
+      body: JSON.stringify({ text })
+    })
+  }
+
+  async translateText(text: string, targetLanguage: string, sourceLanguage: string = 'auto') {
+    return this.request('/translate/translate', {
+      method: 'POST',
+      body: JSON.stringify({
+        text,
+        target_language: targetLanguage,
+        source_language: sourceLanguage
+      })
+    })
+  }
+
+  async translateVoice(audioBlob: Blob, targetLanguage: string, sourceLanguage: string = 'auto') {
+    const formData = new FormData()
+    formData.append('audio', audioBlob, 'audio.wav')
+    formData.append('target_language', targetLanguage)
+    formData.append('source_language', sourceLanguage)
+    
+    return this.request('/translate/voice/translate', {
+      method: 'POST',
+      body: formData
+    })
+  }
+
+  async getSupportedLanguages() {
+    return this.request('/translate/languages')
+  }
+
+  // Sentiment Analysis API Methods
+  async analyzeSentiment(text: string) {
+    return this.request('/ai/sentiment-analysis', {
+      method: 'POST',
+      body: JSON.stringify({ text })
+    })
+  }
+
+  async analyzeMoodFromText(text: string) {
+    return this.request('/ai/mood-analysis', {
+      method: 'POST',
+      body: JSON.stringify({ text })
     })
   }
 }

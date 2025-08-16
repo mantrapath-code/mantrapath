@@ -2,10 +2,11 @@
 Enterprise-grade FastAPI voice processing service
 """
 import logging
+import uuid
 from contextlib import asynccontextmanager
 from typing import Dict, Any, Optional
 
-from fastapi import FastAPI, HTTPException, Depends, UploadFile, File, Form, BackgroundTasks
+from fastapi import FastAPI, HTTPException, Depends, UploadFile, File, Form, BackgroundTasks, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.gzip import GZipMiddleware
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
@@ -16,7 +17,7 @@ from datetime import datetime
 import io
 
 # Voice Service Imports
-from config import voice_config
+from config.settings import voice_config
 from core.models import (
     VoiceCommand, TTSRequest, STTRequest, VoiceResponse,
     AudioData, AudioFormat, VoiceProfile, VoicePreferences
@@ -55,8 +56,32 @@ async def lifespan(app: FastAPI):
     logger.info("Starting Voice Service...")
     
     try:
-        # Initialize services
+        # Initialize services with engine configuration
         config_dict = voice_config.model_dump()
+        
+        # Configure voice engines with API keys
+        engine_config = {
+            "stt_engines": {
+                "whisper": {
+                    "enabled": True,
+                    "required": True,
+                    "api_key": voice_config.openai_api_key,
+                    "model_size": "base"
+                }
+            },
+            "tts_engines": {
+                "elevenlabs": {
+                    "enabled": True,
+                    "required": True,
+                    "elevenlabs_api_key": voice_config.elevenlabs_api_key
+                }
+            },
+            "emotion_engines": {}
+        }
+        
+        # Merge engine config with voice config
+        config_dict.update(engine_config)
+        
         engine_manager = VoiceEngineManager(config_dict)
         await engine_manager.initialize_engines()
         
@@ -199,6 +224,7 @@ async def health_check():
 
 @app.post("/stt", response_model=VoiceResponse)
 async def speech_to_text(
+    request: Request,
     file: UploadFile = File(...),
     language: str = Form("en"),
     model: Optional[str] = Form(None),
@@ -210,6 +236,9 @@ async def speech_to_text(
 ):
     """Speech-to-text endpoint"""
     try:
+        # Extract request ID from headers
+        request_id = request.headers.get("X-Request-ID", str(uuid.uuid4()))
+        
         # Read audio file
         audio_content = await file.read()
         
@@ -235,7 +264,8 @@ async def speech_to_text(
         result = await voice_processing.process_speech_to_text(
             audio_data=audio_data,
             request=stt_request,
-            user_id=auth_data.get("user_id")
+            user_id=auth_data.get("user_id"),
+            request_id=request_id
         )
         
         # Log activity

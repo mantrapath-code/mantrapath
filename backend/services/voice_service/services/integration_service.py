@@ -55,19 +55,27 @@ class ServiceIntegrationManager:
             self._update_request_stats("auth")
             
             headers = {"Authorization": f"Bearer {token}"}
-            url = f"{self.service_urls['auth']}/verify"
+            url = f"{self.service_urls['auth']}/me"
             
-            response = await self.http_client.post(url, headers=headers)
+            response = await self.http_client.get(url, headers=headers)
             
             if response.status_code == 200:
                 auth_data = response.json()
                 
+                # Transform /me response to match expected auth data format
+                user_data = {
+                    "user_id": auth_data.get("id"),
+                    "email": auth_data.get("email"),
+                    "role": auth_data.get("role", "user"),
+                    "is_verified": auth_data.get("is_verified", False)
+                }
+                
                 # Validate user_id if provided
-                if user_id and auth_data.get("user_id") != user_id:
+                if user_id and user_data.get("user_id") != user_id:
                     raise AuthenticationError("Token user ID mismatch")
                 
                 self._update_success_stats("auth")
-                return auth_data
+                return user_data
             else:
                 self._update_failure_stats("auth")
                 raise AuthenticationError(f"Authentication failed: {response.text}")

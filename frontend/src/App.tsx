@@ -21,6 +21,10 @@ import { motion, AnimatePresence } from "framer-motion"
 import { Toaster } from "@/components/ui/sonner"
 // Import localStorage utilities for debugging
 import "@/utils/localStorage"
+// Import voice permissions for voice features
+import "@/utils/voicePermissions"
+// Import health check for development
+import "@/utils/healthCheck"
 // Import notification styles
 import "./styles/notifications.css"
 
@@ -57,6 +61,17 @@ function AppContent() {
       setShowEmailVerification(true)
     }
   }, [])
+
+  // Check for force logout parameter
+  useEffect(() => {
+    const urlParams = new URLSearchParams(window.location.search)
+    if (urlParams.get('logout') === 'true') {
+      console.log('🔧 Force logout requested')
+      logout()
+      // Clean URL
+      window.history.replaceState({}, document.title, window.location.pathname)
+    }
+  }, [logout])
 
   const handleCloseEmailVerification = () => {
     setShowEmailVerification(false)
@@ -160,14 +175,29 @@ function AppContent() {
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 pb-8">
           <div className="lg:col-span-2">
             <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-              <TabsList className="grid grid-cols-6 w-full mb-6">
-                <TabsTrigger value="dashboard">Dashboard</TabsTrigger>
-                <TabsTrigger value="insights">Insights</TabsTrigger>
-                <TabsTrigger value="crisis">Crisis Monitor</TabsTrigger>
-                <TabsTrigger value="achievements">Achievements</TabsTrigger>
-                <TabsTrigger value="journal">Journal</TabsTrigger>
-                <TabsTrigger value="community">Community</TabsTrigger>
-              </TabsList>
+              {/* Mobile Navigation - Horizontal Scroll */}
+              <div className="block md:hidden mb-6">
+                <TabsList className="flex w-full overflow-x-auto scrollbar-hide">
+                  <TabsTrigger value="dashboard" className="flex-shrink-0">Dashboard</TabsTrigger>
+                  <TabsTrigger value="insights" className="flex-shrink-0">Insights</TabsTrigger>
+                  <TabsTrigger value="crisis" className="flex-shrink-0">Monitor</TabsTrigger>
+                  <TabsTrigger value="achievements" className="flex-shrink-0">Goals</TabsTrigger>
+                  <TabsTrigger value="journal" className="flex-shrink-0">Journal</TabsTrigger>
+                  <TabsTrigger value="community" className="flex-shrink-0">Community</TabsTrigger>
+                </TabsList>
+              </div>
+              
+              {/* Desktop Navigation - Grid Layout */}
+              <div className="hidden md:block mb-6">
+                <TabsList className="grid grid-cols-6 w-full">
+                  <TabsTrigger value="dashboard">Dashboard</TabsTrigger>
+                  <TabsTrigger value="insights">Insights</TabsTrigger>
+                  <TabsTrigger value="crisis">Crisis Monitor</TabsTrigger>
+                  <TabsTrigger value="achievements">Achievements</TabsTrigger>
+                  <TabsTrigger value="journal">Journal</TabsTrigger>
+                  <TabsTrigger value="community">Community</TabsTrigger>
+                </TabsList>
+              </div>
               
               <TabsContent value="dashboard" className="space-y-6">
                 <motion.div

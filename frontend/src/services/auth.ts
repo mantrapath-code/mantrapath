@@ -151,31 +151,6 @@ class AuthService {
     }
   }
 
-  // Auto-login for testing (register a test user if not exists)
-  async autoLoginForTesting(): Promise<boolean> {
-    try {
-      // Try to register a test user
-      await this.register(
-        'testuser@mantrapath.com',
-        'testuser',
-        'testpassword123'
-      )
-      return true
-    } catch (error: any) {
-      // If registration fails (user exists), try to login
-      if (error.message.includes('already registered')) {
-        try {
-          await this.login('ssharma8132@gmail.com', 'Dev@#123')
-          return true
-        } catch (loginError) {
-          console.error('Auto-login failed:', loginError)
-          return false
-        }
-      }
-      console.error('Auto-registration failed:', error)
-      return false
-    }
-  }
 }
 
 // Export a singleton instance

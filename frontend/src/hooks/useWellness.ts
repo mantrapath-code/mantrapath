@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from 'react'
 import { toast } from 'sonner'
 import { apiService } from '@/services/api'
+import { authService } from '@/services/auth'
 import { useAuth } from '@/hooks/useAuth'
 import { MoodEntry as BackendMoodEntry } from '@/types/index'
 
@@ -48,7 +49,25 @@ export function useWellness() {
       setLoading(true)
       setError(null)
 
+      // Ensure we have authentication token
+      if (!authService.isAuthenticated()) {
+        console.log('🔐 Authentication required')
+        setMoodEntries([])
+        setError('Authentication required to load mood entries')
+        return
+      }
+
+      // Refresh API service token
+      apiService.refreshToken()
+
       const backendEntries = await apiService.getMoodEntries(100)
+      
+      // Ensure we have an array to work with
+      if (!Array.isArray(backendEntries)) {
+        console.warn('Backend returned non-array data for mood entries:', backendEntries)
+        setMoodEntries([])
+        return
+      }
       
       // Convert backend format to frontend format
       const formattedEntries: MoodEntry[] = backendEntries.map(entry => ({
@@ -81,19 +100,22 @@ export function useWellness() {
         apiService.getWeeklyPatterns()
       ])
 
+      // Add null safety for overview data
+      const monthlySummary = overview?.monthly_summary || {}
+
       const analyticsData: MoodAnalytics = {
-        averageMood: overview.average_mood,
-        moodTrend: overview.mood_trend as 'improving' | 'declining' | 'stable',
-        totalEntries: overview.total_entries,
-        streak: overview.streak,
-        weeklyPattern: overview.weekly_pattern,
+        averageMood: overview?.average_mood || 5,
+        moodTrend: (overview?.mood_trend as 'improving' | 'declining' | 'stable') || 'stable',
+        totalEntries: overview?.total_entries || 0,
+        streak: overview?.streak || 0,
+        weeklyPattern: overview?.weekly_pattern || [],
         monthlySummary: {
-          highestMood: overview.monthly_summary.highest_mood || 10,
-          lowestMood: overview.monthly_summary.lowest_mood || 1,
-          totalDaysTracked: overview.monthly_summary.total_days_tracked || 0,
-          mostCommonStressLevel: overview.monthly_summary.most_common_stress_level || 5
+          highestMood: monthlySummary.highest_mood || 10,
+          lowestMood: monthlySummary.lowest_mood || 1,
+          totalDaysTracked: monthlySummary.total_days_tracked || 0,
+          mostCommonStressLevel: monthlySummary.most_common_stress_level || 5
         },
-        patterns: patterns.patterns || []
+        patterns: patterns?.patterns || []
       }
 
       setAnalytics(analyticsData)

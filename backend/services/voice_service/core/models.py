@@ -172,6 +172,7 @@ class STTResult(BaseModel):
     word_timings: List[WordTiming] = Field(default_factory=list, description="Word-level timing")
     emotion_analysis: Optional[EmotionAnalysis] = Field(None, description="Emotion analysis results")
     translated_text: Optional[str] = Field(None, description="English translation if requested")
+    engine_used: Optional[str] = Field(None, description="Engine used for transcription")
 
 class VoicePreferences(BaseModel):
     """User voice preferences model"""

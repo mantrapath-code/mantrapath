@@ -173,11 +173,11 @@ class VoiceRoutingMiddleware(BaseHTTPMiddleware):
         """Post-process response for voice requests"""
         try:
             # Add voice-specific headers to response
-            if hasattr(request.state, "voice_intent"):
-                response.headers["X-Voice-Intent-Processed"] = request.state.voice_intent
+            if hasattr(request.state, "voice_intent") and request.state.voice_intent is not None:
+                response.headers["X-Voice-Intent-Processed"] = str(request.state.voice_intent)
             
-            if hasattr(request.state, "voice_language"):
-                response.headers["X-Voice-Language"] = request.state.voice_language
+            if hasattr(request.state, "voice_language") and request.state.voice_language is not None:
+                response.headers["X-Voice-Language"] = str(request.state.voice_language)
             
             # Add processing time
             if hasattr(request.state, "voice_processing_start"):

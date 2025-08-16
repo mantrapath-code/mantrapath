@@ -168,9 +168,9 @@ docker build -t mantrapath-voice-service .
 # Run the container
 docker run -d \
   --name voice-service \
-  -p 8007:8007 \
-  -e OPENAI_API_KEY=your_key \
-  -e ELEVENLABS_API_KEY=your_key \
+  -p 8011:8011 \
+  -e OPENAI_API_KEY=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 \
+  -e ELEVENLABS_API_KEY=sk_bc6e95c05b76c9e72a873bbe90547198daec5a7e213b4080 \
   mantrapath-voice-service
 ```
 

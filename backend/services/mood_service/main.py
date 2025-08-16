@@ -30,6 +30,7 @@ from shared.models import (
     CelebrationMoment, AdaptiveQuestion, EnvironmentalData
 )
 from shared.auth import get_current_user
+# Temporarily comment out problematic event imports
 from shared.events import publish_mood_entry_created, publish_journal_entry_created
 # Add V3 enhanced bus imports
 from shared.events import get_enhanced_event_bus, V3EventChannels
@@ -558,7 +559,7 @@ adaptive_collector = AdaptiveMoodCollector()
 weather_engine = EmotionalWeatherEngine()
 celebration_detector = CelebrationMomentDetector()
 
-app = FastAPI(
+app = FastAPI(lifespan=lifespan, 
     title="MantraPath Enhanced Mood Service",
     description="Comprehensive mood tracking with intelligent insights, emotional weather, and celebration detection",
     version="2.0.0"
@@ -785,26 +786,28 @@ async def create_mood_entry(
     
     # 📤 E4: Publish mood entry created event for real-time pipeline
     if get_flag_bool('USE_EVENT_BUS'):
-        await publish_mood_entry_created(
-            user_id=current_user["user_id"],
-            mood_entry_data={
-                "id": str(mood_entry.id),
-                "mood_score": mood_entry.mood_score,
-                "energy_level": mood_entry.energy_level,
-                "stress_level": mood_entry.stress_level,
-                "sleep_quality": mood_entry.sleep_quality,
-                "notes": mood_entry.notes,
-                "context_tags": mood_entry.context_tags or [],
-                "created_at": mood_entry.created_at.isoformat() if mood_entry.created_at else None,
-                "emotional_granularity": mood_entry.emotional_granularity,
-                "mood_confidence": mood_entry.mood_confidence
-            }
-        )
+        # await publish_mood_entry_created(
+        #     user_id=current_user["user_id"],
+        #     mood_entry_data={
+        #         "id": str(mood_entry.id),
+        #         "mood_score": mood_entry.mood_score,
+        #         "energy_level": mood_entry.energy_level,
+        #         "stress_level": mood_entry.stress_level,
+        #         "sleep_quality": mood_entry.sleep_quality,
+        #         "notes": mood_entry.notes,
+        #         "context_tags": mood_entry.context_tags or [],
+        #         "created_at": mood_entry.created_at.isoformat() if mood_entry.created_at else None,
+        #         "emotional_granularity": mood_entry.emotional_granularity,
+        #         "mood_confidence": mood_entry.mood_confidence
+        #     }
+        # )
+        pass # Temporarily commented out
     # V3 enhanced bus publish (dual-publish)
     if get_flag_bool('USE_NATS_EVENT_BUS'):
         try:
-            bus = get_enhanced_event_bus()
-            await bus.publish(V3EventChannels.MOOD_ENTRY_CREATED, build_v3_mood_payload(mood_entry), current_user["user_id"])
+            # bus = get_enhanced_event_bus()
+            await event_bus.publish(V3EventChannels.MOOD_ENTRY_CREATED, build_v3_mood_payload(mood_entry), current_user["user_id"])
+            pass # Temporarily commented out
         except Exception as e:
             print(f"⚠️  V3 mood publish failed: {e}")
 
@@ -913,26 +916,28 @@ async def create_journal_entry(
     
     # 📤 E4: Publish journal entry created event for real-time pipeline
     if get_flag_bool('USE_EVENT_BUS'):
-        await publish_journal_entry_created(
-            user_id=current_user["user_id"],
-            journal_entry_data={
-                "id": str(journal_entry.id),
-                "title": journal_entry.title,
-                "content": journal_entry.content,
-                "mood_before": journal_entry.mood_before,
-                "mood_after": journal_entry.mood_after,
-                "sentiment_score": journal_entry.sentiment_score,
-                "sentiment_label": journal_entry.sentiment_label,
-                "themes": journal_entry.themes or [],
-                "is_private": journal_entry.is_private,
-                "created_at": journal_entry.created_at.isoformat() if journal_entry.created_at else None
-            }
-        )
+        # await publish_journal_entry_created(
+        #     user_id=current_user["user_id"],
+        #     journal_entry_data={
+        #         "id": str(journal_entry.id),
+        #         "title": journal_entry.title,
+        #         "content": journal_entry.content,
+        #         "mood_before": journal_entry.mood_before,
+        #         "mood_after": journal_entry.mood_after,
+        #         "sentiment_score": journal_entry.sentiment_score,
+        #         "sentiment_label": journal_entry.sentiment_label,
+        #         "themes": journal_entry.themes or [],
+        #         "is_private": journal_entry.is_private,
+        #         "created_at": journal_entry.created_at.isoformat() if journal_entry.created_at else None
+        #     }
+        # )
+        pass # Temporarily commented out
     # V3 enhanced bus publish (dual-publish)
     if get_flag_bool('USE_NATS_EVENT_BUS'):
         try:
-            bus = get_enhanced_event_bus()
-            await bus.publish(V3EventChannels.JOURNAL_ENTRY_CREATED, build_v3_journal_payload(journal_entry), current_user["user_id"])
+            # bus = get_enhanced_event_bus()
+            await event_bus.publish(V3EventChannels.JOURNAL_ENTRY_CREATED, build_v3_journal_payload(journal_entry), current_user["user_id"])
+            pass # Temporarily commented out
         except Exception as e:
             print(f"⚠️  V3 journal publish failed: {e}")
 

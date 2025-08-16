@@ -88,7 +88,7 @@ export function AuthScreen() {
       
       // Provide helpful hints for common issues
       if (error.status === 0 || errorMessage.includes('fetch')) {
-        notificationService.info('Backend Offline', 'The app is now in demo mode until the backend is available')
+        notificationService.warning('Backend Offline', 'Unable to connect to the server. Please check your connection and try again.')
       }
     } finally {
       setLoading(false)
@@ -118,11 +118,25 @@ export function AuthScreen() {
         setVerificationEmail(registerData.email)
         setShowVerification(true)
       } else {
-        notificationService.success('register')
+        notificationService.success('register', { context: 'Registration successful! You can now log in with your credentials.' })
+        // Clear the registration form
+        setRegisterData({
+          email: '',
+          username: '',
+          password: '',
+          first_name: '',
+          last_name: ''
+        })
       }
     } catch (error: any) {
       console.error('❌ Could not register user:', error)
-      notificationService.error(error)
+      
+      // Provide helpful feedback for common registration issues
+      if (error.message && error.message.includes('already registered')) {
+        notificationService.warning('Account Exists', 'This email is already registered. Please try logging in instead.')
+      } else {
+        notificationService.error(error)
+      }
     } finally {
       setLoading(false)
     }
@@ -171,32 +185,7 @@ export function AuthScreen() {
     }
   }, [])
 
-  const handleDemoLogin = async () => {
-    try {
-      setLoading(true)
-      console.log('🎯 Attempting demo login...')
-      await login('demo@mantrapath.com', 'demo123')
-      notificationService.success('login', { context: 'Welcome to the demo environment!' })
-    } catch (error: any) {
-      console.log('Demo login failed, trying to create demo account...')
-      // If demo account doesn't exist, create it
-      try {
-        await register({
-          email: 'demo@mantrapath.com',
-          username: 'demo_user',
-          password: 'demo123',
-          first_name: 'Demo',
-          last_name: 'User'
-        })
-        notificationService.success('register', { context: 'Demo account created! Welcome!' })
-      } catch (registerError: any) {
-        console.error('Demo account creation failed:', registerError)
-        notificationService.error(registerError)
-      }
-    } finally {
-      setLoading(false)
-    }
-  }
+
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-background via-background to-primary/5 flex items-center justify-center p-4">
@@ -225,7 +214,7 @@ export function AuthScreen() {
             {backendStatus === 'disconnected' && (
               <Badge variant="destructive" className="gap-2">
                 <Warning size={12} />
-                Using Demo Mode
+                Backend Offline
               </Badge>
             )}
           </div>
@@ -400,47 +389,11 @@ export function AuthScreen() {
               </TabsContent>
             </Tabs>
             
-            <div className="mt-6 relative">
-              <div className="absolute inset-0 flex items-center">
-                <span className="w-full border-t" />
-              </div>
-              <div className="relative flex justify-center text-xs uppercase">
-                <span className="bg-card px-2 text-muted-foreground">Or</span>
-              </div>
-            </div>
-            
-            <Button 
-              variant="outline" 
-              className="w-full mt-4" 
-              onClick={handleDemoLogin}
-              disabled={loading}
-            >
-              Try Demo Account
-            </Button>
             
             <p className="text-xs text-muted-foreground text-center mt-4">
               By creating an account, you agree to our terms of service and privacy policy.
               MantraPath is designed to complement, not replace, professional mental health care.
             </p>
-            
-            {/* Backend Instructions for Disconnected State */}
-            {backendStatus === 'disconnected' && (
-              <div className="mt-4 p-3 bg-amber-50 border border-amber-200 rounded-lg">
-                <h4 className="text-sm font-medium text-amber-800 mb-2">🔧 Demo Mode Active</h4>
-                <p className="text-xs text-amber-700 mb-2">
-                  The backend is not running. You can still explore with demo data.
-                </p>
-                <details className="text-xs text-amber-600">
-                  <summary className="cursor-pointer hover:text-amber-800">Start Backend Services</summary>
-                  <div className="mt-2 p-2 bg-amber-100 rounded font-mono text-xs">
-                    <div>1. Open terminal in backend directory</div>
-                    <div>2. Run: <code>python3 simple_start.py</code></div>
-                    <div>3. Or use: <code>./start-backend.sh</code></div>
-                    <div>4. Refresh this page</div>
-                  </div>
-                </details>
-              </div>
-            )}
           </CardContent>
         </Card>
         

@@ -53,6 +53,7 @@ class ServiceRegistry:
             ("media", service_config.media_service_url, service_config.media_service_health_path),
             ("translation", service_config.translation_service_url, service_config.translation_service_health_path),
             ("voice", service_config.voice_service_url, service_config.voice_service_health_path),
+            ("action-orchestrator", service_config.action_orchestrator_url, service_config.action_orchestrator_health_path),
         ]
         
         for name, url, health_path in services_config:

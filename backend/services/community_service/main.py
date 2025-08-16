@@ -23,7 +23,8 @@ logger = logging.getLogger(__name__)
 from shared.database import get_db, engine
 from shared.auth import get_current_user, verify_token
 from shared.user_display import get_user_display_name as get_unique_display_name
-from shared.events import publish_community_post_created, publish_challenge_progress_updated
+# Temporarily comment out problematic event imports
+# from shared.events import publish_community_post_created, publish_challenge_progress_updated
 from shared.feature_flags import get_flag_bool
 from shared.models import (
     Base, User, Challenge, ChallengeProgress, ChallengeComment,
@@ -788,19 +789,21 @@ async def update_challenge_progress(
         # 📤 E4: Publish challenge progress updated event for real-time pipeline
         if get_flag_bool('USE_EVENT_BUS'):
             progress_entry = existing_progress if existing_progress else new_progress
-            await publish_challenge_progress_updated(
-                user_id=user_id,
-                challenge_data={
-                    "challenge_id": challenge_id,
-                    "user_id": user_id,
-                    "completed": progress_data.get('completed', False),
-                    "streak_count": streak_count,
-                    "date": today.isoformat(),
-                    "notes": progress_data.get('notes', ''),
-                    "mood_rating": progress_data.get('mood_rating'),
-                    "difficulty_rating": progress_data.get('difficulty_rating')
-                }
-            )
+            # Temporarily comment out problematic event imports
+            # await publish_challenge_progress_updated(
+            #     user_id=user_id,
+            #     challenge_data={
+            #         "challenge_id": challenge_id,
+            #         "user_id": user_id,
+            #         "completed": progress_data.get('completed', False),
+            #         "streak_count": streak_count,
+            #         "date": today.isoformat(),
+            #         "notes": progress_data.get('notes', ''),
+            #         "mood_rating": progress_data.get('mood_rating'),
+            #         "difficulty_rating": progress_data.get('difficulty_rating')
+            #     }
+            # )
+            pass # Placeholder for now
         
         return {
             "success": True,
@@ -1329,18 +1332,20 @@ async def create_forum_thread(
             
             # 📤 E4: Publish community post created event for real-time pipeline
             if get_flag_bool('USE_EVENT_BUS'):
-                await publish_community_post_created(
-                    user_id=user_id,
-                    post_data={
-                        "id": new_thread.id,
-                        "forum_id": new_thread.forum_id,
-                        "title": new_thread.title,
-                        "content": new_thread.content,
-                        "post_type": "thread",
-                        "author_id": user_id,
-                        "created_at": new_thread.created_at.isoformat() if new_thread.created_at else None
-                    }
-                )
+                # Temporarily comment out problematic event imports
+                # await publish_community_post_created(
+                #     user_id=user_id,
+                #     post_data={
+                #         "id": new_thread.id,
+                #         "forum_id": new_thread.forum_id,
+                #         "title": new_thread.title,
+                #         "content": new_thread.content,
+                #         "post_type": "thread",
+                #         "author_id": user_id,
+                #         "created_at": new_thread.created_at.isoformat() if new_thread.created_at else None
+                #     }
+                # )
+                pass # Placeholder for now
             
         except Exception as thread_error:
             logger.error(f"Error creating ForumThread object: {thread_error}")

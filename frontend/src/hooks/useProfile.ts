@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react'
 import { apiService } from '@/services/api'
+import { authService } from '@/services/auth'
 
 interface UserProfile {
   id: string
@@ -40,6 +41,18 @@ export function useProfile(): UseProfileReturn {
     try {
       setLoading(true)
       setError(null)
+      
+      // Ensure we have authentication token
+      if (!authService.isAuthenticated()) {
+        console.log('🔐 Authentication required')
+        setProfile(null)
+        setStats(null)
+        setError('Authentication required to load profile')
+        return
+      }
+
+      // Refresh API service token
+      apiService.refreshToken()
       
       const [profileData, statsData] = await Promise.all([
         apiService.getMyProfile(),

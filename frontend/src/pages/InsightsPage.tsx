@@ -14,6 +14,7 @@ import {
   Spinner
 } from '@phosphor-icons/react'
 import { useComprehensiveInsights } from '@/hooks/useComprehensiveInsights'
+import { EmotionalWeatherWidget } from '@/components/mood/EmotionalWeatherWidget'
 
 interface InsightsPageProps {
   onBack?: () => void
@@ -207,6 +208,22 @@ export function InsightsPage({ onBack }: InsightsPageProps) {
           </Card>
         </motion.div>
       </div>
+
+      {/* Emotional Weather Widget */}
+      <motion.div
+        initial={{ opacity: 0, y: 20 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ delay: 0.4 }}
+        className="max-w-2xl"
+      >
+        <EmotionalWeatherWidget 
+          showDetails={true}
+          autoRefresh={true}
+          onWeatherUpdate={(data) => {
+            console.log('Weather updated:', data)
+          }}
+        />
+      </motion.div>
 
       {/* Detailed Insights */}
       <motion.div

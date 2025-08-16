@@ -20,11 +20,12 @@ class ElevenLabsTTSEngine(BaseTTSEngine):
     """ElevenLabs Text-to-Speech Engine implementation"""
     
     def __init__(self, config: Dict[str, Any], **kwargs):
-        super().__init__(config, **kwargs)
+        # Set API key before calling super().__init__() since initialize() may be called
         self.api_key = config.get("elevenlabs_api_key", "")
         self.base_url = "https://api.elevenlabs.io/v1"
         self.client = None
         self.available_voices = {}
+        super().__init__(config, **kwargs)
         
     def initialize(self, **kwargs) -> None:
         """Initialize ElevenLabs engine"""

@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from 'react'
 import { toast } from 'sonner'
 import { apiService } from '@/services/api'
+import { authService } from '@/services/auth'
 import { JournalEntry as BackendJournalEntry } from '@/types/index'
 
 // Local interface for frontend-specific journal entry structure
@@ -44,7 +45,25 @@ export function useJournal() {
       setLoading(true)
       setError(null)
 
+      // Ensure we have authentication token
+      if (!authService.isAuthenticated()) {
+        console.log('🔐 Authentication required')
+        setEntries([])
+        setError('Authentication required to load journal entries')
+        return
+      }
+
+      // Refresh API service token
+      apiService.refreshToken()
+
       const backendEntries = await apiService.getJournalEntries(50)
+      
+      // Ensure we have an array to work with
+      if (!Array.isArray(backendEntries)) {
+        console.warn('Backend returned non-array data for journal entries:', backendEntries)
+        setEntries([])
+        return
+      }
       
       // Convert backend format to frontend format
       const formattedEntries: JournalEntry[] = backendEntries.map(entry => ({

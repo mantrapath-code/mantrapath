@@ -1,0 +1,87 @@
+version: '3.8'
+
+services:
+  models-service:
+    build: .
+    ports:
+      - "8085:8080"  # Models service port - using 8085 externally to avoid conflicts
+    environment:
+      - SERVICE_NAME=models_service
+      - SERVICE_PORT=8080
+      - DEBUG=true
+      - USE_GPU=true
+      - TORCH_DEVICE=auto
+      - MODELS_DIR=/app/models
+      - CACHE_DIR=/app/cache
+      - LOGS_DIR=/app/logs
+      # Model preferences
+      - DEFAULT_STT_MODEL=whisper_medium
+      - DEFAULT_TTS_MODEL=coqui_xtts_v2
+      - WHISPER_MODEL_SIZE=medium
+      - COQUI_MODEL_NAME=tts_models/multilingual/multi-dataset/xtts_v2
+      # Hardware settings
+      - MAX_GPU_MEMORY=0.8
+      - MAX_CONCURRENT_REQUESTS=10
+      - MODEL_CACHE_SIZE=5
+    volumes:
+      # Persist models and cache
+      - models_data:/app/models
+      - cache_data:/app/cache
+      - logs_data:/app/logs
+      # Optional: GPU support
+      # - /dev/nvidia0:/dev/nvidia0
+      # - /dev/nvidiactl:/dev/nvidiactl
+      # - /dev/nvidia-uvm:/dev/nvidia-uvm
+    # Optional: GPU support (uncomment if you have NVIDIA GPU)
+    # deploy:
+    #   resources:
+    #     reservations:
+    #       devices:
+    #         - driver: nvidia
+    #           count: 1
+    #           capabilities: [gpu]
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+
+  # Optional: Redis for caching and job queues
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6385:6379"  # Using 6385 externally to avoid conflicts
+    volumes:
+      - redis_data:/data
+    restart: unless-stopped
+    command: redis-server --appendonly yes
+
+  # Optional: Model download service (runs once to download models)
+  model-downloader:
+    build: .
+    volumes:
+      - models_data:/app/models
+      - cache_data:/app/cache
+    environment:
+      - MODELS_DIR=/app/models
+      - CACHE_DIR=/app/cache
+    command: python -m scripts.download_models --whisper-models medium small --vosk-languages en-us hi --setup-coqui
+    depends_on:
+      - models-service
+    restart: "no"  # Run once
+
+volumes:
+  models_data:
+    driver: local
+  cache_data:
+    driver: local
+  logs_data:
+    driver: local
+  redis_data:
+    driver: local
+
+networks:
+  default:
+    name: mantrapath_models_network

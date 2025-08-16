@@ -1,7 +1,24 @@
 """
-Enhanced Event System for MantraPath V3
-Supporting Voice, AI, and Cultural Intelligence Events
+Comprehensive Event System for MantraPath
+Supporting Voice, AI, Cultural Intelligence, and Core Service Events
 """
+
+# Import core event functions from sibling events module
+try:
+    from ..events import (
+        publish_mood_entry_created,
+        publish_journal_entry_created,
+        publish_challenge_progress_updated,
+        publish_community_post_created,
+        publish_insight_delta,
+        get_event_bus,
+        cleanup_event_bus,
+        EventChannels
+    )
+    CORE_EVENTS_AVAILABLE = True
+except ImportError as e:
+    print(f"⚠️  Core events not available: {e}")
+    CORE_EVENTS_AVAILABLE = False
 
 try:
     from .voice_events import (
@@ -49,6 +66,18 @@ except ImportError:
 
 # Export available components
 __all__ = []
+
+if CORE_EVENTS_AVAILABLE:
+    __all__.extend([
+        'publish_mood_entry_created',
+        'publish_journal_entry_created',
+        'publish_challenge_progress_updated',
+        'publish_community_post_created',
+        'publish_insight_delta',
+        'get_event_bus',
+        'cleanup_event_bus',
+        'EventChannels'
+    ])
 
 if VOICE_EVENTS_AVAILABLE:
     __all__.extend([

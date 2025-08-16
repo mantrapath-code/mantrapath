@@ -88,6 +88,9 @@ class RegistrationResponse(BaseModel):
     message: str
     user_id: str
     verification_required: bool
+    access_token: Optional[str] = None
+    refresh_token: Optional[str] = None
+    token_type: Optional[str] = None
 
 # Cleanup function for unverified accounts
 def cleanup_unverified_accounts():
@@ -321,14 +324,32 @@ async def register(user_data: UserRegister, db: Session = Depends(get_db)):
             user_display_name
         )
         message = "Registration successful! Please check your email to verify your account."
+        
+        return RegistrationResponse(
+            message=message,
+            user_id=str(db_user.id),
+            verification_required=verification_required
+        )
     else:
-        message = "Registration successful! You can now log in immediately."
-    
-    return RegistrationResponse(
-        message=message,
-        user_id=str(db_user.id),
-        verification_required=verification_required
-    )
+        message = "Registration successful! You are now logged in."
+        
+        # Create tokens for immediate login when verification is skipped
+        access_token = create_access_token(data={
+            "sub": str(db_user.id),
+            "email": db_user.email,
+            "role": db_user.role
+        })
+        refresh_token = create_refresh_token(data={"sub": str(db_user.id)})
+        
+        # Return tokens in the response for immediate login
+        return {
+            "message": message,
+            "user_id": str(db_user.id),
+            "verification_required": verification_required,
+            "access_token": access_token,
+            "refresh_token": refresh_token,
+            "token_type": "bearer"
+        }
 
 @app.post("/login", response_model=Token)
 async def login(user_data: UserLogin, db: Session = Depends(get_db)):

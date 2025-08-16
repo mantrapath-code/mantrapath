@@ -1,6 +1,5 @@
 import { createContext, useContext, useEffect, useState } from 'react'
 import { apiService } from '@/services/api'
-import { ensureDevAuthentication } from '@/utils/devAuth'
 import { getUserDisplayName, getUserInitials } from '@/utils/userDisplay'
 
 interface User {
@@ -64,27 +63,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         }
       }
 
-      // If no valid session, try development auto-login
-      if (!import.meta.env.PROD) {
-        console.log('🔧 Development mode: Attempting auto-authentication...')
-        try {
-          const authSuccess = await ensureDevAuthentication()
-          if (authSuccess) {
-            const userData = await apiService.getCurrentUser()
-            // Enhance user data with display utilities
-            const enhancedUser = {
-              ...userData,
-              displayName: getUserDisplayName(userData),
-              initials: getUserInitials(userData)
-            }
-            setUser(enhancedUser)
-            console.log('✅ Development auto-authentication successful')
-          }
-        } catch (error) {
-          console.warn('❌ Development auto-authentication failed:', error)
-        }
-      }
-      
       setLoading(false)
     }
 
@@ -117,17 +95,18 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     try {
       const result = await apiService.register(userData)
       
-      // If email verification is not required, automatically log the user in
-      if (!result.verification_required) {
-        try {
-          await login(userData.email, userData.password)
-        } catch (loginError) {
-          console.warn('Auto-login after registration failed:', loginError)
-          // Return the registration result anyway - user can manually log in
+      // Check if email verification is required
+      if (result.verification_required) {
+        // Email verification is required - user needs to check email
+        return result
+      } else {
+        // No verification required - user can login immediately
+        // But we still need them to login manually for security
+        return {
+          ...result,
+          message: result.message || 'Registration successful! Please log in with your credentials.'
         }
       }
-      
-      return result
     } catch (error) {
       throw error
     }

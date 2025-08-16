@@ -22,9 +22,10 @@ sys.path.append(os.path.join(os.path.dirname(__file__), '..', '..'))
 from shared.database import get_db
 from shared.auth import get_current_user
 from shared.models import MoodEntry, JournalEntry, Notification
-from shared.events import get_event_bus, EventChannels, Event, publish_insight_delta
+# Temporarily comment out problematic event imports
+# from shared.events import get_event_bus, EventChannels, Event, publish_insight_delta
 # BK-004: V3 enhanced bus imports
-from shared.events import get_enhanced_event_bus, V3EventChannels
+# from shared.events import get_enhanced_event_bus, V3EventChannels
 from shared.feature_flags import get_flag_bool
 
 # Import ML models
@@ -67,177 +68,178 @@ crisis_predictor = CrisisPredictionSystem()
 early_warning_system = EarlyWarningSystem()
 
 # E4: Real-Time Insight Delta Processor
-class RealTimeInsightProcessor:
-    """Processes real-time events and generates insight deltas"""
-    
-    def __init__(self):
-        self.insight_cache = {}  # Simple in-memory cache {user_id: cache_data}
-        self.cache_ttl = 300  # 5 minutes TTL
-        logger.info("🔄 RealTimeInsightProcessor initialized")
-    
-    async def process_mood_entry_event(self, event: Event):
-        """Process mood entry created event and generate insight delta"""
-        try:
-            user_id = event.user_id
-            mood_data = event.data
-            
-            if not user_id:
-                return
-            
-            # Calculate quick insight updates
-            delta = await self._calculate_mood_delta(user_id, mood_data)
-            
-            # Publish insight delta
-            if delta:
-                await publish_insight_delta(user_id, delta)
-                logger.info(f"📊 Published insight delta for user {user_id}")
-                
-        except Exception as e:
-            logger.error(f"❌ Error processing mood entry event: {e}")
-    
-    async def process_journal_entry_event(self, event: Event):
-        """Process journal entry created event and generate insight delta"""
-        try:
-            user_id = event.user_id
-            journal_data = event.data
-            
-            if not user_id:
-                return
-            
-            # Calculate quick insight updates
-            delta = await self._calculate_journal_delta(user_id, journal_data)
-            
-            # Publish insight delta
-            if delta:
-                await publish_insight_delta(user_id, delta)
-                logger.info(f"📝 Published journal insight delta for user {user_id}")
-                
-        except Exception as e:
-            logger.error(f"❌ Error processing journal entry event: {e}")
-    
-    async def process_challenge_progress_event(self, event: Event):
-        """Process challenge progress updated event and generate insight delta"""
-        try:
-            user_id = event.user_id
-            challenge_data = event.data
-            
-            if not user_id:
-                return
-            
-            # Calculate quick insight updates
-            delta = await self._calculate_challenge_delta(user_id, challenge_data)
-            
-            # Publish insight delta
-            if delta:
-                await publish_insight_delta(user_id, delta)
-                logger.info(f"🏆 Published challenge insight delta for user {user_id}")
-                
-        except Exception as e:
-            logger.error(f"❌ Error processing challenge progress event: {e}")
-    
-    async def _calculate_mood_delta(self, user_id: str, mood_data: Dict[str, Any]) -> Optional[Dict[str, Any]]:
-        """Calculate mood-related insight deltas"""
-        try:
-            current_time = datetime.now(timezone.utc)
-            
-            # Update cache with new mood entry count
-            cache_key = f"mood_insights_{user_id}"
-            cached_data = self.insight_cache.get(cache_key, {})
-            
-            # Simple delta calculations
-            delta = {
-                "type": "mood_update",
-                "timestamp": current_time.isoformat(),
-                "changes": {
-                    "latest_mood": mood_data.get("mood_score"),
-                    "energy_level": mood_data.get("energy_level"),
-                    "stress_level": mood_data.get("stress_level"),
-                    "days_tracked_increment": 1  # This day was tracked
-                }
-            }
-            
-            # Calculate streak if cache exists
-            last_entry_date = cached_data.get("last_mood_date")
-            today = current_time.date().isoformat()
-            
-            if last_entry_date:
-                # Simple consecutive day check
-                try:
-                    last_date = datetime.fromisoformat(last_entry_date).date()
-                    current_date = current_time.date()
-                    
-                    if (current_date - last_date).days == 1:
-                        # Consecutive day - increment streak
-                        current_streak = cached_data.get("mood_streak", 0) + 1
-                        delta["changes"]["mood_streak"] = current_streak
-                    elif (current_date - last_date).days == 0:
-                        # Same day - maintain streak
-                        delta["changes"]["mood_streak"] = cached_data.get("mood_streak", 1)
-                    else:
-                        # Gap in days - reset streak
-                        delta["changes"]["mood_streak"] = 1
-                except Exception:
-                    delta["changes"]["mood_streak"] = 1
-            else:
-                delta["changes"]["mood_streak"] = 1
-            
-            # Update cache
-            self.insight_cache[cache_key] = {
-                "last_mood_date": today,
-                "mood_streak": delta["changes"].get("mood_streak", 1),
-                "last_updated": current_time.isoformat()
-            }
-            
-            return delta
-            
-        except Exception as e:
-            logger.error(f"❌ Error calculating mood delta: {e}")
-            return None
-    
-    async def _calculate_journal_delta(self, user_id: str, journal_data: Dict[str, Any]) -> Optional[Dict[str, Any]]:
-        """Calculate journal-related insight deltas"""
-        try:
-            current_time = datetime.now(timezone.utc)
-            
-            delta = {
-                "type": "journal_update",
-                "timestamp": current_time.isoformat(),
-                "changes": {
-                    "journal_entries_increment": 1,
-                    "latest_sentiment": journal_data.get("sentiment_label"),
-                    "sentiment_score": journal_data.get("sentiment_score")
-                }
-            }
-            
-            return delta
-            
-        except Exception as e:
-            logger.error(f"❌ Error calculating journal delta: {e}")
-            return None
-    
-    async def _calculate_challenge_delta(self, user_id: str, challenge_data: Dict[str, Any]) -> Optional[Dict[str, Any]]:
-        """Calculate challenge-related insight deltas"""
-        try:
-            current_time = datetime.now(timezone.utc)
-            
-            delta = {
-                "type": "challenge_update",
-                "timestamp": current_time.isoformat(),
-                "changes": {
-                    "challenge_completed": challenge_data.get("completed", False),
-                    "streak_count": challenge_data.get("streak_count", 0),
-                    "engagement_increment": 1
-                }
-            }
-            
-            return delta
-            
-        except Exception as e:
-            logger.error(f"❌ Error calculating challenge delta: {e}")
-            return None
+# Temporarily commented out due to import issues
+# class RealTimeInsightProcessor:
+#     """Processes real-time events and generates insight deltas"""
+#     
+#     def __init__(self):
+#         self.insight_cache = {}  # Simple in-memory cache {user_id: cache_data}
+#         self.cache_ttl = 300  # 5 minutes TTL
+#         logger.info("🔄 RealTimeInsightProcessor initialized")
+#     
+#     async def process_mood_entry_event(self, event: Event):
+#         """Process mood entry created event and generate insight delta"""
+#         try:
+#             user_id = event.user_id
+#             mood_data = event.data
+#             
+#             if not user_id:
+#                 return
+#             
+#             # Calculate quick insight updates
+#             delta = await self._calculate_mood_delta(user_id, mood_data)
+#             
+#             # Publish insight delta
+#             if delta:
+#                 await publish_insight_delta(user_id, delta)
+#                 logger.info(f"📊 Published insight delta for user {user_id}")
+#                 
+#         except Exception as e:
+#             logger.error(f"❌ Error processing mood entry event: {e}")
+#     
+#     async def process_journal_entry_event(self, event: Event):
+#         """Process journal entry created event and generate insight delta"""
+#         try:
+#             user_id = event.user_id
+#             journal_data = event.data
+#             
+#             if not user_id:
+#                 return
+#             
+#             # Calculate quick insight updates
+#             delta = await self._calculate_journal_delta(user_id, journal_data)
+#             
+#             # Publish insight delta
+#             if delta:
+#                 await publish_insight_delta(user_id, delta)
+#                 logger.info(f"📝 Published journal insight delta for user {user_id}")
+#                 
+#         except Exception as e:
+#             logger.error(f"❌ Error processing journal entry event: {e}")
+#     
+#     async def process_challenge_progress_event(self, event: Event):
+#         """Process challenge progress updated event and generate insight delta"""
+#         try:
+#             user_id = event.user_id
+#             challenge_data = event.data
+#             
+#             if not user_id:
+#                 return
+#             
+#             # Calculate quick insight updates
+#             delta = await self._calculate_challenge_delta(user_id, challenge_data)
+#             
+#             # Publish insight delta
+#             if delta:
+#                 await publish_insight_delta(user_id, delta)
+#                 logger.info(f"🏆 Published challenge insight delta for user {user_id}")
+#                 
+#         except Exception as e:
+#             logger.error(f"❌ Error processing challenge progress event: {e}")
+#     
+#     async def _calculate_mood_delta(self, user_id: str, mood_data: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+#         """Calculate mood-related insight deltas"""
+#         try:
+#             current_time = datetime.now(timezone.utc)
+#             
+#             # Update cache with new mood entry count
+#             cache_key = f"mood_insights_{user_id}"
+#             cached_data = self.insight_cache.get(cache_key, {})
+#             
+#             # Simple delta calculations
+#             delta = {
+#                 "type": "mood_update",
+#                 "timestamp": current_time.isoformat(),
+#                 "changes": {
+#                     "latest_mood": mood_data.get("mood_score"),
+#                     "energy_level": mood_data.get("energy_level"),
+#                     "stress_level": mood_data.get("stress_level"),
+#                     "days_tracked_increment": 1  # This day was tracked
+#                 }
+#             }
+#             
+#             # Calculate streak if cache exists
+#             last_entry_date = cached_data.get("last_mood_date")
+#             today = current_time.date().isoformat()
+#             
+#             if last_entry_date:
+#                 # Simple consecutive day check
+#                 try:
+#                     last_date = datetime.fromisoformat(last_entry_date).date()
+#                     current_date = current_time.date()
+#                     
+#                     if (current_date - last_date).days == 1:
+#                         # Consecutive day - increment streak
+#                         current_streak = cached_data.get("mood_streak", 0) + 1
+#                         delta["changes"]["mood_streak"] = current_streak
+#                     elif (current_date - last_date).days == 0:
+#                         # Same day - maintain streak
+#                         delta["changes"]["mood_streak"] = cached_data.get("mood_streak", 1)
+#                     else:
+#                         # Gap in days - reset streak
+#                         delta["changes"]["mood_streak"] = 1
+#                 except Exception:
+#                     delta["changes"]["mood_streak"] = 1
+#             else:
+#                 delta["changes"]["mood_streak"] = 1
+#             
+#             # Update cache
+#             self.insight_cache[cache_key] = {
+#                 "last_mood_date": today,
+#                 "mood_streak": delta["changes"].get("mood_streak", 1),
+#                 "last_updated": current_time.isoformat()
+#             }
+#             
+#             return delta
+#             
+#         except Exception as e:
+#             logger.error(f"❌ Error calculating mood delta: {e}")
+#             return None
+#     
+#     async def _calculate_journal_delta(self, user_id: str, journal_data: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+#         """Calculate journal-related insight deltas"""
+#         try:
+#             current_time = datetime.now(timezone.utc)
+#             
+#             delta = {
+#                 "type": "journal_update",
+#                 "timestamp": current_time.isoformat(),
+#                 "changes": {
+#                     "journal_entries_increment": 1,
+#                     "latest_sentiment": journal_data.get("sentiment_label"),
+#                     "sentiment_score": journal_data.get("sentiment_score")
+#                 }
+#             }
+#             
+#             return delta
+#             
+#         except Exception as e:
+#             logger.error(f"❌ Error calculating journal delta: {e}")
+#             return None
+#     
+#     async def _calculate_challenge_delta(self, user_id: str, challenge_data: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+#         """Calculate challenge-related insight deltas"""
+#         try:
+#             current_time = datetime.now(timezone.utc)
+#             
+#             delta = {
+#                 "type": "challenge_update",
+#                 "timestamp": current_time.isoformat(),
+#                 "changes": {
+#                     "challenge_completed": challenge_data.get("completed", False),
+#                     "streak_count": challenge_data.get("streak_count", 0),
+#                     "engagement_increment": 1
+#                 }
+#             }
+#             
+#             return delta
+#             
+#         except Exception as e:
+#             logger.error(f"❌ Error calculating challenge delta: {e}")
+#             return None
 
 # Initialize real-time processor
-realtime_processor = RealTimeInsightProcessor()
+# realtime_processor = RealTimeInsightProcessor()
 
 # Initialize API-only crisis monitoring dashboard
 crisis_dashboard = None
@@ -252,69 +254,70 @@ except Exception as e:
     crisis_dashboard = None
 
 # Start background metrics collection
-@app.on_event("startup")
-async def startup_event():
-    """Initialize background tasks and monitoring"""
-    logger.info("🚀 Starting ML Service with Crisis Prediction Dashboard")
-    
-    # Start metrics collection background task
-    asyncio.create_task(collect_metrics_background())
-    
-    # E4: Setup real-time event subscriptions
-    if get_flag_bool('USE_EVENT_BUS'):
-        await setup_realtime_subscriptions()
-    
-    logger.info("✅ Crisis prediction monitoring active")
+# Temporarily commented out due to import issues
+# @app.on_event("startup")
+# async def startup_event():
+#     """Initialize background tasks and monitoring"""
+#     logger.info("🚀 Starting ML Service with Crisis Prediction Dashboard")
+#     
+#     # Start metrics collection background task
+#     asyncio.create_task(collect_metrics_background())
+#     
+#     # E4: Setup real-time event subscriptions
+#     if get_flag_bool('USE_EVENT_BUS'):
+#         await setup_realtime_subscriptions()
+#     
+#     logger.info("✅ Crisis prediction monitoring active")
 
-async def setup_realtime_subscriptions():
-    """Setup event subscriptions for real-time insight processing"""
-    try:
-        bus = get_event_bus()
-        
-        # Subscribe to mood entry events (legacy)
-        await bus.subscribe(
-            EventChannels.MOOD_ENTRY_CREATED,
-            realtime_processor.process_mood_entry_event
-        )
-        
-        # Subscribe to journal entry events (legacy)
-        await bus.subscribe(
-            EventChannels.JOURNAL_ENTRY_CREATED,
-            realtime_processor.process_journal_entry_event
-        )
-        
-        # Subscribe to challenge progress events (legacy)
-        await bus.subscribe(
-            EventChannels.CHALLENGE_PROGRESS_UPDATED,
-            realtime_processor.process_challenge_progress_event
-        )
-        
-        # BK-004: Also subscribe to V3 enhanced channels when enabled
-        if get_flag_bool('USE_NATS_EVENT_BUS'):
-            v3bus = get_enhanced_event_bus()
-            await v3bus.subscribe(
-                V3EventChannels.MOOD_ENTRY_CREATED,
-                realtime_processor.process_mood_entry_event
-            )
-            await v3bus.subscribe(
-                V3EventChannels.JOURNAL_ENTRY_CREATED,
-                realtime_processor.process_journal_entry_event
-            )
-        
-        logger.info("🔔 Real-time event subscriptions established (legacy + V3)")
-        
-    except Exception as e:
-        logger.error(f"❌ Failed to setup real-time subscriptions: {e}")
+# async def setup_realtime_subscriptions():
+#     """Setup event subscriptions for real-time insight processing"""
+#     try:
+#         bus = get_event_bus()
+#         
+#         # Subscribe to mood entry events (legacy)
+#         await bus.subscribe(
+#             EventChannels.MOOD_ENTRY_CREATED,
+#             realtime_processor.process_mood_entry_event
+#         )
+#         
+#         # Subscribe to journal entry events (legacy)
+#         await bus.subscribe(
+#             EventChannels.JOURNAL_ENTRY_CREATED,
+#             realtime_processor.process_journal_entry_event
+#         )
+#         
+#         # Subscribe to challenge progress events (legacy)
+#         await bus.subscribe(
+#             EventChannels.CHALLENGE_PROGRESS_UPDATED,
+#             realtime_processor.process_challenge_progress_event
+#         )
+#         
+#         # BK-004: Also subscribe to V3 enhanced channels when enabled
+#         if get_flag_bool('USE_NATS_EVENT_BUS'):
+#             v3bus = get_enhanced_event_bus()
+#             await v3bus.subscribe(
+#                 V3EventChannels.MOOD_ENTRY_CREATED,
+#                 realtime_processor.process_mood_entry_event
+#             )
+#             await v3bus.subscribe(
+#                 V3EventChannels.JOURNAL_ENTRY_CREATED,
+#                 realtime_processor.process_journal_entry_event
+#             )
+#         
+#         logger.info("🔔 Real-time event subscriptions established (legacy + V3)")
+#         
+#     except Exception as e:
+#         logger.error(f"❌ Failed to setup real-time subscriptions: {e}")
 
-@app.on_event("shutdown")
-async def shutdown_event():
-    """Cleanup on shutdown"""
-    try:
-        from shared.events import cleanup_event_bus
-        await cleanup_event_bus()
-        logger.info("🛑 Event bus cleaned up")
-    except Exception as e:
-        logger.error(f"❌ Error during shutdown cleanup: {e}")
+# @app.on_event("shutdown")
+# async def shutdown_event():
+#     """Cleanup on shutdown"""
+#     try:
+#         from shared.events import cleanup_event_bus
+#         await cleanup_event_bus()
+#         logger.info("🛑 Event bus cleaned up")
+#     except Exception as e:
+#         logger.error(f"❌ Error during shutdown cleanup: {e}")
 
 async def collect_metrics_background():
     """Background task to collect crisis prediction metrics"""

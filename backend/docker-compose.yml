@@ -37,13 +37,13 @@ services:
   # NATS for real-time messaging and WebSocket clustering with JetStream
   nats:
     image: nats:2.10-alpine
+    container_name: mantrapath-nats
     ports:
       - "4222:4222"    # Client connections
       - "8222:8222"    # HTTP monitoring
       - "6222:6222"    # Clustering port
     volumes:
       - nats_data:/data/jetstream
-      - ./config/nats.conf:/etc/nats/nats.conf:ro
     networks:
       - mantrapath-network
     healthcheck:
@@ -51,13 +51,16 @@ services:
       interval: 30s
       timeout: 10s
       retries: 5
-      start_period: 10s
+      start_period: 30s
     command: [
-      "--config", "/etc/nats/nats.conf"
+      "--port", "4222",
+      "--http_port", "8222",
+      "--jetstream",
+      "--store_dir", "/data/jetstream"
     ]
     environment:
-      - NATS_JETSTREAM_MAX_MEMORY=1GB
-      - NATS_JETSTREAM_MAX_FILE=10GB
+      - NATS_SERVER_NAME=mantrapath-nats
+    restart: unless-stopped
 
   # API Gateway - Main service (V3 Enhanced)
   api-gateway:
@@ -66,7 +69,7 @@ services:
       dockerfile: services/api_gateway/Dockerfile
     ports:
       - "8000:8000"
-      - "8001:8001"  # WebSocket port
+      - "8080:8080"  # WebSocket port (changed from 8001)
       - "9090:9090"  # Metrics port
     env_file:
       - .env
@@ -77,7 +80,7 @@ services:
       - GATEWAY_DEBUG=${DEBUG:-true}
       - GATEWAY_HOST=0.0.0.0
       - GATEWAY_PORT=8000
-      - WEBSOCKET_PORT=8001
+      - WEBSOCKET_PORT=8080
       - METRICS_PORT=9090
       
       # Voice Features
@@ -85,20 +88,20 @@ services:
       - VOICE_COMMAND_TIMEOUT=5000
       - VOICE_CONFIDENCE_THRESHOLD=0.7
       - SUPPORTED_LANGUAGES=en,hi,es,fr,de,it,pt,ru,ja,zh,ko,ar,bn,ta,te,gu,mr,pa,ur,ml,kn,as
-      - VOICE_SERVICE_URL=http://voice-service:8004
+      - VOICE_SERVICE_URL=http://voice-service:8011
       
       # AI Context
       - AI_CONTEXT_ENABLED=true
       - AI_CONTEXT_CACHE_TTL=300
       - AI_CONTEXT_MAX_SIZE=1024
-      - ML_SERVICE_URL=http://ml-service:8006
+      - ML_SERVICE_URL=http://ml-service:8008
       
       # Cultural Intelligence
       - CULTURAL_ADAPTATION_ENABLED=true
       - CULTURAL_CONTEXT_CACHE_TTL=600
       - DEFAULT_CULTURE=neutral
       - CULTURAL_FALLBACK_ENABLED=true
-      - TRANSLATION_SERVICE_URL=http://translation-service:8005
+      - TRANSLATION_SERVICE_URL=http://translation-service:8010
       
       # WebSocket Enhanced
       - WEBSOCKET_MAX_CONNECTIONS=10000

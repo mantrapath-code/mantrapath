@@ -131,57 +131,7 @@ export function AchievementsPage({ onBack }: AchievementsPageProps) {
       setAchievements(dynamicAchievements)
     } catch (error) {
       console.error('Failed to load achievements:', error)
-      
-      // Fallback to mock data if API fails
-      const fallbackAchievements: Achievement[] = [
-        {
-          id: '1',
-          title: 'First Steps',
-          description: 'Log your first mood entry',
-          category: 'getting-started',
-          level: 'bronze',
-          progress: moodEntries.length > 0 ? 1 : 0,
-          maxProgress: 1,
-          isUnlocked: moodEntries.length > 0,
-          unlockedAt: moodEntries.length > 0 ? new Date(moodEntries[0].timestamp).toISOString() : undefined,
-          icon: '🎯'
-        },
-        {
-          id: '2',
-          title: 'Week Warrior',
-          description: 'Log moods for 7 consecutive days',
-          category: 'consistency',
-          level: 'silver',
-          progress: Math.min(7, moodEntries.length),
-          maxProgress: 7,
-          isUnlocked: moodEntries.length >= 7,
-          icon: '🔥'
-        },
-        {
-          id: '3',
-          title: 'Mood Master',
-          description: 'Reach 30 total mood entries',
-          category: 'milestone',
-          level: 'gold',
-          progress: Math.min(30, moodEntries.length),
-          maxProgress: 30,
-          isUnlocked: moodEntries.length >= 30,
-          icon: '👑'
-        },
-        {
-          id: '4',
-          title: 'Positive Vibes',
-          description: 'Log 5 excellent moods in a row',
-          category: 'positivity',
-          level: 'silver',
-          progress: 0,
-          maxProgress: 5,
-          isUnlocked: false,
-          icon: '✨'
-        }
-      ]
-      
-      setAchievements(fallbackAchievements)
+      setAchievements([]) // Set empty array instead of fallback data
     } finally {
       setLoading(false)
     }

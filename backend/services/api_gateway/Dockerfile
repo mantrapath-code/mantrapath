@@ -30,6 +30,9 @@ RUN mkdir -p /app/src /app/config /app/logs /app/cache /app/models
 COPY services/api_gateway/src/ ./src/
 COPY services/api_gateway/config/ ./config/
 
+# Copy shared modules (required for authentication)
+COPY shared/ ./shared/
+
 # Copy V3 enhanced configuration files
 COPY config/voice_config.yaml ./config/
 COPY config/cultural_config.yaml ./config/

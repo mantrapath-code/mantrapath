@@ -9,7 +9,7 @@ import time
 from typing import Dict, Any, Optional
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI, Request, HTTPException, Depends, WebSocket, WebSocketDisconnect
+from fastapi import FastAPI, Request, HTTPException, Depends, WebSocket, WebSocketDisconnect, status
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, Response
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
@@ -151,50 +151,25 @@ app.add_middleware(VoiceRoutingMiddleware, voice_router=voice_router)
 # V3 Enhanced Health Endpoints
 @app.get("/api/v3/health/enhanced")
 async def enhanced_health_check():
-    """Enhanced health check with V3 features status"""
-    start_time = time.time()
-    
+    """Enhanced health check with V3 features"""
     try:
-        # Check core services
-        core_health = await health_checker.check_detailed_health()
-        
-        # Check V3 enhanced services
-        v3_services_health = {
-            "voice_router": await voice_router.health_check(),
-            "ai_context_manager": await ai_context_manager.health_check(),
-            "cultural_manager": await cultural_manager.health_check(),
-            "websocket_manager": await websocket_manager.health_check(),
-            "cache_manager": await cache_manager.health_check(),
-            "performance_monitor": await performance_monitor.health_check()
-        }
-        
-        # Overall health status
-        all_healthy = (
-            core_health.get("status") == "healthy" and
-            all(service.get("status") == "healthy" for service in v3_services_health.values())
-        )
-        
-        response_time = (time.time() - start_time) * 1000  # Convert to milliseconds
-        
         return {
-            "status": "healthy" if all_healthy else "degraded",
+            "status": "healthy",
             "version": "3.0.0-enhanced",
             "timestamp": time.time(),
-            "response_time_ms": round(response_time, 2),
-            "core_services": core_health,
-            "v3_enhanced_services": v3_services_health,
             "features": {
-                "voice_routing": gateway_config.voice_routing_enabled,
-                "ai_context": gateway_config.ai_context_enabled,
-                "cultural_adaptation": gateway_config.cultural_adaptation_enabled,
-                "websocket_streaming": gateway_config.websocket_voice_streaming,
-                "performance_monitoring": gateway_config.performance_monitoring
-            }
+                "voice_routing": await voice_router.health_check(),
+                "ai_context": await ai_context_manager.health_check(),
+                "cultural_intelligence": await cultural_manager.health_check(),
+                "websocket": await websocket_manager.health_check(),
+                "performance": await performance_monitor.health_check()
+            },
+            "services": await health_checker.gateway_health()
         }
     except Exception as e:
-        logger.exception("Enhanced health check failed", error=str(e))
+        logger.error("Enhanced health check failed", error=str(e))
         return JSONResponse(
-            status_code=503,
+            status_code=500,
             content={
                 "status": "unhealthy",
                 "version": "3.0.0-enhanced",
@@ -202,6 +177,32 @@ async def enhanced_health_check():
                 "error": str(e)
             }
         )
+
+
+@app.get("/health")
+async def basic_health_check():
+    """Basic health check endpoint"""
+    return {
+        "status": "healthy",
+        "service": "api-gateway",
+        "timestamp": time.time()
+    }
+
+
+@app.get("/health/live")
+async def liveness_check():
+    """Liveness check endpoint for Docker health checks"""
+    return {
+        "status": "alive",
+        "service": "api-gateway",
+        "timestamp": time.time()
+    }
+
+
+@app.get("/health/ready")
+async def readiness_check():
+    """Readiness check endpoint"""
+    return await health_checker.readiness_check()
 
 
 @app.get("/api/v3/health/voice")
@@ -411,8 +412,9 @@ async def enhanced_service_proxy(
     
     try:
         # Rate limiting
-        client_id = get_client_identifier(request)
-        await rate_limiter.check_rate_limit(client_id, request.url.path)
+        client_id = get_client_identifier(dict(request.headers))
+        if not rate_limiter.is_allowed(client_id):
+            raise HTTPException(status_code=429, detail="Rate limit exceeded")
         
         # Authentication if credentials provided
         user_context = None
@@ -442,7 +444,7 @@ async def enhanced_service_proxy(
         )
         
         # Circuit breaker check
-        if circuit_breaker.is_open(service_name):
+        if not circuit_breaker.is_call_allowed(service_name):
             raise HTTPException(status_code=503, detail=f"Service {service_name} is currently unavailable")
         
         # Proxy request
@@ -502,27 +504,195 @@ async def enhanced_service_proxy(
 
 async def authenticate_user(credentials: HTTPAuthorizationCredentials) -> Optional[Dict[str, Any]]:
     """Authenticate user and return user context"""
-    # Implementation would integrate with auth service
-    # For now, return a mock user context
-    return {
-        "user_id": "user123",
-        "preferences": {},
-        "cultural_profile": {}
-    }
+    try:
+        # Import auth utilities
+        import sys
+        sys.path.append('/app/shared')
+        from shared.auth import verify_token
+        
+        token = credentials.credentials
+        payload = verify_token(token)
+        
+        if payload is None:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Authentication required",
+                headers={"WWW-Authenticate": "Bearer"},
+            )
+        
+        user_id = payload.get("sub")
+        if user_id is None:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Authentication required",
+                headers={"WWW-Authenticate": "Bearer"},
+            )
+        
+        return {
+            "user_id": user_id,
+            "email": payload.get("email"),
+            "role": payload.get("role", "user"),
+            "preferences": {},
+            "cultural_profile": {}
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Authentication error: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Authentication required",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
 
 
-# Legacy compatibility endpoint
+# Generic request router for all non-V3 endpoints
 @app.api_route("/{path:path}", methods=["GET", "POST", "PUT", "DELETE", "PATCH", "HEAD", "OPTIONS"])
-async def legacy_proxy(path: str, request: Request):
-    """Legacy proxy for backward compatibility"""
-    # Route to appropriate V3 endpoint or legacy service
-    if path.startswith("api/v3"):
-        # Already handled by V3 routes
-        raise HTTPException(status_code=404, detail="Not found")
+async def route_request(
+    path: str, 
+    request: Request, 
+    credentials: Optional[HTTPAuthorizationCredentials] = Depends(security)
+):
+    """Route requests using the RequestRouter"""
+    request_id = str(uuid.uuid4())
+    start_time = time.time()
     
-    # Handle legacy routes with basic proxy
-    # Implementation would route to legacy services
-    raise HTTPException(status_code=404, detail="Legacy endpoint not implemented")
+    logger.info(
+        "Routing request",
+        request_id=request_id,
+        path=f"/{path}",
+        method=request.method
+    )
+    
+    try:
+        # Skip V3 API routes that are handled elsewhere
+        if path.startswith("api/v3"):
+            raise HTTPException(status_code=404, detail="Not found")
+        
+        # Find route using RequestRouter
+        route = request_router.find_route(f"/{path}", request.method)
+        if not route:
+            raise HTTPException(status_code=404, detail="Route not found")
+        
+        # Rate limiting
+        client_id = get_client_identifier(dict(request.headers))
+        if not rate_limiter.is_allowed(client_id):
+            raise HTTPException(status_code=429, detail="Rate limit exceeded")
+        
+        # Authentication if required by route
+        user_context = None
+        if route.auth_required:
+            if not credentials:
+                raise HTTPException(status_code=401, detail="Authentication required")
+            user_context = await authenticate_user(credentials)
+        elif credentials:
+            # Optional auth - try to authenticate if provided
+            try:
+                user_context = await authenticate_user(credentials)
+            except:
+                pass  # Continue without auth if optional
+        
+        # Get AI context
+        ai_context = await ai_context_manager.get_context(user_context) if user_context else None
+        
+        # Get cultural context from request headers or user profile
+        cultural_context = await cultural_manager.get_context_from_request(request, user_context)
+        
+        # Create proxy request
+        body = await request.body() if request.method in ["POST", "PUT", "PATCH"] else None
+        
+        # Handle prefix stripping if configured
+        target_path = f"/{path}"
+        if route.strip_prefix and route.path_pattern:
+            # Extract the prefix from the pattern (e.g., "^/voice/.*" -> "/voice", "^/auth/.*" -> "/auth")
+            import re
+            pattern_match = re.match(r'\^/([^/]+)', route.path_pattern)
+            if pattern_match:
+                prefix = f"/{pattern_match.group(1)}"
+                if target_path.startswith(prefix):
+                    target_path = target_path[len(prefix):]
+                    if not target_path.startswith('/'):
+                        target_path = f"/{target_path}"
+        
+        proxy_request = ProxyRequest(
+            method=HTTPMethod(request.method),
+            path=target_path,
+            headers={
+                **dict(request.headers),
+                "X-Request-ID": request_id,
+                "X-AI-Context": ai_context.to_header() if ai_context else "",
+                "X-Cultural-Context": cultural_context.to_header() if cultural_context else ""
+            },
+            body=body,
+            query_params=dict(request.query_params)
+        )
+        
+        # Circuit breaker check
+        service_name = route.service_name
+        if not circuit_breaker.is_call_allowed(service_name):
+            raise HTTPException(status_code=503, detail=f"Service {service_name} is currently unavailable")
+        
+        # Get healthy service instances
+        healthy_instances = service_registry.get_healthy_services(service_name)
+        if not healthy_instances:
+            raise HTTPException(status_code=503, detail=f"No healthy instances of service {service_name}")
+        
+        # Use load balancer to select an instance
+        target_service = load_balancer.select_instance(healthy_instances)
+        if not target_service:
+            raise HTTPException(status_code=503, detail=f"Failed to select service instance for {service_name}")
+        
+        # Proxy request to target service
+        try:
+            response = await request_proxy.proxy_request(proxy_request, target_service)
+            circuit_breaker.record_success(service_name)
+            
+            # Apply cultural adaptation to response
+            enhanced_response = await cultural_manager.adapt_response(
+                response,
+                cultural_context
+            ) if cultural_context else response
+            
+            processing_time = (time.time() - start_time) * 1000
+            
+            # Record metrics
+            await performance_monitor.record_service_request(
+                service=service_name,
+                path=f"/{path}",
+                method=request.method,
+                processing_time=processing_time,
+                success=True
+            )
+            
+            return enhanced_response
+            
+        except Exception as e:
+            circuit_breaker.record_failure(service_name)
+            raise e
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        processing_time = (time.time() - start_time) * 1000
+        
+        # Record error metrics
+        await performance_monitor.record_service_request(
+            service=route.service_name if 'route' in locals() else "unknown",
+            path=f"/{path}",
+            method=request.method,
+            processing_time=processing_time,
+            success=False,
+            error=str(e)
+        )
+        
+        logger.exception(
+            "Request routing failed",
+            request_id=request_id,
+            path=f"/{path}",
+            error=str(e)
+        )
+        
+        raise HTTPException(status_code=500, detail="Internal server error")
 
 
 if __name__ == "__main__":

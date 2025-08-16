@@ -9,6 +9,28 @@ interface ChatMessage {
   timestamp: string
   messageType?: string
   breathingExercise?: BreathingExercise
+  // Enhanced fields from Action Orchestrator
+  intent?: {
+    intent_type: string
+    confidence: number
+    entities: any[]
+  }
+  orchestration_metadata?: {
+    workflow_id: string
+    execution_time_ms: number
+    services_involved: string[]
+    success_rate: number
+  }
+  suggested_actions?: Array<{
+    action: string
+    label: string
+    description: string
+    confidence: number
+  }>
+  mood_insights?: any
+  cultural_adaptations?: any
+  confidence_score?: number
+  source?: string
 }
 
 interface BreathingExercise {
@@ -40,7 +62,7 @@ export function useChatbot() {
   const abortControllerRef = useRef<AbortController | null>(null)
 
   // Send message to chatbot
-  const sendMessage = useCallback(async (content: string) => {
+  const sendMessage = useCallback(async (content: string, includeContext: boolean = true) => {
     if (!content.trim()) return
 
     // Cancel any ongoing request
@@ -63,7 +85,24 @@ export function useChatbot() {
     setError(null)
 
     try {
-      const response = await apiService.chatWithBot(content, currentSessionId || undefined)
+      // Enhanced message with context about available services
+      let enhancedContent = content.trim()
+      
+      if (includeContext) {
+        enhancedContent = `${content.trim()}
+
+SYSTEM_CONTEXT: You are Mantra-Mitra, an empathetic AI wellness companion. You have access to:
+- Mood tracking service (can analyze sentiment and update user mood)
+- Voice service (TTS/STT with emotion analysis)
+- Translation service (multi-language support)
+- Breathing exercises and wellness techniques
+- Community features and peer support
+- Crisis intervention protocols
+
+Respond with empathy, understanding, and practical wellness guidance. If user seems distressed, offer immediate support options. Mention relevant features when appropriate.`
+      }
+
+      const response = await apiService.chatWithBotEnhanced(enhancedContent, currentSessionId || undefined)
       
       // Update session ID if this is a new conversation
       if (!currentSessionId) {
@@ -76,7 +115,15 @@ export function useChatbot() {
         content: response.response,
         timestamp: new Date().toISOString(),
         messageType: response.message_type,
-        breathingExercise: response.breathing_exercise
+        breathingExercise: response.breathing_exercise,
+        // Enhanced fields from Action Orchestrator
+        intent: response.intent,
+        orchestration_metadata: response.orchestration_metadata,
+        suggested_actions: response.suggested_actions,
+        mood_insights: response.mood_insights,
+        cultural_adaptations: response.cultural_adaptations,
+        confidence_score: response.confidence_score,
+        source: response.source
       }
 
       setMessages(prev => [...prev, botMessage])
@@ -99,11 +146,31 @@ export function useChatbot() {
       setCurrentSessionId(newSession.id)
       setMessages([])
       
-      // Add welcome message
+      // Add comprehensive welcome message
       const welcomeMessage: ChatMessage = {
         id: 'welcome',
         sender: 'assistant',
-        content: "Hello! I'm Mantra-Mitra, your wellness companion. I'm here to listen, support you, and help you through difficult moments. How are you feeling today?",
+        content: `Hello! 💜 I'm Mantra-Mitra, your AI wellness companion. I'm here to provide emotional support, listen to your feelings, and help you on your wellness journey.
+
+🌟 **What I can help you with:**
+• **Emotional Support** - Share how you're feeling and I'll listen with empathy
+• **Mood Tracking** - I automatically analyze your emotions and update your mood
+• **Voice Conversations** - Speak to me naturally, I understand multiple languages
+• **Breathing Exercises** - Get guided breathing exercises when you need to relax
+• **Wellness Insights** - Access personalized insights about your mental health patterns
+• **Crisis Support** - Get immediate help if you're in distress
+
+🗣️ **Voice Features:**
+• Speak in any language - I'll detect and respond appropriately
+• I can speak back to you with natural voice synthesis
+• Your conversations help me understand your emotional state better
+
+💭 **Privacy & Care:**
+• Everything you share is confidential and secure
+• I analyze sentiment to better understand your needs
+• Your mood patterns help provide personalized support
+
+How are you feeling today? You can speak to me or type - whatever feels most comfortable! 🌸`,
         timestamp: new Date().toISOString(),
         messageType: 'greeting'
       }

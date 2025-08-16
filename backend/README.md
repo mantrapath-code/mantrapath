@@ -2,7 +2,7 @@
 
 ## 🏗️ **Executive Overview**
 
-**MantraPath Backend** is a sophisticated, production-ready microservices architecture designed for a holistic mental wellness platform. The system comprises **15 specialized services** orchestrated through an enhanced API Gateway with advanced features including voice processing, translation, action orchestration, and cross-service ML intelligence.
+**MantraPath Backend** is a sophisticated, production-ready microservices architecture designed for a holistic mental wellness platform. The system comprises **16 specialized services** orchestrated through an enhanced API Gateway with advanced features including voice processing, translation, action orchestration, and cross-service ML intelligence.
 
 ### **System Architecture Philosophy**
 - **🔀 Microservices Design**: Each service owns its domain with clear boundaries and responsibilities
@@ -34,6 +34,7 @@
 | **🎯 Action Orchestrator** | 8012 | PostgreSQL | Redis | Workflow Management, Intent Classification, Cultural Processing | ✅ Production | V1.5 |
 | **🏆 Achievement Engine** | 8013 | PostgreSQL | Redis | Gamification, Progress Tracking, Milestone Recognition | ✅ Production | V1.0 |
 | **📊 Analytics Service** | 8014 | PostgreSQL | Redis | Advanced Analytics, User Insights, Performance Metrics | ✅ Production | V1.0 |
+| **🤖 Models Service** | 8085 | - | Redis | Self-hosted STT/TTS, Voice Models, Indian Language Support | ✅ Production | V1.0 |
 
 ---
 
@@ -539,6 +540,60 @@ sequenceDiagram
 - **Performance Metrics**: System and service performance monitoring
 - **Engagement Analysis**: User engagement patterns and insights
 - **Automated Reporting**: Scheduled analytics reports
+
+---
+
+### **🤖 Models Service (Port 8085) - Self-Hosted Voice Models & Language Processing**
+```
+📁 models_service/
+├── main.py                      # FastAPI application
+├── setup.sh                     # Automated setup script
+├── docker-compose.yml           # Container orchestration
+├── services/
+│   ├── stt_service.py          # Speech-to-Text processing
+│   ├── tts_service.py          # Text-to-Speech synthesis
+│   ├── model_manager.py        # Model download & management
+│   └── nlp_service.py          # Natural language processing
+├── models/                     # Downloaded AI models
+├── cache/                      # Model cache and temporary files
+├── config/
+│   └── settings.py             # Service configuration
+└── routes/                     # API endpoints
+```
+
+**🎯 Core Functions:**
+- **Self-Hosted STT**: OpenAI Whisper, Vosk, Wav2Vec2 models for Indian languages
+- **Multilingual TTS**: gTTS, Coqui TTS, Festival, eSpeak for 20+ languages  
+- **Model Management**: Automated download, caching, and version control
+- **Voice Processing**: Real-time audio processing with GPU acceleration
+- **Indian Language Support**: Dedicated models for Hindi, Bengali, Telugu, Tamil, and more
+- **API Fallback**: Configurable fallback to external APIs when needed
+
+**🌐 Supported Languages:**
+- **Indian**: Hindi (hi), Bengali (bn), Telugu (te), Tamil (ta), Marathi (mr), Gujarati (gu), Kannada (kn), Malayalam (ml), Punjabi (pa), Odia (or), Assamese (as)
+- **International**: English (en), Spanish (es), French (fr), German (de), Russian (ru), Chinese (zh), Japanese (ja), Korean (ko)
+
+**📡 Key Endpoints:**
+- `GET /health` - Service health check
+- `GET /models/available` - List downloadable models
+- `POST /api/v1/stt/transcribe` - Speech-to-text conversion
+- `POST /api/v1/tts/synthesize` - Text-to-speech synthesis
+- `POST /api/v1/models/download` - Download AI models
+- `GET /api/v1/stt/languages` - Supported STT languages
+
+**🚀 Quick Setup:**
+```bash
+cd backend/services/models_service
+./setup.sh
+# Service available at: http://localhost:8085
+# API Documentation: http://localhost:8085/docs
+```
+
+**🔗 Integration with Other Services:**
+- **Voice Service**: Direct integration for STT/TTS processing
+- **Translation Service**: Language detection and voice output
+- **Chatbot Service**: Voice interaction and response synthesis
+- **API Gateway**: Smart routing for voice requests
 
 ## 🔄 **Complete Request Journey & Analytics Pipeline**
 
