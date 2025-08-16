@@ -16,6 +16,7 @@ KNOWN_FLAGS = {
     'USE_SERVER_UNIFIED_INSIGHTS': True,   # Enable unified backend aggregation endpoint (E2 Complete)
     'USE_EVENT_BUS_KAFKA': False,          # Future streaming integration 
     'USE_EVENT_BUS': True,                 # Enable EventBus for real-time features (E4)
+    'USE_NATS_EVENT_BUS': True,            # Enable Enhanced (NATS-backed) Event Bus for V3 channels
     'ENABLE_TRANSLATION_MVP': False,       # Translation service stub
     'USE_ENHANCED_ML_INSIGHTS': True,      # Enable enhanced ML insights features
 }

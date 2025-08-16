@@ -25,6 +25,8 @@ sys.path.append('/app/shared')
 from shared.database import get_db, engine
 from shared.models import ChatSession, ChatMessage, Base
 from shared.auth import get_current_user
+# Event bus imports for BK-004
+from shared.events import get_enhanced_event_bus, V3EventChannels
 
 # Configure logging
 logging.basicConfig(
@@ -63,6 +65,8 @@ class ChatbotService:
         self.phi4_available = PHI4_MODEL_AVAILABLE
         self.openai_available = bool(OPENAI_API_KEY)
         self.redis_client = None
+        # BK-004: Event bus reference
+        self.event_bus = None
         
     async def initialize(self):
         """Initialize chatbot service"""
@@ -74,8 +78,89 @@ class ChatbotService:
         except Exception as e:
             logger.warning(f"Agent Redis not available: {e}")
             
+        # BK-004: Initialize enhanced event bus and subscribe to events
+        try:
+            self.event_bus = get_enhanced_event_bus()
+            await self._setup_event_subscriptions()
+            logger.info("Chatbot event subscriptions established")
+        except Exception as e:
+            logger.warning(f"Failed to initialize event subscriptions: {e}")
+        
         logger.info(f"Chatbot service initialized - PHI4: {self.phi4_available}, OpenAI: {self.openai_available}")
-    
+
+    async def _setup_event_subscriptions(self):
+        """BK-004: Subscribe to V3 service events for context sharing"""
+        if not self.event_bus:
+            return
+        
+        async def on_voice_intent(event):
+            try:
+                user_id = event.user_id or event.data.get("user_id")
+                if not user_id:
+                    return
+                intent = event.data.get("intent") or event.data.get("intent_name")
+                confidence = event.data.get("confidence_score") or event.data.get("confidence")
+                ts = datetime.utcnow().isoformat()
+                if self.redis_client:
+                    await self.redis_client.hset(
+                        f"chatbot:context:{user_id}",
+                        mapping={
+                            "last_intent": intent or "",
+                            "intent_confidence": confidence or 0.0,
+                            "last_intent_ts": ts,
+                        }
+                    )
+            except Exception as e:
+                logger.error(f"Error handling voice.intent_classified: {e}")
+        
+        async def on_mood_created(event):
+            try:
+                user_id = event.user_id or event.data.get("user_id")
+                if not user_id:
+                    return
+                summary = json.dumps({
+                    "mood_score": event.data.get("mood_score"),
+                    "energy_level": event.data.get("energy_level"),
+                    "stress_level": event.data.get("stress_level"),
+                    "created_at": event.data.get("created_at"),
+                })
+                if self.redis_client:
+                    await self.redis_client.hset(
+                        f"chatbot:context:{user_id}",
+                        mapping={
+                            "last_mood": summary,
+                            "last_mood_ts": datetime.utcnow().isoformat(),
+                        }
+                    )
+            except Exception as e:
+                logger.error(f"Error handling mood.entry.created: {e}")
+        
+        async def on_journal_created(event):
+            try:
+                user_id = event.user_id or event.data.get("user_id")
+                if not user_id:
+                    return
+                summary = json.dumps({
+                    "sentiment_score": event.data.get("sentiment_score"),
+                    "sentiment_label": event.data.get("sentiment_label"),
+                    "themes": event.data.get("themes"),
+                    "created_at": event.data.get("created_at"),
+                })
+                if self.redis_client:
+                    await self.redis_client.hset(
+                        f"chatbot:context:{user_id}",
+                        mapping={
+                            "last_journal": summary,
+                            "last_journal_ts": datetime.utcnow().isoformat(),
+                        }
+                    )
+            except Exception as e:
+                logger.error(f"Error handling journal.entry.created: {e}")
+        
+        await self.event_bus.subscribe(V3EventChannels.VOICE_INTENT_CLASSIFIED, on_voice_intent)
+        await self.event_bus.subscribe(V3EventChannels.MOOD_ENTRY_CREATED, on_mood_created)
+        await self.event_bus.subscribe(V3EventChannels.JOURNAL_ENTRY_CREATED, on_journal_created)
+
     async def generate_response(
         self, 
         user_message: str, 

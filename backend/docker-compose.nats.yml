@@ -1,0 +1,37 @@
+version: '3.8'
+
+services:
+  nats-jetstream:
+    image: nats:2.10-alpine
+    container_name: mantrapath-nats
+    ports:
+      - "4222:4222"  # NATS client port
+      - "8222:8222"  # HTTP monitoring port
+      - "6222:6222"  # Cluster port (for future clustering)
+    volumes:
+      # Configuration file
+      - ./config/nats-jetstream.conf:/etc/nats/nats-server.conf:ro
+      # JetStream data persistence
+      - ./data/jetstream:/data/jetstream
+      # Logs
+      - ./logs:/logs
+    command: 
+      - "--config"
+      - "/etc/nats/nats-server.conf"
+      - "--jetstream"
+    environment:
+      - NATS_SERVER_NAME=mantrapath-nats
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:8222/healthz"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+    networks:
+      - mantrapath-network
+
+networks:
+  mantrapath-network:
+    driver: bridge
+    name: mantrapath-events

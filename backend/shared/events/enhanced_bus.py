@@ -71,16 +71,43 @@ except ImportError:
             self.running = True
         
         async def publish(self, channel: str, data: Dict[str, Any], user_id: Optional[str] = None) -> bool:
+            """Publish event to in-memory subscribers"""
+            if channel not in self.channels:
+                return True  # No subscribers, but success
+            
+            event = Event(
+                channel=channel,
+                data=data,
+                user_id=user_id,
+                timestamp=datetime.now(timezone.utc)
+            )
+            
+            # Call all handlers for this channel
+            for handler in self.channels[channel]:
+                try:
+                    await handler(event)
+                except Exception as e:
+                    logger.error(f"Error in event handler for channel {channel}: {e}")
+            
             return True
         
         async def subscribe(self, channel: str, handler: Callable[[Event], Any]) -> None:
-            pass
+            """Subscribe to a channel with a handler"""
+            if channel not in self.channels:
+                self.channels[channel] = []
+            self.channels[channel].append(handler)
         
         async def unsubscribe(self, channel: str, handler: Callable[[Event], Any]) -> None:
-            pass
+            """Unsubscribe handler from channel"""
+            if channel in self.channels and handler in self.channels[channel]:
+                self.channels[channel].remove(handler)
         
         async def close(self) -> None:
-            pass
+            """Clean shutdown"""
+            self.running = False
+            for task in self.tasks.values():
+                task.cancel()
+            self.tasks.clear()
 
 # Try to import NATS if available
 try:
@@ -114,6 +141,7 @@ class EnhancedEventBus(InMemoryEventBus):
         self.nc = None
         self.js = None
         self.nats_connected = False
+        self.stream_cache = set()  # Cache of created streams
         
         # Performance tracking
         self.event_metrics = {
@@ -135,8 +163,8 @@ class EnhancedEventBus(InMemoryEventBus):
     async def initialize(self) -> bool:
         """Initialize the enhanced event bus"""
         try:
-            # Initialize parent class
-            await super().__init__()
+            # Initialize parent class - no await needed for InMemoryEventBus
+            # The parent __init__ is already called in __init__
             
             # Initialize NATS if enabled
             if self.use_nats:
@@ -153,30 +181,96 @@ class EnhancedEventBus(InMemoryEventBus):
             return False
     
     async def _initialize_nats(self) -> bool:
-        """Initialize NATS connection"""
+        """Initialize NATS connection with production-ready configuration"""
         if not NATS_AVAILABLE:
-            logger.warning("⚠️  NATS not available, using in-memory fallback")
+            logger.warning("⚠️  NATS package not available, using in-memory fallback")
             return False
         
         try:
+            # Production-ready NATS connection with proper timeouts and retry logic
             self.nc = await nats.connect(
                 servers=self.nats_servers,
                 name="mantrapath-enhanced-bus",
-                max_reconnect_attempts=5,
-                reconnect_time_wait=2.0
+                max_reconnect_attempts=10,     # More attempts for production
+                reconnect_time_wait=2.0,       # 2 second wait between attempts
+                connect_timeout=10.0,          # 10 second connection timeout
+                allow_reconnect=True,          # Allow reconnection for resilience
+                ping_interval=60,              # Heartbeat every 60 seconds
+                max_outstanding_pings=3       # Max 3 outstanding pings
             )
             
-            # Initialize JetStream
+            # Initialize JetStream with production configuration
             self.js = self.nc.jetstream()
             self.nats_connected = True
             
-            logger.info("✅ NATS connection established")
+            # Set up basic streams for MantraPath event patterns
+            await self._setup_production_streams()
+            
+            logger.info("✅ NATS JetStream connection established with production configuration")
             return True
             
         except Exception as e:
-            logger.error(f"❌ Failed to connect to NATS: {e}")
+            logger.error(f"❌ NATS server connection failed: {e}")
+            logger.info("🔄 Falling back to in-memory event bus")
             self.nats_connected = False
+            self.nc = None
+            self.js = None
             return False
+    
+    async def _setup_production_streams(self) -> None:
+        """Set up production NATS streams for MantraPath"""
+        if not self.js:
+            return
+            
+        streams_config = [
+            {
+                "name": "mantrapath-voice",
+                "subjects": ["voice.*"],
+                "description": "Voice activity and intent processing events"
+            },
+            {
+                "name": "mantrapath-ai", 
+                "subjects": ["ai.*", "intelligence.*"],
+                "description": "AI processing and intelligence events"
+            },
+            {
+                "name": "mantrapath-mood",
+                "subjects": ["mood.*"],
+                "description": "Mood tracking and analysis events"
+            },
+            {
+                "name": "mantrapath-journal",
+                "subjects": ["journal.*"],
+                "description": "Journal entry and analysis events"
+            },
+            {
+                "name": "mantrapath-cultural",
+                "subjects": ["cultural.*", "regional.*"],
+                "description": "Cultural intelligence and regional adaptation events"
+            }
+        ]
+        
+        for stream_config in streams_config:
+            try:
+                # Check if stream exists
+                try:
+                    await self.js.stream_info(stream_config["name"])
+                    logger.debug(f"✅ Stream {stream_config['name']} already exists")
+                except:
+                    # Create new stream
+                    await self.js.add_stream(
+                        name=stream_config["name"],
+                        subjects=stream_config["subjects"],
+                        max_msgs=1000000,      # 1M messages for production
+                        max_age=7*24*3600,     # 7 days retention
+                        storage="file",        # Persistent storage
+                        description=stream_config["description"]
+                    )
+                    logger.info(f"✅ Created production stream: {stream_config['name']}")
+                    
+            except Exception as e:
+                logger.error(f"❌ Failed to setup stream {stream_config['name']}: {e}")
+                # Continue with other streams even if one fails
     
     def _setup_event_processors(self) -> None:
         """Set up event processors for different event types"""
@@ -217,14 +311,12 @@ class EnhancedEventBus(InMemoryEventBus):
             # Track performance
             publish_start = time.time()
             
-            # Publish to NATS if available
-            success = True
+            # Publish to NATS if available (don't fail if NATS is down)
             if self.nats_connected:
-                success = await self._publish_to_nats(processed_event)
+                await self._nats_publish(processed_event)
             
-            # Always publish to in-memory system
-            if success:
-                success = await super().publish(channel, processed_event.data, user_id)
+            # Always publish to in-memory system as fallback
+            success = await super().publish(channel, processed_event.data, user_id)
             
             # Track performance
             if self.enable_performance_tracking:
@@ -272,13 +364,15 @@ class EnhancedEventBus(InMemoryEventBus):
         
         return True  # No validator found, assume valid
     
-    async def _publish_to_nats(self, event: Event) -> bool:
-        """Publish event to NATS"""
+    async def _nats_publish(self, event: Event) -> bool:
+        """Publish event using NATS JetStream with automatic stream creation"""
+        if not self.nc or not self.js:
+            return False
+        
+        start_time = time.time()
+        
         try:
-            if not self.js:
-                return False
-            
-            # Serialize event
+            # Build event data with metadata
             event_data = {
                 "channel": event.channel,
                 "data": event.data,
@@ -289,18 +383,151 @@ class EnhancedEventBus(InMemoryEventBus):
             
             event_json = json.dumps(event_data, ensure_ascii=False).encode('utf-8')
             
-            # Publish with JetStream
-            await self.js.publish(
-                subject=event.channel,
-                payload=event_json,
-                headers={"event_id": event.event_id or "", "user_id": event.user_id or ""}
+            # Ensure the stream exists for this channel pattern with retry logic
+            stream_ready = await self._ensure_stream_for_channel(event.channel)
+            if stream_ready:
+                # Give the stream a moment to be fully ready
+                await asyncio.sleep(0.01)  # 10ms delay for stream readiness
+            
+            # Publish with JetStream and proper timeout
+            ack = await asyncio.wait_for(
+                self.js.publish(
+                    subject=event.channel,
+                    payload=event_json,
+                    headers={"event_id": event.event_id or "", "user_id": event.user_id or ""}
+                ),
+                timeout=5.0  # 5 second timeout for production reliability
             )
             
+            logger.debug(f"✅ NATS publish successful for {event.channel}: {ack.seq}")
             return True
             
-        except Exception as e:
-            logger.error(f"❌ Failed to publish to NATS: {e}")
+        except asyncio.TimeoutError:
+            logger.warning(f"⚠️  NATS publish timeout for {event.channel}, using in-memory fallback")
+            self.event_metrics["error_count"] += 1
             return False
+        except Exception as e:
+            error_msg = str(e).lower()
+            if "no response from stream" in error_msg:
+                logger.error(f"❌ NATS stream not configured for {event.channel}: {e}")
+                # Try to auto-create the stream with longer wait
+                try:
+                    await self._create_stream_for_channel(event.channel)
+                    await asyncio.sleep(0.05)  # 50ms delay after creation
+                    # Retry the publish once
+                    ack = await asyncio.wait_for(
+                        self.js.publish(
+                            subject=event.channel,
+                            payload=event_json,
+                            headers={"event_id": event.event_id or "", "user_id": event.user_id or ""}
+                        ),
+                        timeout=2.0
+                    )
+                    logger.info(f"✅ NATS publish successful on retry for {event.channel}: {ack.seq}")
+                    return True
+                except Exception as retry_error:
+                    logger.error(f"❌ NATS retry failed for {event.channel}: {retry_error}")
+            elif "connection" in error_msg or "timeout" in error_msg:
+                logger.warning(f"⚠️  NATS connection issue for {event.channel}: {e}")
+                self.nats_connected = False  # Mark as disconnected for health check
+            else:
+                logger.error(f"❌ NATS publish failed for {event.channel}: {e}")
+            
+            self.event_metrics["error_count"] += 1
+            return False
+    
+    async def _ensure_stream_for_channel(self, channel: str) -> bool:
+        """Ensure NATS stream exists for the given channel pattern"""
+        if not self.js:
+            return False
+            
+        try:
+            # Determine stream name based on channel prefix
+            stream_name = self._get_stream_name_for_channel(channel)
+            
+            # Check cache first
+            if stream_name in self.stream_cache:
+                return True
+            
+            subjects = self._get_subjects_for_stream(stream_name)
+            
+            # Try to get existing stream first
+            try:
+                await self.js.stream_info(stream_name)
+                self.stream_cache.add(stream_name)  # Add to cache
+                return True  # Stream already exists
+            except:
+                # Stream doesn't exist, create it
+                await self.js.add_stream(
+                    name=stream_name,
+                    subjects=subjects,
+                    max_msgs=100000,  # Increased for production
+                    max_age=86400,    # 24 hours retention
+                    storage="file",   # Persistent storage
+                    discard="old"     # Discard old messages when limit reached
+                )
+                self.stream_cache.add(stream_name)  # Add to cache
+                logger.info(f"✅ Created NATS stream: {stream_name} for subjects: {subjects}")
+                return True
+                
+        except Exception as e:
+            logger.error(f"❌ Failed to ensure stream for {channel}: {e}")
+            # Try to create a catch-all stream if specific stream creation fails
+            try:
+                catch_all_name = "mantrapath-catchall"
+                if catch_all_name not in self.stream_cache:
+                    await self.js.stream_info(catch_all_name)
+                    self.stream_cache.add(catch_all_name)
+                return True
+            except:
+                try:
+                    await self.js.add_stream(
+                        name=catch_all_name,
+                        subjects=["*"],
+                        max_msgs=50000,
+                        max_age=3600,  # 1 hour retention for catch-all
+                        storage="memory"  # Use memory for catch-all
+                    )
+                    self.stream_cache.add(catch_all_name)
+                    logger.info(f"✅ Created catch-all stream: {catch_all_name}")
+                    return True
+                except Exception as e2:
+                    logger.error(f"❌ Failed to create catch-all stream: {e2}")
+                    return False
+    
+    async def _create_stream_for_channel(self, channel: str) -> bool:
+        """Create NATS stream for channel if it doesn't exist"""
+        return await self._ensure_stream_for_channel(channel)
+    
+    def _get_stream_name_for_channel(self, channel: str) -> str:
+        """Get appropriate stream name for a channel"""
+        if channel.startswith("voice."):
+            return "mantrapath-voice"
+        elif channel.startswith("ai."):
+            return "mantrapath-ai"
+        elif channel.startswith("cultural."):
+            return "mantrapath-cultural"
+        elif channel.startswith("mood."):
+            return "mantrapath-mood"
+        elif channel.startswith("journal."):
+            return "mantrapath-journal"
+        elif channel.startswith("test."):
+            return "mantrapath-test"
+        else:
+            return "mantrapath-general"
+    
+    def _get_subjects_for_stream(self, stream_name: str) -> List[str]:
+        """Get subject patterns for a stream"""
+        stream_subjects = {
+            "mantrapath-voice": ["voice.*"],
+            "mantrapath-ai": ["ai.*", "intelligence.*"],
+            "mantrapath-cultural": ["cultural.*", "regional.*"],
+            "mantrapath-mood": ["mood.*"],
+            "mantrapath-journal": ["journal.*"],
+            "mantrapath-test": ["test.*"],
+            "mantrapath-general": ["*"]
+        }
+        return stream_subjects.get(stream_name, ["*"])
     
     def _update_event_type_metrics(self, channel: str) -> None:
         """Update metrics based on event type"""
@@ -425,7 +652,11 @@ class EnhancedEventBus(InMemoryEventBus):
         
         # Close NATS connection
         if self.nc:
-            await self.nc.close()
+            try:
+                await self.nc.close()
+            except (RuntimeError, Exception) as e:
+                # Ignore event loop closure and other shutdown errors
+                logger.debug(f"NATS close error (ignored): {e}")
         
         # Close parent
         await super().close()
@@ -438,12 +669,39 @@ _global_enhanced_event_bus: Optional[EnhancedEventBus] = None
 
 
 def get_enhanced_event_bus() -> EnhancedEventBus:
-    """Get the global enhanced event bus instance"""
+    """Get the global enhanced event bus instance with environment-aware configuration"""
     global _global_enhanced_event_bus
     
     if _global_enhanced_event_bus is None:
+        # Environment-aware configuration
+        env = os.getenv("ENV", "development").lower()
         use_nats = os.getenv("USE_NATS_EVENT_BUS", "true").lower() == "true"
         nats_servers = os.getenv("NATS_SERVERS", "nats://localhost:4222")
+        
+        # If we're in a test environment, check if NATS is actually available
+        if env in ["test", "testing"] and use_nats:
+            # Quick connectivity check for tests
+            try:
+                import socket
+                host, port = "localhost", 4222
+                if "://" in nats_servers:
+                    # Parse NATS URL
+                    parts = nats_servers.split("://")[1].split(":")
+                    host = parts[0]
+                    port = int(parts[1]) if len(parts) > 1 else 4222
+                
+                sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+                sock.settimeout(1)
+                result = sock.connect_ex((host, port))
+                sock.close()
+                
+                if result != 0:
+                    logger.info(f"🔄 NATS server not available at {host}:{port}, using in-memory fallback for tests")
+                    use_nats = False
+                    
+            except Exception:
+                logger.info("🔄 NATS connectivity check failed, using in-memory fallback for tests")
+                use_nats = False
         
         _global_enhanced_event_bus = EnhancedEventBus(
             use_nats=use_nats,
@@ -495,6 +753,10 @@ class V3EventChannels:
     # Translation Events (for backward compatibility)
     TRANSLATION_COMPLETED = "translation.completed"
     TRANSLATION_FAILED = "translation.failed"
+
+    # General Streams - V3 service events
+    MOOD_ENTRY_CREATED = "mood.entry.created"
+    JOURNAL_ENTRY_CREATED = "journal.entry.created"
 
 
 # Helper functions for publishing V3 events

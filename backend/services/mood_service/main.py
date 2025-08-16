@@ -31,6 +31,8 @@ from shared.models import (
 )
 from shared.auth import get_current_user
 from shared.events import publish_mood_entry_created, publish_journal_entry_created
+# Add V3 enhanced bus imports
+from shared.events import get_enhanced_event_bus, V3EventChannels
 from shared.feature_flags import get_flag_bool
 
 # Import cross-platform mood intelligence
@@ -600,6 +602,27 @@ class MoodEntryCreate(BaseModel):
     adaptive_responses: Optional[List[dict]] = []  # Responses to follow-up questions
     environmental_context: Optional[dict] = {}  # Weather, location, etc.
 
+# Helper builders for V3 payloads (testable)
+def build_v3_mood_payload(mood_entry: Any) -> dict:
+    """Build minimal V3 mood.entry.created payload"""
+    return {
+        "id": str(getattr(mood_entry, "id", "")),
+        "user_id": getattr(mood_entry, "user_id", None),
+        "mood_score": getattr(mood_entry, "mood_score", None),
+        "energy_level": getattr(mood_entry, "energy_level", None),
+        "stress_level": getattr(mood_entry, "stress_level", None),
+        "sleep_quality": getattr(mood_entry, "sleep_quality", None),
+        "emotional_granularity": getattr(mood_entry, "emotional_granularity", None),
+        "mood_confidence": getattr(mood_entry, "mood_confidence", None),
+        "context_tags": getattr(mood_entry, "context_tags", []) or [],
+        "created_at": (
+            getattr(mood_entry, "created_at", None).isoformat()
+            if getattr(mood_entry, "created_at", None) else None
+        ),
+        # Optional voice context placeholder (filled by upstream if available)
+        "voice_context": getattr(mood_entry, "voice_context", None) or None,
+    }
+
 class MoodEntryResponse(BaseModel):
     """Enhanced mood entry response model"""
     id: str
@@ -624,6 +647,28 @@ class JournalEntryCreate(BaseModel):
     mood_before: Optional[int] = None
     mood_after: Optional[int] = None
     is_private: bool = True
+
+# Helper builder for V3 journal payload
+def build_v3_journal_payload(journal_entry: Any) -> dict:
+    """Build minimal V3 journal.entry.created payload"""
+    return {
+        "id": str(getattr(journal_entry, "id", "")),
+        "user_id": getattr(journal_entry, "user_id", None),
+        "title": getattr(journal_entry, "title", None),
+        "content": getattr(journal_entry, "content", None),
+        "mood_before": getattr(journal_entry, "mood_before", None),
+        "mood_after": getattr(journal_entry, "mood_after", None),
+        "sentiment_score": getattr(journal_entry, "sentiment_score", None),
+        "sentiment_label": getattr(journal_entry, "sentiment_label", None),
+        "themes": getattr(journal_entry, "themes", []) or [],
+        "is_private": getattr(journal_entry, "is_private", True),
+        "created_at": (
+            getattr(journal_entry, "created_at", None).isoformat()
+            if getattr(journal_entry, "created_at", None) else None
+        ),
+        # Reserved place for AI processing metadata
+        "ai_ready": getattr(journal_entry, "ai_ready", None) or None,
+    }
 
 class JournalEntryResponse(BaseModel):
     id: str
@@ -755,7 +800,14 @@ async def create_mood_entry(
                 "mood_confidence": mood_entry.mood_confidence
             }
         )
-    
+    # V3 enhanced bus publish (dual-publish)
+    if get_flag_bool('USE_NATS_EVENT_BUS'):
+        try:
+            bus = get_enhanced_event_bus()
+            await bus.publish(V3EventChannels.MOOD_ENTRY_CREATED, build_v3_mood_payload(mood_entry), current_user["user_id"])
+        except Exception as e:
+            print(f"⚠️  V3 mood publish failed: {e}")
+
     # Check for celebration moments after mood entry
     celebrations = await celebration_detector.detect_celebrations(
         user_id=current_user["user_id"],
@@ -876,7 +928,14 @@ async def create_journal_entry(
                 "created_at": journal_entry.created_at.isoformat() if journal_entry.created_at else None
             }
         )
-    
+    # V3 enhanced bus publish (dual-publish)
+    if get_flag_bool('USE_NATS_EVENT_BUS'):
+        try:
+            bus = get_enhanced_event_bus()
+            await bus.publish(V3EventChannels.JOURNAL_ENTRY_CREATED, build_v3_journal_payload(journal_entry), current_user["user_id"])
+        except Exception as e:
+            print(f"⚠️  V3 journal publish failed: {e}")
+
     # 🧠 Cross-Platform Mood Intelligence: Infer mood from journal content
     if CROSS_PLATFORM_MOOD_AVAILABLE:
         try:

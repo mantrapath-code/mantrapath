@@ -1,0 +1,240 @@
+{
+  "timestamp": "2025-08-15T23:45:15.552454+00:00",
+  "overall": {
+    "passed": 24,
+    "total": 25,
+    "pass_rate": 96.0
+  },
+  "categories": {
+    "environment": {
+      "passed": 3,
+      "total": 3,
+      "tests": [
+        {
+          "category": "environment",
+          "test": "python_version",
+          "passed": true,
+          "description": "Python sys.version_info(major=3, minor=11, micro=12, releaselevel='final', serial=0)",
+          "timestamp": "2025-08-15T23:45:14.659807+00:00"
+        },
+        {
+          "category": "environment",
+          "test": "nats_package",
+          "passed": true,
+          "description": "NATS Python package",
+          "timestamp": "2025-08-15T23:45:14.659814+00:00"
+        },
+        {
+          "category": "environment",
+          "test": "env_vars",
+          "passed": true,
+          "description": "Environment configured",
+          "timestamp": "2025-08-15T23:45:14.659824+00:00"
+        }
+      ]
+    },
+    "nats": {
+      "passed": 4,
+      "total": 4,
+      "tests": [
+        {
+          "category": "nats",
+          "test": "server_running",
+          "passed": true,
+          "description": "NATS server connectivity",
+          "timestamp": "2025-08-15T23:45:14.661011+00:00"
+        },
+        {
+          "category": "nats",
+          "test": "jetstream_enabled",
+          "passed": true,
+          "description": "JetStream properly configured",
+          "timestamp": "2025-08-15T23:45:14.666573+00:00"
+        },
+        {
+          "category": "nats",
+          "test": "stream_operations",
+          "passed": true,
+          "description": "Stream operations working",
+          "timestamp": "2025-08-15T23:45:14.671932+00:00"
+        },
+        {
+          "category": "nats",
+          "test": "monitoring_available",
+          "passed": true,
+          "description": "NATS monitoring accessible",
+          "timestamp": "2025-08-15T23:45:14.674356+00:00"
+        }
+      ]
+    },
+    "core": {
+      "passed": 4,
+      "total": 4,
+      "tests": [
+        {
+          "category": "core",
+          "test": "initialization",
+          "passed": true,
+          "description": "Bus initialization",
+          "timestamp": "2025-08-15T23:45:14.679192+00:00"
+        },
+        {
+          "category": "core",
+          "test": "basic_pubsub",
+          "passed": true,
+          "description": "Basic pub/sub functionality",
+          "timestamp": "2025-08-15T23:45:14.781532+00:00"
+        },
+        {
+          "category": "core",
+          "test": "event_pipeline",
+          "passed": true,
+          "description": "Event processing pipeline",
+          "timestamp": "2025-08-15T23:45:14.791126+00:00"
+        },
+        {
+          "category": "core",
+          "test": "health_check",
+          "passed": true,
+          "description": "Health: degraded",
+          "timestamp": "2025-08-15T23:45:14.791153+00:00"
+        }
+      ]
+    },
+    "integration": {
+      "passed": 3,
+      "total": 3,
+      "tests": [
+        {
+          "category": "integration",
+          "test": "dual_publish",
+          "passed": true,
+          "description": "Dual-publish pattern",
+          "timestamp": "2025-08-15T23:45:14.896582+00:00"
+        },
+        {
+          "category": "integration",
+          "test": "cross_service",
+          "passed": true,
+          "description": "Cross-service communication",
+          "timestamp": "2025-08-15T23:45:15.002897+00:00"
+        },
+        {
+          "category": "integration",
+          "test": "backward_compatibility",
+          "passed": true,
+          "description": "Legacy compatibility",
+          "timestamp": "2025-08-15T23:45:15.110275+00:00"
+        }
+      ]
+    },
+    "performance": {
+      "passed": 4,
+      "total": 4,
+      "tests": [
+        {
+          "category": "performance",
+          "test": "throughput",
+          "passed": true,
+          "description": "Throughput: 2745.1/s",
+          "timestamp": "2025-08-15T23:45:15.146757+00:00"
+        },
+        {
+          "category": "performance",
+          "test": "latency",
+          "passed": true,
+          "description": "Avg latency: 1.32ms",
+          "timestamp": "2025-08-15T23:45:15.160084+00:00"
+        },
+        {
+          "category": "performance",
+          "test": "concurrent_subscribers",
+          "passed": true,
+          "description": "Concurrent handling: 200/200",
+          "timestamp": "2025-08-15T23:45:15.373542+00:00"
+        },
+        {
+          "category": "performance",
+          "test": "memory_usage",
+          "passed": true,
+          "description": "Memory increase: 1.5 MB",
+          "timestamp": "2025-08-15T23:45:15.435749+00:00"
+        }
+      ]
+    },
+    "resilience": {
+      "passed": 3,
+      "total": 4,
+      "tests": [
+        {
+          "category": "resilience",
+          "test": "invalid_event_handling",
+          "passed": true,
+          "description": "Invalid event handling",
+          "timestamp": "2025-08-15T23:45:15.439443+00:00"
+        },
+        {
+          "category": "resilience",
+          "test": "subscriber_errors",
+          "passed": true,
+          "description": "Subscriber error isolation",
+          "timestamp": "2025-08-15T23:45:15.541888+00:00"
+        },
+        {
+          "category": "resilience",
+          "test": "connection_resilience",
+          "passed": true,
+          "description": "Connection resilience",
+          "timestamp": "2025-08-15T23:45:15.545423+00:00"
+        },
+        {
+          "category": "resilience",
+          "test": "resource_cleanup",
+          "passed": false,
+          "description": "Resource cleanup",
+          "timestamp": "2025-08-15T23:45:15.545461+00:00"
+        }
+      ]
+    },
+    "production": {
+      "passed": 3,
+      "total": 3,
+      "tests": [
+        {
+          "category": "production",
+          "test": "configuration",
+          "passed": true,
+          "description": "Production configuration",
+          "timestamp": "2025-08-15T23:45:15.545491+00:00"
+        },
+        {
+          "category": "production",
+          "test": "monitoring",
+          "passed": true,
+          "description": "Monitoring capabilities",
+          "timestamp": "2025-08-15T23:45:15.548236+00:00"
+        },
+        {
+          "category": "production",
+          "test": "operational_features",
+          "passed": true,
+          "description": "Operational readiness",
+          "timestamp": "2025-08-15T23:45:15.552316+00:00"
+        }
+      ]
+    }
+  },
+  "performance": {
+    "throughput": 2745.053175823816,
+    "avg_latency": 1.3181041984353215
+  },
+  "infrastructure": {
+    "nats_server_running": true,
+    "jetstream_enabled": true,
+    "nats_available": true
+  },
+  "production_ready": true,
+  "recommendations": [
+    "Address 1 failed test(s)"
+  ]
+}

@@ -23,6 +23,8 @@ from shared.database import get_db
 from shared.auth import get_current_user
 from shared.models import MoodEntry, JournalEntry, Notification
 from shared.events import get_event_bus, EventChannels, Event, publish_insight_delta
+# BK-004: V3 enhanced bus imports
+from shared.events import get_enhanced_event_bus, V3EventChannels
 from shared.feature_flags import get_flag_bool
 
 # Import ML models
@@ -269,25 +271,37 @@ async def setup_realtime_subscriptions():
     try:
         bus = get_event_bus()
         
-        # Subscribe to mood entry events
+        # Subscribe to mood entry events (legacy)
         await bus.subscribe(
             EventChannels.MOOD_ENTRY_CREATED,
             realtime_processor.process_mood_entry_event
         )
         
-        # Subscribe to journal entry events
+        # Subscribe to journal entry events (legacy)
         await bus.subscribe(
             EventChannels.JOURNAL_ENTRY_CREATED,
             realtime_processor.process_journal_entry_event
         )
         
-        # Subscribe to challenge progress events
+        # Subscribe to challenge progress events (legacy)
         await bus.subscribe(
             EventChannels.CHALLENGE_PROGRESS_UPDATED,
             realtime_processor.process_challenge_progress_event
         )
         
-        logger.info("🔔 Real-time event subscriptions established")
+        # BK-004: Also subscribe to V3 enhanced channels when enabled
+        if get_flag_bool('USE_NATS_EVENT_BUS'):
+            v3bus = get_enhanced_event_bus()
+            await v3bus.subscribe(
+                V3EventChannels.MOOD_ENTRY_CREATED,
+                realtime_processor.process_mood_entry_event
+            )
+            await v3bus.subscribe(
+                V3EventChannels.JOURNAL_ENTRY_CREATED,
+                realtime_processor.process_journal_entry_event
+            )
+        
+        logger.info("🔔 Real-time event subscriptions established (legacy + V3)")
         
     except Exception as e:
         logger.error(f"❌ Failed to setup real-time subscriptions: {e}")
