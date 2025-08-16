@@ -757,6 +757,19 @@ class V3EventChannels:
     # General Streams - V3 service events
     MOOD_ENTRY_CREATED = "mood.entry.created"
     JOURNAL_ENTRY_CREATED = "journal.entry.created"
+    CHALLENGE_PROGRESS_UPDATED = "community.challenge.progress.updated"
+    COMMUNITY_POST_CREATED = "community.post.created"
+    INSIGHT_DELTA = "ml.insight.delta"
+    
+    # Notification Events
+    NOTIFICATION_SENT = "notification.sent"
+    NOTIFICATION_DELIVERED = "notification.delivered"
+    NOTIFICATION_FAILED = "notification.failed"
+    
+    # Content Events
+    CONTENT_RECOMMENDATION_CREATED = "content.recommendation.created"
+    CONTENT_ACCESSED = "content.accessed"
+    CONTENT_RATED = "content.rated"
 
 
 # Helper functions for publishing V3 events

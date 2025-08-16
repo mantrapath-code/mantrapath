@@ -23,8 +23,9 @@ logger = logging.getLogger(__name__)
 from shared.database import get_db, engine
 from shared.auth import get_current_user, verify_token
 from shared.user_display import get_user_display_name as get_unique_display_name
-# Temporarily comment out problematic event imports
-# from shared.events import publish_community_post_created, publish_challenge_progress_updated
+# Event imports for community events
+from shared.events import publish_community_post_created, publish_challenge_progress_updated
+from shared.events import get_enhanced_event_bus, V3EventChannels
 from shared.feature_flags import get_flag_bool
 from shared.models import (
     Base, User, Challenge, ChallengeProgress, ChallengeComment,
@@ -789,14 +790,28 @@ async def update_challenge_progress(
         # 📤 E4: Publish challenge progress updated event for real-time pipeline
         if get_flag_bool('USE_EVENT_BUS'):
             progress_entry = existing_progress if existing_progress else new_progress
-            # Temporarily comment out problematic event imports
-            # await publish_challenge_progress_updated(
-            #     user_id=user_id,
-            #     challenge_data={
-            #         "challenge_id": challenge_id,
-            #         "user_id": user_id,
-            #         "completed": progress_data.get('completed', False),
-            #         "streak_count": streak_count,
+            # Publish challenge progress updated event
+            try:
+                bus = get_enhanced_event_bus()
+                await bus.publish(
+                    V3EventChannels.CHALLENGE_PROGRESS_UPDATED,
+                    {
+                        "challenge_id": challenge_id,
+                        "user_id": user_id,
+                        "completed": progress_data.get('completed', False),
+                        "streak_count": streak_count,
+                        "date": today.isoformat(),
+                        "mood_rating": progress_data.get('mood_rating'),
+                        "difficulty_rating": progress_data.get('difficulty_rating'),
+                        "notes": progress_data.get('notes', ''),
+                        "reflection": progress_data.get('reflection', '')
+                    },
+                    user_id=user_id
+                )
+                logger.info(f"Published challenge progress event for user {user_id}, challenge {challenge_id}")
+            except Exception as e:
+                logger.error(f"Failed to publish challenge progress event: {e}")
+                # Don't fail the main operation if event publishing fails
             #         "date": today.isoformat(),
             #         "notes": progress_data.get('notes', ''),
             #         "mood_rating": progress_data.get('mood_rating'),
@@ -1332,20 +1347,25 @@ async def create_forum_thread(
             
             # 📤 E4: Publish community post created event for real-time pipeline
             if get_flag_bool('USE_EVENT_BUS'):
-                # Temporarily comment out problematic event imports
-                # await publish_community_post_created(
-                #     user_id=user_id,
-                #     post_data={
-                #         "id": new_thread.id,
-                #         "forum_id": new_thread.forum_id,
-                #         "title": new_thread.title,
-                #         "content": new_thread.content,
-                #         "post_type": "thread",
-                #         "author_id": user_id,
-                #         "created_at": new_thread.created_at.isoformat() if new_thread.created_at else None
-                #     }
-                # )
-                pass # Placeholder for now
+                try:
+                    bus = get_enhanced_event_bus()
+                    await bus.publish(
+                        V3EventChannels.COMMUNITY_POST_CREATED,
+                        {
+                            "id": new_thread.id,
+                            "forum_id": new_thread.forum_id,
+                            "title": new_thread.title,
+                            "content": new_thread.content,
+                            "post_type": "thread",
+                            "author_id": user_id,
+                            "created_at": new_thread.created_at.isoformat() if new_thread.created_at else None
+                        },
+                        user_id=user_id
+                    )
+                    logger.info(f"Published community post event for thread {new_thread.id}")
+                except Exception as e:
+                    logger.error(f"Failed to publish community post event: {e}")
+                    # Don't fail the main operation if event publishing fails
             
         except Exception as thread_error:
             logger.error(f"Error creating ForumThread object: {thread_error}")

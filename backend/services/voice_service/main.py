@@ -32,6 +32,13 @@ from services.command_processor import VoiceCommandProcessor
 from services.profile_service import VoiceProfileService
 from services.integration_service import ServiceIntegrationManager
 
+# Enhanced Event Bus V3 Integration
+import sys
+import os
+sys.path.append(os.path.join(os.path.dirname(__file__), '..', '..'))
+from shared.events import get_enhanced_event_bus, V3EventChannels
+from shared.feature_flags import get_flag_bool
+
 # Configure logging
 logging.basicConfig(
     level=getattr(logging, voice_config.LOG_LEVEL),
@@ -268,6 +275,27 @@ async def speech_to_text(
             request_id=request_id
         )
         
+        # 📤 E4: Publish voice activity event for real-time pipeline
+        if get_flag_bool('USE_EVENT_BUS'):
+            try:
+                bus = get_enhanced_event_bus()
+                await bus.publish(
+                    V3EventChannels.VOICE_ACTIVITY_DETECTED,
+                    {
+                        "user_id": auth_data.get("user_id"),
+                        "activity_type": "speech_to_text",
+                        "language": language,
+                        "confidence": result.get("confidence", 0.0) if isinstance(result, dict) else 0.0,
+                        "text": result.get("text", "") if isinstance(result, dict) else str(result),
+                        "duration_ms": audio_data.duration * 1000 if audio_data.duration else 0,
+                        "timestamp": datetime.utcnow().isoformat()
+                    },
+                    user_id=auth_data.get("user_id")
+                )
+                logging.info(f"Published voice activity event for user {auth_data.get('user_id')}")
+            except Exception as e:
+                logging.error(f"Failed to publish voice activity event: {e}")
+        
         # Log activity
         asyncio.create_task(
             integration_manager.log_user_activity(
@@ -335,6 +363,28 @@ async def process_voice_command(
             user_id=auth_data.get("user_id"),
             context=command.context
         )
+        
+        # 📤 E4: Publish voice intent classified event for real-time pipeline
+        if get_flag_bool('USE_EVENT_BUS'):
+            try:
+                bus = get_enhanced_event_bus()
+                await bus.publish(
+                    V3EventChannels.VOICE_INTENT_CLASSIFIED,
+                    {
+                        "user_id": auth_data.get("user_id"),
+                        "intent": result.data.get("intent", "unknown") if result.data else "unknown",
+                        "confidence": result.data.get("confidence", 0.0) if result.data else 0.0,
+                        "parameters": result.data.get("parameters", {}) if result.data else {},
+                        "text": command.text,
+                        "language": command.language,
+                        "context": command.context or {},
+                        "timestamp": datetime.utcnow().isoformat()
+                    },
+                    user_id=auth_data.get("user_id")
+                )
+                logging.info(f"Published voice intent classified event for user {auth_data.get('user_id')}")
+            except Exception as e:
+                logging.error(f"Failed to publish voice intent classified event: {e}")
         
         return result
         

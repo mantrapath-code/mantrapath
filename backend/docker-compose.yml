@@ -131,6 +131,7 @@ services:
       - SERVICE_TRANSLATION_SERVICE_URL=http://translation-service:${TRANSLATION_SERVICE_PORT}
       - SERVICE_ACTION_ORCHESTRATOR_URL=http://action-orchestrator:${ACTION_ORCHESTRATOR_PORT}
       - SERVICE_VOICE_SERVICE_URL=http://voice-service:8011
+      - SERVICE_AI_CONTEXT_STORE_URL=http://ai-context-store:8013
     depends_on:
       redis:
         condition: service_healthy
@@ -357,6 +358,42 @@ services:
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8008/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+
+  # AI Context Store Service
+  ai-context-store:
+    build:
+      context: .
+      dockerfile: services/ai_context_store/Dockerfile
+    ports:
+      - "8013:8013"
+    env_file:
+      - .env
+    environment:
+      - DATABASE_URL=postgresql://mantrapath:mantrapath123@postgres:5432/mantrapath
+      - REDIS_URL=redis://redis:6379
+      - JWT_SECRET_KEY=${JWT_SECRET_KEY:-your-super-secret-jwt-key-change-in-production}
+      - AI_CONTEXT_STORE_PORT=8013
+      - NATS_URL=nats://nats:4222
+      - EVENT_BUS_TYPE=enhanced
+      - CONTEXT_CACHE_TTL=3600
+      - BUFFER_FLUSH_INTERVAL=30
+      - HEALTH_CHECK_INTERVAL=300
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      nats:
+        condition: service_healthy
+    networks:
+      - mantrapath-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8013/health"]
       interval: 30s
       timeout: 10s
       retries: 3

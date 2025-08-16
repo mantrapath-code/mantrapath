@@ -22,10 +22,10 @@ sys.path.append(os.path.join(os.path.dirname(__file__), '..', '..'))
 from shared.database import get_db
 from shared.auth import get_current_user
 from shared.models import MoodEntry, JournalEntry, Notification
-# Temporarily comment out problematic event imports
-# from shared.events import get_event_bus, EventChannels, Event, publish_insight_delta
+# Event imports for ML insights
+from shared.events import get_event_bus, EventChannels, Event, publish_insight_delta
 # BK-004: V3 enhanced bus imports
-# from shared.events import get_enhanced_event_bus, V3EventChannels
+from shared.events import get_enhanced_event_bus, V3EventChannels
 from shared.feature_flags import get_flag_bool
 
 # Import ML models
@@ -1758,6 +1758,26 @@ async def get_unified_insights(
     else:
         result = aggregator.get_unified_insights(db, user_id, force_refresh=force_refresh)
         result['version'] = 'v1_baseline'
+    
+    # 📤 E4: Publish insight delta event for real-time pipeline
+    if get_flag_bool('USE_EVENT_BUS'):
+        try:
+            bus = get_enhanced_event_bus()
+            await bus.publish(
+                V3EventChannels.INSIGHT_DELTA,
+                {
+                    "user_id": user_id,
+                    "insights": result,
+                    "version": result.get('version', 'unknown'),
+                    "enhanced": use_enhanced,
+                    "timestamp": datetime.now(timezone.utc).isoformat()
+                },
+                user_id=user_id
+            )
+            logger.info(f"Published insight delta event for user {user_id}")
+        except Exception as e:
+            logger.error(f"Failed to publish insight delta event: {e}")
+            # Don't fail the main operation if event publishing fails
     
     return result
 

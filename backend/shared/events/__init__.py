@@ -5,7 +5,14 @@ Supporting Voice, AI, Cultural Intelligence, and Core Service Events
 
 # Import core event functions from sibling events module
 try:
-    from ..events import (
+    import sys
+    import os
+    # Add the parent directory to sys.path to enable absolute imports
+    parent_dir = os.path.dirname(os.path.dirname(__file__))
+    if parent_dir not in sys.path:
+        sys.path.insert(0, parent_dir)
+    
+    from core_events import (
         publish_mood_entry_created,
         publish_journal_entry_created,
         publish_challenge_progress_updated,
@@ -13,7 +20,8 @@ try:
         publish_insight_delta,
         get_event_bus,
         cleanup_event_bus,
-        EventChannels
+        EventChannels,
+        Event
     )
     CORE_EVENTS_AVAILABLE = True
 except ImportError as e:
@@ -76,7 +84,8 @@ if CORE_EVENTS_AVAILABLE:
         'publish_insight_delta',
         'get_event_bus',
         'cleanup_event_bus',
-        'EventChannels'
+        'EventChannels',
+        'Event'
     ])
 
 if VOICE_EVENTS_AVAILABLE:
