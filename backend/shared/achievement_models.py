@@ -10,10 +10,7 @@ from datetime import datetime
 import uuid
 
 # Import the existing Base from shared models
-import sys
-import os
-sys.path.append(os.path.join(os.path.dirname(__file__), '../shared'))
-from shared.models import Base
+from models import Base
 
 class UserAchievementProgress(Base):
     """

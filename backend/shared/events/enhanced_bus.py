@@ -20,11 +20,6 @@ from datetime import datetime, timezone
 import uuid
 
 # Import existing event system
-import sys
-import os
-parent_dir = os.path.dirname(os.path.dirname(__file__))
-sys.path.insert(0, parent_dir)
-
 try:
     from events import Event, EventBus, InMemoryEventBus, get_event_bus, cleanup_event_bus
 except ImportError:
@@ -662,6 +657,14 @@ class EnhancedEventBus(InMemoryEventBus):
         await super().close()
         
         logger.info("✅ EnhancedEventBus closed")
+
+    async def connect(self) -> bool:
+        """Connect the enhanced event bus - compatibility method"""
+        return await self.initialize()
+    
+    async def disconnect(self) -> None:
+        """Disconnect the enhanced event bus - compatibility method"""
+        await self.close()
 
 
 # Global enhanced event bus instance

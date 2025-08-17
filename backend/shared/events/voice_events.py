@@ -174,6 +174,8 @@ class IntentData(BaseModel):
 
 class ProcessingMetadata(BaseModel):
     """Intent processing metadata"""
+    model_config = {"protected_namespaces": ()}
+    
     classification_model: str = Field(..., description="Model used for classification")
     model_version: str = Field(default="1.0", description="Model version")
     processing_time_ms: int = Field(..., ge=0, description="Processing time in milliseconds")

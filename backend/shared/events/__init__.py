@@ -5,13 +5,6 @@ Supporting Voice, AI, Cultural Intelligence, and Core Service Events
 
 # Import core event functions from sibling events module
 try:
-    import sys
-    import os
-    # Add the parent directory to sys.path to enable absolute imports
-    parent_dir = os.path.dirname(os.path.dirname(__file__))
-    if parent_dir not in sys.path:
-        sys.path.insert(0, parent_dir)
-    
     from core_events import (
         publish_mood_entry_created,
         publish_journal_entry_created,

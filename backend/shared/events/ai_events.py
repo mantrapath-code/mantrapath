@@ -57,6 +57,8 @@ class IntelligenceEventType(str, Enum):
 
 class ProcessingData(BaseModel):
     """AI processing metadata"""
+    model_config = {"protected_namespaces": ()}
+    
     model_name: str = Field(..., description="AI model identifier")
     model_version: str = Field(default="1.0", description="Model version")
     input_data_hash: str = Field(..., description="Hash of input data for caching")

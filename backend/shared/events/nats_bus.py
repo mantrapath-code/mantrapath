@@ -32,9 +32,6 @@ except ImportError:
 from ..events import Event, EventBus
 try:
     # Import the parent Event and EventBus classes
-    import sys
-    import os
-    sys.path.append(os.path.dirname(os.path.dirname(__file__)))
     from events import Event, EventBus
 except ImportError:
     # Fallback - define minimal interfaces

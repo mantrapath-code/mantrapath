@@ -531,10 +531,105 @@ services:
       retries: 3
       start_period: 30s
 
+  # AI Event Processor Service (V3 Sprint 2)
+  ai-event-processor:
+    build:
+      context: .
+      dockerfile: services/ai_event_processor/Dockerfile
+    ports:
+      - "8014:8014"
+    env_file:
+      - .env
+    environment:
+      - AI_EVENT_PROCESSOR_HOST=0.0.0.0
+      - AI_EVENT_PROCESSOR_PORT=8014
+      - DATABASE_URL=postgresql://mantrapath:mantrapath123@postgres:5432/mantrapath
+      - REDIS_URL=redis://redis:6379
+      - NATS_URL=nats://nats:4222
+      - NATS_SERVERS=nats://nats:4222
+      - JWT_SECRET_KEY=${JWT_SECRET_KEY:-your-super-secret-jwt-key-change-in-production}
+      - LOG_LEVEL=info
+      - ENVIRONMENT=development
+      # AI Model Configuration
+      - AI_MODELS_CACHE_DIR=/app/models_cache
+      - EMOTION_MODEL_NAME=j-hartmann/emotion-english-distilroberta-base
+      - SENTIMENT_MODEL_NAME=cardiffnlp/twitter-roberta-base-sentiment-latest
+      - DEVICE=cpu
+      # Performance Configuration
+      - MAX_CONCURRENT_EVENTS=100
+      - EVENT_PROCESSING_TIMEOUT=300
+      - CONTEXT_CACHE_TTL=3600
+      - METRICS_EXPORT_INTERVAL=60
+    volumes:
+      - ai_models_cache:/app/models_cache
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      nats:
+        condition: service_healthy
+    networks:
+      - mantrapath-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8014/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+
+  # Voice Event Processor Service (V3 Sprint 2)
+  voice-event-processor:
+    build:
+      context: .
+      dockerfile: services/voice_event_processor/Dockerfile
+    ports:
+      - "8015:8015"
+    env_file:
+      - .env
+    environment:
+      - VOICE_EVENT_PROCESSOR_HOST=0.0.0.0
+      - VOICE_EVENT_PROCESSOR_PORT=8015
+      - DATABASE_URL=postgresql://mantrapath:mantrapath123@postgres:5432/mantrapath
+      - REDIS_URL=redis://redis:6379
+      - NATS_URL=nats://nats:4222
+      - JWT_SECRET_KEY=${JWT_SECRET_KEY:-your-super-secret-jwt-key-change-in-production}
+      - LOG_LEVEL=info
+      - ENVIRONMENT=development
+      # Voice Processing Configuration
+      - MAX_CONCURRENT_STREAMS=100
+      - VAD_SENSITIVITY=0.7
+      - VOICE_STREAMING_ENABLED=true
+      - AUDIO_SAMPLE_RATE=16000
+      - AUDIO_CHUNK_SIZE=1024
+      - VOICE_EMOTION_MODEL=speechbrain/emotion-recognition-wav2vec2-IEMOCAP
+      # Performance Configuration
+      - STREAM_TIMEOUT=30
+      - ACTIVITY_DETECTION_TIMEOUT=50
+      - EMOTION_ANALYSIS_TIMEOUT=200
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      nats:
+        condition: service_healthy
+    networks:
+      - mantrapath-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8015/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+
 volumes:
   postgres_data:
   agent_redis_data:
   nats_data:
+  ai_models_cache:
 
 networks:
   mantrapath-network:
