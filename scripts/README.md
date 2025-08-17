@@ -1,69 +1,111 @@
-# MantraPath Development Scripts
+# 🛠️ MantraPath Scripts
 
-This directory contains development scripts for the MantraPath wellness platform.
+This directory contains all development, management, and operational scripts organized by function.
 
-## 🚀 Quick Start
+## � Directory Structure
 
-To get started with development:
+### 🎛️ Management Scripts (`management/`)
+- **Service management and orchestration**
+- **System administration utilities**
+- **Event bus activation and control**
+- **Process monitoring and control**
 
+**Key Scripts:**
+- `manage.sh` - Primary service management interface
+- `manage_services.sh` - Comprehensive service orchestration
+- `activate_event_bus.sh` - Event system activation
+
+### ⚙️ Setup Scripts (`setup/`)
+- **Environment configuration**
+- **Development environment setup**
+- **Dependency installation**
+- **Initial project configuration**
+
+**Key Scripts:**
+- `dev-setup.sh` - Complete development environment setup
+- `setup-env.sh` - Environment variable configuration
+- `setup-venv.sh` - Python virtual environment setup
+- `sync-env.sh` - Environment synchronization
+- `docker-dev.sh` - Docker development setup
+
+### 🧪 Testing Scripts (`testing/`)
+- **Automated testing suites**
+- **Integration testing**
+- **Performance testing**
+- **Validation scripts**
+
+**Key Scripts:**
+- `test_scripts.sh` - Comprehensive test suite
+- `test_event_integration.sh` - Event system testing
+- `test_frontend_integration.py` - Frontend integration tests
+- `test_redis_cache.py` - Cache testing
+- `test_unified_insights.sh` - Insights system testing
+
+### 📊 Monitoring Scripts (`monitoring/`)
+- **Health checking and monitoring**
+- **System performance monitoring**
+- **Service status tracking**
+- **Alert and notification systems**
+
+**Key Scripts:**
+- `quick_health_check_fixed.py` - Real-time health dashboard
+- `system_summary.sh` - System status overview
+
+### 📝 Supporting Directories
+
+#### 🗄️ Archive (`archive/`)
+- **Deprecated scripts and legacy code**
+- **Historical versions for reference**
+
+#### 🔧 Development (`dev/`)
+- **Development-specific utilities**
+- **Debugging tools and helpers**
+
+#### 📊 Test Data (`test-data/`)
+- **Test datasets and fixtures**
+- **Mock data for testing**
+
+#### 📈 Test Reports (`test-reports/`)
+- **Automated test results**
+- **Performance benchmarks**
+- **Coverage reports**
+
+## 🚀 Quick Usage
+
+### Start Development Environment
 ```bash
-# Make scripts executable
-chmod +x scripts/*.sh
-
-# Setup environment (first time only)
-./scripts/setup-env.sh
+# Complete setup
+./setup/dev-setup.sh
 
 # Start all services
-./scripts/start.sh
+./management/manage_services.sh
 ```
 
-## 📋 Available Scripts
+### Run Tests
+```bash
+# Complete test suite
+./testing/test_scripts.sh
 
-### Core Development Scripts
+# Specific component tests
+./testing/test_event_integration.sh
+```
 
-- **`start.sh`** - Start all services with dependency management
-  - ✅ **Docker Compose Integration**: Uses Docker Compose to build and run ALL backend services
-  - ✅ **Correct Port Detection**: Frontend starts on Vite's port 5173
-  - Checks prerequisites (Node.js, Python, Docker)
-  - Sets up environment files if missing
-  - Starts infrastructure (PostgreSQL, Redis)
-  - Starts ALL backend services via Docker Compose
-  - Starts frontend development server
-  - Provides live monitoring and health checks
+### Monitor System
+```bash
+# Health check
+python ./monitoring/quick_health_check_fixed.py
 
-- **`stop.sh`** - Gracefully stop all running services
-  - Stops services by port with graceful termination
-  - Cleans up Python and Node.js processes
-  - Stops Docker containers properly
-  - Cleans temporary files
+# System summary
+./monitoring/system_summary.sh
+```
 
-- **`restart.sh`** - Safely restart all services
-  - Stops all services cleanly
-  - Waits for clean shutdown
-  - Starts all services with proper dependency order
+## 🔄 Best Practices
 
-- **`status.sh`** - Quick status check for all services
-  - Shows service status with health checks (healthy/responding/not responding)
-  - Displays configuration status
-  - Shows Docker container status
-  - Provides quick links and summary
-  - **All 13 services monitored**: 2 infrastructure + 10 backend + 1 frontend
-
-- **`logs.sh`** - View logs from running services
-  - `./scripts/logs.sh status` - Service status
-  - `./scripts/logs.sh docker` - Docker logs
-  - `./scripts/logs.sh tail frontend` - Follow frontend logs
-  - `./scripts/logs.sh live` - Live monitoring
-
-### Environment Setup
-
-- **`setup-env.sh`** - Interactive environment configuration
-  - Creates .env files for backend and frontend
-  - Configures database settings (PostgreSQL)
-  - Sets up Redis connection
-  - Configures email services (SMTP)
-  - Sets up AI services (OpenAI API)
-  - Generates secure JWT secrets automatically
+1. **Always test scripts in development before production**
+2. **Keep scripts executable with proper permissions**
+3. **Document new scripts with clear comments**
+4. **Use consistent naming conventions**
+5. **Maintain backward compatibility when possible**
 
 ## 🏗️ Service Architecture
 

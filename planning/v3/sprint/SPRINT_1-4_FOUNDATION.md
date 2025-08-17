@@ -248,19 +248,46 @@ This phase focuses on consolidating our existing services into a unified, voice-
   - [ ] API integration and testing (3h)
 
 **Story V3-BK-008**: Proactive Assistance Engine
-- **Priority**: P0 | **Points**: 8 | **Assignee**: Mid Dev 2  
-- **Description**: Implement proactive assistance based on real-time analysis
+- **Priority**: P0 | **Points**: 12 (Updated) | **Assignee**: Mid Dev 2  
+- **Status**: ❌ NOT IMPLEMENTED - Requires new service creation
+- **Description**: Implement proactive assistance based on real-time analysis using existing AI infrastructure
+- **Implementation Strategy**: Create dedicated orchestration service leveraging existing components:
+  - ✅ **Available Foundation**: PredictiveInterventionEngine, Crisis Detection, AI Context Store, Cultural Intelligence
+  - ❌ **Missing Components**: Proactive Assistance Service, Contextual Help System, Comprehensive Timing Prediction
 - **Acceptance Criteria**:
-  - [ ] Early intervention detection
-  - [ ] Optimal timing prediction for assistance
-  - [ ] Contextual help trigger system
-  - [ ] Cultural sensitivity in proactive assistance
-- **Tasks**:
-  - [ ] Intervention detection algorithms (3h)
-  - [ ] Timing prediction system (2h)
-  - [ ] Contextual trigger engine (2h)
-  - [ ] Cultural sensitivity integration (1h)
-  - [ ] Testing with real scenarios (2h)
+  - [ ] **Early intervention detection** - Orchestrate existing PredictiveInterventionEngine (ai_event_processor)
+  - [ ] **Optimal timing prediction** - Enhanced timing system using behavioral data from AI Context Store
+  - [ ] **Contextual help trigger system** - New help content matching engine with cultural adaptation
+  - [ ] **Cultural sensitivity** - Integrate existing cultural intelligence for assistance appropriateness
+- **Updated Tasks** (Based on Comprehensive Analysis):
+  - [ ] **Proactive Assistance Service Creation** - New FastAPI service with orchestration engine (6h)
+  - [ ] **Timing Prediction Enhancement** - Comprehensive timing system using existing data (2h)
+  - [ ] **Contextual Help System** - Help content matching with cultural adaptation (2h)
+  - [ ] **Cultural Sensitivity Integration** - Appropriateness checking using existing intelligence (1h)
+  - [ ] **Comprehensive Testing** - End-to-end testing with cultural validation (1h)
+- **Key Integration Points**:
+  - AI Event Processor (Port 8014) - Need new endpoint: `/api/v1/intervention/analyze/{user_id}`
+  - AI Context Store (Port 8016) - Use existing endpoints for user context
+  - Cultural Intelligence - Leverage existing cultural adaptation capabilities
+- **Service Architecture**:
+  ```
+  backend/services/proactive_assistance_engine/
+  ├── main.py                          # FastAPI application (Port 8018)
+  ├── src/core/assistance_orchestrator.py  # Main orchestration engine
+  ├── src/integrations/               # Service integration clients
+  ├── src/models/assistance_models.py  # Data models
+  └── tests/                          # Comprehensive test suite
+  ```
+- **Performance Targets**:
+  - >85% intervention detection accuracy (using existing predictive engine)
+  - >75% timing prediction accuracy
+  - <500ms assistance evaluation time
+  - >90% cultural appropriateness score
+- **Risk Mitigation**: 
+  - Leverage existing services to minimize implementation risk
+  - Implement graceful degradation for service dependencies
+  - Start with basic help content, iterate based on user feedback
+- **Detailed Implementation Plan**: See `/planning/v3-implementation/Sprint-2/V3-BK-008_PROACTIVE_ASSISTANCE_EXECUTION_PLAN.md`
 
 ---
 

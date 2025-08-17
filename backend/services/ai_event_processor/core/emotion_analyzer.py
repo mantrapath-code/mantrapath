@@ -124,10 +124,10 @@ class EmotionAnalyzer:
     async def analyze(
         self, 
         text: str, 
-        language: str = "en", 
-        user_id: str = None,
+        user_id: Optional[str] = None,
+        language: str = "en",
         context: Optional[Dict[str, Any]] = None
-    ) -> Dict[str, Any]:
+    ) -> EmotionResult:
         """
         Analyze emotion from text with cultural adaptation
         
@@ -147,7 +147,7 @@ class EmotionAnalyzer:
                 raise RuntimeError("Emotion analyzer not initialized")
             
             if not text or not text.strip():
-                return self._create_neutral_result(start_time)
+                return self._create_neutral_emotion_result()
             
             # Detect language if not provided or uncertain
             detected_language = await self._detect_language(text, language)
@@ -163,15 +163,30 @@ class EmotionAnalyzer:
             # Create response
             processing_time = (time.time() - start_time) * 1000
             
-            result = {
-                "emotion": cultural_result["primary_emotion"],
-                "confidence": cultural_result["confidence"],
-                "emotions": cultural_result["emotion_scores"],
-                "cultural_context": cultural_result.get("cultural_interpretation"),
-                "processing_time_ms": processing_time,
-                "language": detected_language,
-                "cultural_adaptation": cultural_result.get("cultural_adaptation")
-            }
+            # Check if cultural adaptation was applied
+            has_cultural_adaptation = (
+                cultural_result.get("cultural_adaptation") is not None or
+                cultural_result.get("cultural_interpretation") is not None or
+                detected_language != "en"
+            )
+            
+            # Build analysis metadata
+            analysis_metadata = {}
+            if cultural_result.get("cultural_interpretation"):
+                analysis_metadata["cultural_context"] = cultural_result.get("cultural_interpretation")
+            if detected_language != "en":
+                analysis_metadata["language_detected"] = detected_language
+            
+            result = EmotionResult(
+                emotion=cultural_result["primary_emotion"],
+                confidence=cultural_result["confidence"],
+                emotions=cultural_result["emotion_scores"],
+                cultural_context=cultural_result.get("cultural_interpretation"),
+                processing_time_ms=processing_time,
+                language=detected_language,
+                has_cultural_adaptation=has_cultural_adaptation,
+                analysis_metadata=analysis_metadata
+            )
             
             # Update metrics
             self._update_metrics(processing_time)
@@ -180,7 +195,7 @@ class EmotionAnalyzer:
             
         except Exception as e:
             logger.error("Emotion analysis failed", error=str(e), user_id=user_id)
-            return self._create_error_result(time.time())
+            return self._create_error_emotion_result()
     
     async def _detect_language(self, text: str, provided_language: str) -> str:
         """Detect or validate language"""
@@ -349,7 +364,7 @@ class EmotionAnalyzer:
             "cultural_adaptation": None
         }
     
-    def _create_fallback_emotion_result(self, text: str) -> Dict[str, Any]:
+    def _create_fallback_emotion_result(self, text: str):
         """Create fallback emotion result using simple heuristics"""
         # Simple keyword-based emotion detection as fallback
         positive_words = ['happy', 'joy', 'good', 'great', 'excellent', 'wonderful', 'amazing']
@@ -360,27 +375,21 @@ class EmotionAnalyzer:
         positive_count = sum(1 for word in positive_words if word in text_lower)
         negative_count = sum(1 for word in negative_words if word in text_lower)
         
+        # Create simple object with expected attributes
+        class FallbackResult:
+            def __init__(self, emotion, confidence, emotion_scores):
+                self.primary_emotion = emotion
+                self.emotion = emotion  # Also provide the standard field name
+                self.confidence = confidence
+                self.emotion_scores = emotion_scores
+                self.emotions = emotion_scores  # Also provide the standard field name
+        
         if positive_count > negative_count:
-            return {
-                "primary_emotion": "joy",
-                "confidence": 0.6,
-                "emotion_scores": {"joy": 0.6, "neutral": 0.4},
-                "raw_results": []
-            }
+            return FallbackResult("joy", 0.6, {"joy": 0.6, "neutral": 0.4})
         elif negative_count > positive_count:
-            return {
-                "primary_emotion": "sadness",
-                "confidence": 0.6,
-                "emotion_scores": {"sadness": 0.6, "neutral": 0.4},
-                "raw_results": []
-            }
+            return FallbackResult("sadness", 0.6, {"sadness": 0.6, "neutral": 0.4})
         else:
-            return {
-                "primary_emotion": "neutral",
-                "confidence": 0.8,
-                "emotion_scores": {"neutral": 0.8},
-                "raw_results": []
-            }
+            return FallbackResult("neutral", 0.8, {"neutral": 0.8})
     
     def _update_metrics(self, processing_time_ms: float):
         """Update processing metrics"""
@@ -437,3 +446,101 @@ class EmotionAnalyzer:
         except Exception as e:
             logger.error("Batch emotion analysis failed", error=str(e))
             return [self._create_error_result(time.time()) for _ in texts]
+    
+    async def batch_analyze(self, texts: List[str], user_id: str, **kwargs) -> List[Optional[EmotionResult]]:
+        """Batch analyze emotions for multiple texts"""
+        try:
+            tasks = [self.analyze(text, user_id, **kwargs) for text in texts]
+            results = await asyncio.gather(*tasks, return_exceptions=True)
+            
+            # Convert exceptions to None
+            processed_results = []
+            for result in results:
+                if isinstance(result, Exception):
+                    processed_results.append(None)
+                else:
+                    processed_results.append(result)
+            
+            return processed_results
+            
+        except Exception as e:
+            logger.error("Batch emotion analysis failed", error=str(e))
+            return [None] * len(texts)
+    
+    async def _analyze_voice_features(self, voice_features: Dict[str, Any], user_id: str) -> Dict[str, Any]:
+        """Analyze voice features for emotion detection"""
+        # Placeholder implementation for voice emotion analysis
+        # In production, this would use audio ML models
+        
+        return {
+            'emotion': 'neutral',
+            'confidence': 0.75,
+            'arousal': 0.5,
+            'valence': 0.5
+        }
+    
+    def _generate_emotion_insights(self, emotion_history: List[Dict[str, Any]], user_id: str) -> Dict[str, Any]:
+        """Generate insights from emotion history"""
+        if not emotion_history:
+            return {
+                'trend': 'stable',
+                'dominant_emotion': 'neutral',
+                'stability_score': 1.0
+            }
+        
+        # Calculate dominant emotion
+        emotion_counts = {}
+        for entry in emotion_history:
+            emotion = entry['emotion']
+            emotion_counts[emotion] = emotion_counts.get(emotion, 0) + 1
+        
+        dominant_emotion = max(emotion_counts, key=emotion_counts.get)
+        
+        # Calculate trend (simplified)
+        if len(emotion_history) >= 2:
+            recent_emotions = [e['emotion'] for e in emotion_history[-3:]]
+            if all(e in ['joy', 'surprise'] for e in recent_emotions):
+                trend = 'improving'
+            elif all(e in ['sadness', 'anger', 'fear'] for e in recent_emotions):
+                trend = 'declining'
+            else:
+                trend = 'stable'
+        else:
+            trend = 'stable'
+        
+        # Calculate stability (variance in emotions)
+        unique_emotions = len(set(e['emotion'] for e in emotion_history))
+        stability_score = 1.0 / unique_emotions if unique_emotions > 0 else 1.0
+        
+        return {
+            'trend': trend,
+            'dominant_emotion': dominant_emotion,
+            'stability_score': stability_score,
+            'emotion_distribution': emotion_counts
+        }
+    
+    def _create_neutral_emotion_result(self) -> EmotionResult:
+        """Create a neutral emotion result"""
+        return EmotionResult(
+            emotion="neutral",
+            confidence=0.8,
+            emotions={"neutral": 0.8, "joy": 0.1, "sadness": 0.1},
+            cultural_context=None,
+            processing_time_ms=0.0,
+            language="en",
+            has_cultural_adaptation=False,
+            analysis_metadata={}
+        )
+    
+    def _create_error_emotion_result(self) -> EmotionResult:
+        """Create an error emotion result"""
+        return EmotionResult(
+            emotion="neutral",
+            confidence=0.5,
+            emotions={"neutral": 1.0},
+            cultural_context="error_fallback",
+            processing_time_ms=0.0,
+            language="en",
+            has_cultural_adaptation=False,
+            analysis_metadata={"fallback_analysis": True}
+        )

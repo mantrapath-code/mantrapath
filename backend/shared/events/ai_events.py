@@ -35,6 +35,12 @@ class AIEventType(str, Enum):
     # Performance
     PERFORMANCE_THRESHOLD_EXCEEDED = "ai.performance_threshold_exceeded"
     MEMORY_WARNING = "ai.memory_warning"
+    
+    # Analysis Results
+    EMOTION_ANALYZED = "ai.emotion_analyzed"
+    CONTENT_ANALYZED = "ai.content_analyzed"
+    VOICE_ANALYZED = "ai.voice_analyzed"
+    CONVERSATION_ANALYZED = "ai.conversation_analyzed"
 
 
 class IntelligenceEventType(str, Enum):

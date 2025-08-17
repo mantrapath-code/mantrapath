@@ -35,10 +35,9 @@ class TestContextAggregatorService:
     """Test Context Aggregator Service"""
     
     @pytest.fixture
-    async def aggregator_service(self):
+    def aggregator_service(self):
         """Create aggregator service for testing"""
         service = ContextAggregatorService()
-        await service.initialize()
         return service
     
     @pytest.mark.asyncio
@@ -148,10 +147,9 @@ class TestIntelligenceEngine:
     """Test Intelligence Engine"""
     
     @pytest.fixture
-    async def intelligence_engine(self):
+    def intelligence_engine(self):
         """Create intelligence engine for testing"""
         engine = IntelligenceEngine()
-        await engine.start_intelligence_processing()
         return engine
     
     @pytest.mark.asyncio
@@ -256,14 +254,10 @@ class TestEventProcessor:
     """Test Event Processor"""
     
     @pytest.fixture
-    async def event_processor(self):
+    def event_processor(self):
         """Create event processor for testing"""
         aggregator = ContextAggregatorService()
-        await aggregator.initialize()
-        
         engine = IntelligenceEngine()
-        await engine.start_intelligence_processing()
-        
         processor = EventProcessor(aggregator, engine)
         return processor, aggregator, engine
     

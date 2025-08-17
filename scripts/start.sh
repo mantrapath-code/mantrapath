@@ -168,17 +168,66 @@ view_status() {
         "8007:Notification Service"
         "8008:ML Service"
         "8009:Media Service"
+        "8010:Translation Service"
+        "8011:Voice Service"
+        "8012:Action Orchestrator"
+        "8013:AI Context Store"
+        "8014:AI Event Processor"
+        "8015:Voice Event Processor"
+        "8080:Models Service"
+        "5432:PostgreSQL"
+        "6379:Redis"
+        "4222:NATS Client"
+        "8222:NATS Monitor"
     )
     
     for service in "${services[@]}"; do
         port=$(echo $service | cut -d: -f1)
         name=$(echo $service | cut -d: -f2)
         
-        if curl -s -f "${PROTOCOL}://${DOMAIN}:$port/health" >/dev/null 2>&1; then
-            echo -e "  ${GREEN}✅${NC} $name (port $port)"
-        else
-            echo -e "  ${RED}❌${NC} $name (port $port)"
-        fi
+        # Special handling for different service types
+        case $port in
+            5432)
+                # PostgreSQL - check if port is open
+                if nc -z localhost $port 2>/dev/null; then
+                    echo -e "  ${GREEN}✅${NC} $name (port $port)"
+                else
+                    echo -e "  ${RED}❌${NC} $name (port $port)"
+                fi
+                ;;
+            6379)
+                # Redis - check if port is open
+                if nc -z localhost $port 2>/dev/null; then
+                    echo -e "  ${GREEN}✅${NC} $name (port $port)"
+                else
+                    echo -e "  ${RED}❌${NC} $name (port $port)"
+                fi
+                ;;
+            4222)
+                # NATS Client - check if port is open
+                if nc -z localhost $port 2>/dev/null; then
+                    echo -e "  ${GREEN}✅${NC} $name (port $port)"
+                else
+                    echo -e "  ${RED}❌${NC} $name (port $port)"
+                fi
+                ;;
+            8222)
+                # NATS Monitor - has special healthz endpoint
+                if curl -s -f "${PROTOCOL}://${DOMAIN}:$port/healthz" >/dev/null 2>&1; then
+                    echo -e "  ${GREEN}✅${NC} $name (port $port)"
+                else
+                    echo -e "  ${RED}❌${NC} $name (port $port)"
+                fi
+                ;;
+            *)
+                # Regular services with /health endpoint
+                if curl -s -f "${PROTOCOL}://${DOMAIN}:$port/health" >/dev/null 2>&1; then
+                    echo -e "  ${GREEN}✅${NC} $name (port $port)"
+                else
+                    echo -e "  ${RED}❌${NC} $name (port $port)"
+                fi
+                ;;
+        esac
     done
 }
 

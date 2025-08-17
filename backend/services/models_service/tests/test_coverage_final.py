@@ -845,3 +845,4 @@ class TestFinalMainApp:
 
 if __name__ == "__main__":
     pytest.main([__file__, "-v", "--cov=.", "--cov-report=term-missing"])
+

@@ -18,6 +18,21 @@ class EmotionResult(BaseModel):
     confidence: float = Field(..., ge=0.0, le=1.0, description="Confidence score")
     emotions: Dict[str, float] = Field(..., description="All emotion scores")
     cultural_context: Optional[str] = Field(default=None, description="Cultural interpretation")
+    processing_time_ms: Optional[float] = Field(default=None, description="Processing time in milliseconds")
+    language: Optional[str] = Field(default=None, description="Detected or provided language")
+    has_cultural_adaptation: Optional[bool] = Field(default=False, description="Whether cultural adaptation was applied")
+    analysis_metadata: Optional[Dict[str, Any]] = Field(default_factory=dict, description="Analysis metadata")
+    
+    # Legacy field aliases for backward compatibility
+    @property
+    def primary_emotion(self) -> str:
+        """Backward compatibility alias for emotion"""
+        return self.emotion
+    
+    @property
+    def emotion_scores(self) -> Dict[str, float]:
+        """Backward compatibility alias for emotions"""
+        return self.emotions
 
 class EmotionAnalysisResponse(BaseModel):
     """Response model for emotion analysis"""

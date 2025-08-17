@@ -135,3 +135,4 @@ class TestBasicCoverage:
         # Test dict comprehension
         doubled = {k: v * 2 for k, v in test_dict.items()}
         assert doubled["key1"] == "value1value1"
+

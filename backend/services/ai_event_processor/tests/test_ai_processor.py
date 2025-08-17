@@ -7,7 +7,9 @@ from datetime import datetime, timezone
 
 import sys
 import os
+# Add both the current service directory and the backend directory to Python path
 sys.path.append(os.path.join(os.path.dirname(__file__), '..'))
+sys.path.append(os.path.join(os.path.dirname(__file__), '../../../'))
 
 from core.ai_processor import AIEventProcessor
 from models.ai_models import AIMetrics
@@ -16,7 +18,7 @@ class TestAIEventProcessor:
     """Test suite for AI Event Processor"""
     
     @pytest.fixture
-    async def ai_processor(self):
+    def ai_processor(self):
         """Create AI processor instance for testing"""
         processor = AIEventProcessor()
         

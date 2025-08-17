@@ -14,7 +14,7 @@ class TestEmotionAnalyzer:
     """Test suite for Emotion Analyzer"""
     
     @pytest.fixture
-    async def emotion_analyzer(self):
+    def emotion_analyzer(self):
         """Create emotion analyzer instance for testing"""
         analyzer = EmotionAnalyzer()
         

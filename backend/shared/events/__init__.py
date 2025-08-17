@@ -5,7 +5,7 @@ Supporting Voice, AI, Cultural Intelligence, and Core Service Events
 
 # Import core event functions from sibling events module
 try:
-    from core_events import (
+    from ..core_events import (
         publish_mood_entry_created,
         publish_journal_entry_created,
         publish_challenge_progress_updated,
