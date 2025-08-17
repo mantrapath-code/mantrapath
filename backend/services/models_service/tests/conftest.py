@@ -2,12 +2,19 @@
 Test configuration and fixtures
 """
 
+import sys
+import os
+from pathlib import Path
+
+# Add the service root to Python path for proper imports
+service_root = Path(__file__).parent.parent
+sys.path.insert(0, str(service_root))
+
 import pytest
 import pytest_asyncio
 import asyncio
 import tempfile
 import shutil
-from pathlib import Path
 from unittest.mock import Mock, AsyncMock, MagicMock, patch
 from fastapi.testclient import TestClient
 import torch
@@ -82,19 +89,29 @@ def mock_settings(temp_models_dir, mock_model_config):
     settings = Mock()
     settings.MODELS_DIR = temp_models_dir
     settings.MODEL_CONFIGS = mock_model_config
-    settings.REDIS_URL = "redis://localhost:6379/10"  # Test database
-    settings.MAX_CACHE_SIZE_GB = 5
-    settings.DOWNLOAD_TIMEOUT = 30
+    settings.CACHE_DIR = temp_models_dir / "cache"
+    settings.LOGS_DIR = temp_models_dir / "logs"
+    settings.DEFAULT_STT_MODEL = "whisper_medium"
+    settings.DEFAULT_TTS_MODEL = "coqui_xtts_v2"
+    settings.DEFAULT_NLP_MODEL = "sentence_transformers"
+    settings.USE_GPU = False
+    settings.MAX_GPU_MEMORY = 0.8
+    settings.TORCH_DEVICE = "cpu"
+    settings.MAX_CONCURRENT_REQUESTS = 10
+    settings.MODEL_CACHE_SIZE = 5
+    settings.REQUEST_TIMEOUT = 300
     settings.INDIAN_LANGUAGES = {
         "hi": {
             "name": "Hindi",
+            "script": "Devanagari",
             "stt_models": ["whisper", "vosk"],
             "tts_models": ["coqui", "espeak"]
         },
         "bn": {
             "name": "Bengali", 
+            "script": "Bengali",
             "stt_models": ["whisper"],
-            "tts_models": ["espeak"]
+            "tts_models": ["coqui", "espeak"]
         }
     }
     return settings

@@ -3,22 +3,33 @@ ML Service for Smart Notification Scheduling
 Provides machine learning capabilities for personalized notification timing and content
 """
 
+import sys
+import os
+
+# CRITICAL: Add current directory to Python path FIRST before any other imports
+current_dir = os.path.dirname(os.path.abspath(__file__))
+# Remove any existing entries to avoid duplicates
+sys.path = [p for p in sys.path if p != current_dir]
+# Insert at the very beginning to ensure priority over shared/models.py
+sys.path.insert(0, current_dir)
+
+# Add parent directories to path for imports
+parent_dir = os.path.join(os.path.dirname(__file__), '..', '..')
+if parent_dir not in sys.path:
+    sys.path.append(parent_dir)
+
 from fastapi import FastAPI, Depends, HTTPException, BackgroundTasks
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from typing import List, Dict, Any, Optional, Iterable
 from datetime import datetime, timedelta, timezone
-import os
 import logging
 import uuid
 import json
 import asyncio
 import numpy as np
 from sqlalchemy.orm import Session
-import sys
 
-# Add parent directories to path for imports
-sys.path.append(os.path.join(os.path.dirname(__file__), '..', '..'))
 from shared.database import get_db
 from shared.auth import get_current_user
 from shared.models import MoodEntry, JournalEntry, Notification
@@ -28,15 +39,15 @@ from shared.events import get_event_bus, EventChannels, Event, publish_insight_d
 from shared.events import get_enhanced_event_bus, V3EventChannels
 from shared.feature_flags import get_flag_bool
 
-# Import ML models
-from models.pattern_analyzer import MoodPatternAnalyzer
-from models.timing_predictor import OptimalTimingPredictor
-from models.content_engine import NotificationContentEngine
-from models.effectiveness_tracker import EffectivenessTracker
+# Import ML models (path already configured above)
+from ml_models.pattern_analyzer import MoodPatternAnalyzer
+from ml_models.timing_predictor import OptimalTimingPredictor
+from ml_models.content_engine import NotificationContentEngine
+from ml_models.effectiveness_tracker import EffectivenessTracker
 
 # 🚨 Phase 2A: Import Crisis Prediction & Early Warning Systems
-from models.crisis_predictor import CrisisPredictionSystem
-from models.early_warning_system import EarlyWarningSystem
+from ml_models.crisis_predictor import CrisisPredictionSystem
+from ml_models.early_warning_system import EarlyWarningSystem
 
 # Setup logging
 logging.basicConfig(level=logging.INFO)
@@ -374,6 +385,8 @@ class CrisisAssessmentRequest(BaseModel):
     include_interventions: bool = True
 
 class CrisisRiskResponse(BaseModel):
+    model_config = {"protected_namespaces": ()}
+    
     user_id: str
     crisis_probability: float
     risk_level: str  # 'MINIMAL', 'LOW', 'MEDIUM', 'HIGH'

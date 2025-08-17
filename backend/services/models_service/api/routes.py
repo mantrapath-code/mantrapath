@@ -47,6 +47,8 @@ class TranslationRequest(BaseModel):
     model_preference: Optional[str] = None
 
 class ModelDownloadRequest(BaseModel):
+    model_config = {"protected_namespaces": ()}
+    
     model_name: str
     force: bool = False
 

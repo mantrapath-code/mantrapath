@@ -4,6 +4,7 @@ Includes intelligent mood collection, emotional weather forecasting, and celebra
 """
 from fastapi import FastAPI, Depends, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
+from contextlib import asynccontextmanager
 from sqlalchemy.orm import Session
 from sqlalchemy import desc, func, and_
 from pydantic import BaseModel
@@ -558,6 +559,19 @@ class CelebrationMomentDetector:
 adaptive_collector = AdaptiveMoodCollector()
 weather_engine = EmotionalWeatherEngine()
 celebration_detector = CelebrationMomentDetector()
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """Application lifespan management"""
+    # Initialize event bus on startup
+    event_bus = get_enhanced_event_bus()
+    await event_bus.initialize()
+    
+    yield
+    
+    # Cleanup on shutdown  
+    if event_bus:
+        await event_bus.close()
 
 app = FastAPI(lifespan=lifespan, 
     title="MantraPath Enhanced Mood Service",
