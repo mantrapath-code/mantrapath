@@ -279,6 +279,44 @@ class RequestRouter:
                 retries=1,
                 auth_required=True  # Re-enabled
             ),
+            
+            # Models Service Routes (NEW - BK-008 Integration)
+            RouteRule(
+                path_pattern=r"^/api/v1/models/.*",
+                methods=[HTTPMethod.GET, HTTPMethod.POST, HTTPMethod.PUT, HTTPMethod.DELETE],
+                service_name="models",
+                strip_prefix=False,
+                timeout=120,  # Longer timeout for AI model processing
+                retries=1,
+                auth_required=True
+            ),
+            RouteRule(
+                path_pattern=r"^/api/v1/stt/.*",
+                methods=[HTTPMethod.POST],
+                service_name="models",
+                strip_prefix=False,
+                timeout=120,  # Longer timeout for STT processing
+                retries=1,
+                auth_required=True
+            ),
+            RouteRule(
+                path_pattern=r"^/api/v1/tts/.*",
+                methods=[HTTPMethod.POST],
+                service_name="models",
+                strip_prefix=False,
+                timeout=120,  # Longer timeout for TTS processing
+                retries=1,
+                auth_required=True
+            ),
+            RouteRule(
+                path_pattern=r"^/api/v1/nlp/.*",
+                methods=[HTTPMethod.POST],
+                service_name="models",
+                strip_prefix=False,
+                timeout=120,  # Longer timeout for NLP processing
+                retries=1,
+                auth_required=True
+            ),
         ]
         
         self._routes.extend(default_routes)

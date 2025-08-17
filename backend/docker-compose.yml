@@ -363,6 +363,59 @@ services:
       retries: 3
       start_period: 60s
 
+  # Models Service (NEW - BK-008 Integration)
+  models-service:
+    build:
+      context: ./services/models_service
+      dockerfile: Dockerfile
+    ports:
+      - "8085:8080"
+    env_file:
+      - .env
+    environment:
+      - MODELS_SERVICE_HOST=0.0.0.0
+      - MODELS_SERVICE_PORT=8080
+      - MODELS_CACHE_DIR=/app/cache
+      - HUGGINGFACE_CACHE_DIR=/app/cache/huggingface
+      - PYTORCH_CACHE_DIR=/app/cache/pytorch
+      - WHISPER_CACHE_DIR=/app/cache/whisper
+      - TTS_CACHE_DIR=/app/cache/tts
+      - MODELS_DOWNLOAD_DIR=/app/models
+      - LOG_LEVEL=INFO
+      - ENABLE_GPU=false
+      - MAX_WORKERS=4
+      - REQUEST_TIMEOUT=120
+      - MODEL_TIMEOUT=300
+      # STT Configuration
+      - STT_DEFAULT_MODEL=whisper_base
+      - STT_LANGUAGES=en,hi,te,ta,bn,mr,gu,kn,ml,pa,ur,as,or,ne,si
+      # TTS Configuration  
+      - TTS_DEFAULT_ENGINE=espeak
+      - TTS_LANGUAGES=en,hi,te,ta,bn,mr,gu,kn,ml,pa,ur,as,or,ne,si
+      # NLP Configuration
+      - NLP_DEFAULT_ENGINE=transformers
+      - TRANSLATION_DEFAULT_ENGINE=marian
+      - SENTIMENT_DEFAULT_MODEL=cardiffnlp/twitter-roberta-base-sentiment-latest
+    volumes:
+      - models_cache:/app/cache
+      - models_data:/app/models
+      - ./services/models_service/logs:/app/logs
+    networks:
+      - mantrapath-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
+      interval: 45s
+      timeout: 15s
+      retries: 3
+      start_period: 120s  # Models service needs more time to start
+    deploy:
+      resources:
+        limits:
+          memory: 4G
+        reservations:
+          memory: 2G
+
   # AI Context Store Service
   ai-context-store:
     build:
@@ -579,6 +632,65 @@ services:
       retries: 3
       start_period: 60s
 
+  # Proactive Assistance Engine Service (V3 Sprint 2)
+  proactive-assistance-engine:
+    build:
+      context: .
+      dockerfile: services/proactive_assistance_engine/Dockerfile
+    ports:
+      - "8018:8018"
+    env_file:
+      - .env
+    environment:
+      - PROACTIVE_ASSISTANCE_HOST=0.0.0.0
+      - PROACTIVE_ASSISTANCE_PORT=8018
+      - DATABASE_URL=postgresql://mantrapath:mantrapath123@postgres:5432/mantrapath
+      - REDIS_URL=redis://redis:6379
+      - NATS_URL=nats://nats:4222
+      - JWT_SECRET_KEY=${JWT_SECRET_KEY:-your-super-secret-jwt-key-change-in-production}
+      - LOG_LEVEL=info
+      - ENVIRONMENT=development
+      # Service Integration URLs
+      - AI_EVENT_PROCESSOR_URL=http://ai-event-processor:8014
+      - AI_CONTEXT_STORE_URL=http://ai-context-store:8013
+      - CULTURAL_INTELLIGENCE_URL=http://cultural-intelligence:8017
+      - MODELS_SERVICE_URL=http://models-service:8085  # NEW - Models Service Integration
+      # Performance Configuration
+      - MAX_CONCURRENT_EVALUATIONS=50
+      - EVALUATION_TIMEOUT=30
+      - ASSISTANCE_CACHE_TTL=1800
+      - METRICS_EXPORT_INTERVAL=60
+      # Cultural Intelligence Configuration
+      - CULTURAL_ADAPTATION_ENABLED=true
+      - CULTURAL_FALLBACK_ENABLED=true
+      - DEFAULT_CULTURE=neutral
+      # Timing Configuration
+      - MIN_ASSISTANCE_GAP_MINUTES=30
+      - MAX_DAILY_ASSISTANCE=10
+      - PREFERRED_TIME_WINDOWS=enabled
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      nats:
+        condition: service_healthy
+      ai-event-processor:
+        condition: service_healthy
+      ai-context-store:
+        condition: service_healthy
+      models-service:  # NEW - Models Service dependency
+        condition: service_healthy
+    networks:
+      - mantrapath-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8018/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+
   # Voice Event Processor Service (V3 Sprint 2)
   voice-event-processor:
     build:
@@ -630,6 +742,8 @@ volumes:
   agent_redis_data:
   nats_data:
   ai_models_cache:
+  models_cache:    # NEW - Models Service cache
+  models_data:     # NEW - Models Service model storage
 
 networks:
   mantrapath-network:

@@ -136,6 +136,10 @@ class ServiceConfig(BaseSettings):
     action_orchestrator_url: str = Field(default="http://action-orchestrator:8012")
     action_orchestrator_health_path: str = Field(default="/health")
     
+    # Models Service (NEW - BK-008 Integration)
+    models_service_url: str = Field(default="http://models-service:8085")
+    models_service_health_path: str = Field(default="/health")
+    
     model_config = {
         "env_file": ".env", 
         "env_prefix": "SERVICE_",

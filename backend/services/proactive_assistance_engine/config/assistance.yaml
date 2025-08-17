@@ -1,0 +1,221 @@
+# Proactive Assistance Engine Configuration
+# V3-BK-008 Implementation
+
+proactive_assistance:
+  # Evaluation Configuration
+  evaluation:
+    interval_minutes: 30
+    min_gap_between_assistance_hours: 2
+    cultural_sensitivity_threshold: 0.9
+    timing_confidence_threshold: 0.7
+    max_evaluation_retries: 3
+    evaluation_timeout_seconds: 30
+  
+  # Timing Configuration
+  timing:
+    preferred_windows:
+      morning: {start: 8, end: 11, weight: 0.8}
+      afternoon: {start: 14, end: 17, weight: 0.9}  
+      evening: {start: 18, end: 21, weight: 0.7}
+      night: {start: 22, end: 6, weight: 0.3}
+    
+    cultural_timing_adaptations:
+      collectivist:
+        family_time_awareness: true
+        respect_meal_times: true
+        religious_time_consideration: true
+      individualist:
+        personal_schedule_focus: true
+        work_hour_respect: true
+        efficiency_valued: true
+  
+  # Cultural Configuration
+  cultural:
+    adaptation_required: true
+    minimum_confidence: 0.7
+    supported_cultures:
+      - collectivist
+      - individualist
+      - high_context
+      - low_context
+      - neutral
+    
+    communication_styles:
+      - direct
+      - indirect
+      - neutral
+      - high_context
+      - low_context
+  
+  # Help Content Configuration
+  help_content:
+    max_suggestions: 3
+    relevance_threshold: 0.6
+    cultural_adaptation_required: true
+    fallback_content_enabled: true
+    
+    categories:
+      - crisis_intervention
+      - mood_support
+      - proactive_check_in
+      - behavioral_guidance
+      - cultural_adaptation
+  
+  # Service Integration Configuration
+  integration:
+    ai_event_processor_url: "http://ai-event-processor:8014"
+    ai_context_store_url: "http://ai-context-store:8013"
+    cultural_intelligence_url: "http://localhost:8017"
+    models_service_url: "http://models-service:8080"  # NEW - BK-008 Integration (fixed internal port)
+    timeout_seconds: 30
+    retry_attempts: 3
+    health_check_interval: 60
+    
+    # Models Service Configuration (NEW)
+    models_service:
+      enabled: true
+      voice_processing_enabled: true
+      multilingual_support_enabled: true
+      fallback_to_external_apis: true
+      preferred_models:
+        stt: "whisper_base"
+        tts: "espeak"
+        translation: "default"
+        sentiment: "default"
+    
+    endpoints:
+      ai_event_processor:
+        intervention_analysis: "/api/v1/intervention/analyze/{user_id}"
+        health: "/health"
+        metrics: "/api/v1/metrics"
+      
+      ai_context_store:
+        user_context: "/api/v1/context/user/{user_id}"
+        intelligence_insights: "/api/v1/intelligence/insights/{user_id}"
+        health: "/health"
+        metrics: "/metrics"
+      
+      cultural_intelligence:
+        cultural_evaluation: "/api/v1/cultural/evaluate"
+        content_adaptation: "/api/v1/cultural/adapt"
+        health: "/health"
+        metrics: "/api/v1/metrics"
+      
+      # Models Service Endpoints (NEW)
+      models_service:
+        stt_transcribe: "/api/v1/stt/transcribe"
+        tts_synthesize: "/api/v1/tts/synthesize"
+        nlp_translate: "/api/v1/nlp/translate"
+        nlp_sentiment: "/api/v1/nlp/sentiment"
+        nlp_embeddings: "/api/v1/nlp/embeddings"
+        health: "/health"
+        status: "/status"
+        models_available: "/models/available"
+        models_loaded: "/models/loaded"
+  
+  # Performance Configuration
+  performance:
+    max_concurrent_evaluations: 100
+    evaluation_timeout_ms: 5000
+    cache_ttl_seconds: 3600
+    metrics_export_interval: 60
+    
+    thresholds:
+      max_response_time_ms: 500
+      min_confidence_score: 0.7
+      max_error_rate: 0.1
+  
+  # Logging Configuration
+  logging:
+    level: "info"
+    format: "json"
+    include_timestamp: true
+    include_user_id: true
+    include_correlation_id: true
+    
+    structured_logging:
+      enabled: true
+      include_metrics: true
+      include_context: true
+  
+  # Event Configuration
+  events:
+    subscribed:
+      - "mood.entry_created"
+      - "journal.entry_created"
+      - "voice.crisis_detected"
+      - "chat.crisis_detected"
+    
+    published:
+      - "assistance.evaluation_completed"
+      - "assistance.triggered"
+      - "assistance.user_response"
+      - "assistance.timing_evaluated"
+      - "assistance.cultural_evaluated"
+    
+    event_bus:
+      type: "nats"
+      nats_url: "nats://localhost:4222"
+      jetstream_enabled: true
+      durable_name: "proactive_assistance_consumer"
+  
+  # Database Configuration
+  database:
+    type: "postgresql"
+    connection_pool_size: 10
+    max_overflow: 20
+    pool_timeout: 30
+    pool_recycle: 3600
+    
+    tables:
+      assistance_history: "assistance_history"
+      user_preferences: "user_assistance_preferences"
+      cultural_profiles: "user_cultural_profiles"
+      timing_patterns: "user_timing_patterns"
+  
+  # Redis Configuration
+  redis:
+    enabled: true
+    connection_pool_size: 10
+    cache_ttl_seconds: 3600
+    key_prefix: "proactive_assistance"
+    
+    cache_keys:
+      user_context: "user_context:{user_id}"
+      assistance_history: "assistance_history:{user_id}"
+      cultural_profile: "cultural_profile:{user_id}"
+      timing_patterns: "timing_patterns:{user_id}"
+  
+  # Security Configuration
+  security:
+    authentication_required: true
+    authorization_enabled: true
+    rate_limiting_enabled: true
+    max_requests_per_minute: 100
+    
+    cors:
+      allowed_origins: ["*"]
+      allowed_methods: ["GET", "POST", "PUT", "DELETE"]
+      allowed_headers: ["*"]
+      allow_credentials: true
+  
+  # Monitoring Configuration
+  monitoring:
+    health_checks_enabled: true
+    metrics_enabled: true
+    tracing_enabled: false
+    alerting_enabled: true
+    
+    health_check_endpoints:
+      - "/health"
+      - "/health/live"
+      - "/health/ready"
+    
+    metrics_endpoints:
+      - "/api/v1/metrics"
+      - "/api/v1/integrations/status"
+    
+    alerting:
+      error_rate_threshold: 0.1
+      response_time_threshold_ms: 1000
+      cultural_appropriateness_threshold: 0.7
