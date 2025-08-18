@@ -254,7 +254,7 @@ class ActionDispatcher:
                 "health_endpoint": "/health"
             },
             "chatbot_service": {
-                "base_url": "http://chatbot-service:8008",
+                "base_url": "http://chatbot-service:8004",
                 "timeout": 30,
                 "health_endpoint": "/health"
             },

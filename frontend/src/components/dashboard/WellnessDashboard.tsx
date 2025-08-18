@@ -4,7 +4,7 @@ import { Progress } from "@/components/ui/progress"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { Trophy, Heart, BookOpen, Users, Target, Brain, Palette, ChartLine, Share, Broadcast } from "@phosphor-icons/react"
+import { Trophy, Heart, BookOpen, Users, Target, Brain, Palette, ChartLine, Share, Broadcast, ArrowClockwise } from "@phosphor-icons/react"
 import { useUserStats, useWellness } from "@/hooks/useWellness"
 import { useJournal } from "@/hooks/useJournal"
 import { useMoodBasedTheme } from "@/hooks/useMoodTheme"
@@ -21,7 +21,7 @@ export function WellnessDashboard() {
   const { currentTheme, availableThemes, applyTheme, autoApplyMoodTheme, getCurrentMood, isThemeChanging } = useMoodBasedTheme()
   
   // E4: Real-time insights integration
-  const { insights: realtimeInsights, isConnected: isWebSocketConnected, connectionError } = useRealtimeInsights()
+  const { insights: realtimeInsights, isConnected: isWebSocketConnected, connectionError, retryConnection } = useRealtimeInsights()
   
   const [moodTrend, setMoodTrend] = useState<'improving' | 'declining' | 'stable'>('stable')
   
@@ -124,6 +124,17 @@ export function WellnessDashboard() {
                   </span>
                   {connectionError && (
                     <span className="text-amber-500 ml-1" title={connectionError}>⚠️</span>
+                  )}
+                  {!isWebSocketConnected && (
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={retryConnection}
+                      className="text-xs ml-2 h-6 px-2"
+                    >
+                      <ArrowClockwise size={12} className="mr-1" />
+                      Retry
+                    </Button>
                   )}
                 </div>
               </div>

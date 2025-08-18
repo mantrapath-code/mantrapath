@@ -235,7 +235,7 @@ services:
       retries: 5
       start_period: 30s
 
-  # Chatbot Service
+  # Chatbot Service (Enhanced - Phase 1)
   chatbot-service:
     build:
       context: .
@@ -245,12 +245,49 @@ services:
     env_file:
       - .env
     environment:
+      # Database and Core Infrastructure
       - DATABASE_URL=postgresql://mantrapath:mantrapath123@postgres:5432/mantrapath
       - REDIS_URL=redis://redis:6379
       - AGENT_REDIS_URL=redis://agent-redis:6379
       - JWT_SECRET_KEY=${JWT_SECRET_KEY:-your-super-secret-jwt-key-change-in-production}
-      - OPENAI_API_KEY=${OPENAI_API_KEY:-your-openai-api-key-here}
       - PHI4_MODEL_AVAILABLE=true
+      
+      # Phase 1 Service Integration URLs (corrected ports)
+      - MODELS_SERVICE_URL=http://models-service:8080
+      - ML_SERVICE_URL=http://ml-service:8008
+      - AI_CONTEXT_STORE_URL=http://ai-context-store:8013
+      - TRANSLATION_SERVICE_URL=http://translation-service:8010
+      - VOICE_SERVICE_URL=http://voice-service:8011
+      - ACTION_ORCHESTRATOR_URL=http://action-orchestrator:8012
+      
+      # Service Configuration
+      - MODELS_SERVICE_TIMEOUT=30
+      - MODELS_SERVICE_ENABLED=true
+      - ML_SERVICE_ENABLED=true
+      - AI_CONTEXT_STORE_ENABLED=true
+      - TRANSLATION_SERVICE_ENABLED=true
+      - VOICE_SERVICE_ENABLED=true
+      - ACTION_ORCHESTRATOR_ENABLED=true
+      
+      # Chatbot Configuration
+      - CHATBOT_DEFAULT_LANGUAGE=hi
+      - CHATBOT_CRISIS_THRESHOLD=0.7
+      - CHATBOT_ENABLE_VOICE=true
+      - CHATBOT_ENABLE_TRANSLATION=true
+      - CHATBOT_ENABLE_ML_INSIGHTS=true
+      - CHATBOT_CULTURAL_ADAPTATION_ENABLED=true
+      - CHATBOT_RESPONSE_TIMEOUT=30
+      - CHATBOT_MAX_CONTEXT_LENGTH=4000
+      - CHATBOT_LOG_LEVEL=INFO
+      
+      # Crisis Detection
+      - CHATBOT_CRISIS_DETECTION_ENABLED=true
+      - CHATBOT_EMOTION_DETECTION_ENABLED=true
+      - CHATBOT_PERSONALIZATION_ENABLED=true
+      
+      # External API Keys (Phase 1 eliminates these dependencies)
+      # - OPENAI_API_KEY=${OPENAI_API_KEY:-disabled-using-internal-services}
+      
     extra_hosts:
       - "host.docker.internal:host-gateway"
     depends_on:
@@ -260,9 +297,19 @@ services:
         condition: service_healthy
       agent-redis:
         condition: service_healthy
+      models-service:
+        condition: service_healthy
+      ml-service:
+        condition: service_healthy
     networks:
       - mantrapath-network
     restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8004/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 60s
 
   # Content Service
   content-service:
@@ -654,7 +701,7 @@ services:
       - AI_EVENT_PROCESSOR_URL=http://ai-event-processor:8014
       - AI_CONTEXT_STORE_URL=http://ai-context-store:8013
       - CULTURAL_INTELLIGENCE_URL=http://cultural-intelligence:8017
-      - MODELS_SERVICE_URL=http://models-service:8085  # NEW - Models Service Integration
+      - MODELS_SERVICE_URL=http://models-service:8080  # NEW - Models Service Integration
       # Performance Configuration
       - MAX_CONCURRENT_EVALUATIONS=50
       - EVALUATION_TIMEOUT=30

@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect } from "react"
+import { useState, useRef, useEffect, useCallback } from "react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -32,6 +32,7 @@ export function ChatBot({ className }: ChatBotProps) {
   const [supportedLanguages, setSupportedLanguages] = useState<any[]>([])
   const [lastInputMethod, setLastInputMethod] = useState<'text' | 'voice'>('text') // Track input method
   const [lastTTSMessageId, setLastTTSMessageId] = useState<string | null>(null) // Prevent TTS loops
+  const isMountedRef = useRef(true) // Track component mount status
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const audioRef = useRef<HTMLAudioElement>(null)
   
@@ -47,6 +48,11 @@ export function ChatBot({ className }: ChatBotProps) {
   useEffect(() => {
     if (messages.length === 0) {
       actions.startNewSession()
+    }
+    
+    // Cleanup on unmount
+    return () => {
+      isMountedRef.current = false
     }
   }, [actions, messages.length])
 
@@ -83,26 +89,30 @@ export function ChatBot({ className }: ChatBotProps) {
   
   // Effect to handle TTS for new bot messages (only for voice responses when user spoke and auto TTS is enabled)
   useEffect(() => {
-    if (voiceEnabled && autoTTS && messages.length > 0) {
-      const lastMessage = messages[messages.length - 1]
-      // Only trigger TTS for assistant responses that are NOT greeting/welcome messages
-      // and only if the user used voice input (indicating they want voice interaction)
-      // and we haven't already spoken this message
-      if (lastMessage && 
-          lastMessage.sender === 'assistant' && 
-          lastMessage.messageType !== 'greeting' &&
-          lastInputMethod === 'voice' &&
-          lastMessage.id !== lastTTSMessageId &&
-          messages.length > 1) { // Ensure there's been at least one user message
-        // Delay TTS slightly to ensure message is rendered
-        setTimeout(() => {
+    if (!isMountedRef.current || !voiceEnabled || !autoTTS || messages.length === 0) return
+    
+    const lastMessage = messages[messages.length - 1]
+    // Only trigger TTS for assistant responses that are NOT greeting/welcome messages
+    // and only if the user used voice input (indicating they want voice interaction)
+    // and we haven't already spoken this message
+    if (lastMessage && 
+        lastMessage.sender === 'assistant' && 
+        lastMessage.messageType !== 'greeting' &&
+        lastInputMethod === 'voice' &&
+        lastMessage.id !== lastTTSMessageId &&
+        messages.length > 1) { // Ensure there's been at least one user message
+      // Delay TTS slightly to ensure message is rendered
+      const timeoutId = setTimeout(() => {
+        if (isMountedRef.current) {
           speakMessage(lastMessage.content)
           setLastTTSMessageId(lastMessage.id) // Mark this message as spoken
-        }, 500)
-      }
+        }
+      }, 500)
+      
+      // Cleanup timeout on unmount or dependency change
+      return () => clearTimeout(timeoutId)
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [messages, voiceEnabled, autoTTS, lastInputMethod])
+  }, [messages, voiceEnabled, autoTTS, lastInputMethod, lastTTSMessageId]) // speakMessage is stable
 
   const handleSend = async () => {
     if (!input.trim()) return
@@ -374,8 +384,34 @@ export function ChatBot({ className }: ChatBotProps) {
     loadLanguages()
   }, [])
 
+  // Fallback browser TTS
+  const fallbackTTS = useCallback((text: string) => {
+    if ('speechSynthesis' in window) {
+      const utterance = new SpeechSynthesisUtterance(text)
+      utterance.lang = selectedLanguage === 'en' ? 'en-US' : selectedLanguage
+      utterance.rate = 0.9
+      utterance.pitch = 1.0
+      utterance.volume = 0.8
+      
+      utterance.onend = () => setIsSpeaking(false)
+      utterance.onerror = () => {
+        setIsSpeaking(false)
+        toast.error('Voice output failed')
+      }
+      
+      speechSynthesis.speak(utterance)
+      
+      toast.info('Using browser voice synthesis', {
+        description: 'Backend TTS unavailable'
+      })
+    } else {
+      setIsSpeaking(false)
+      toast.error('Text-to-speech not supported in this browser')
+    }
+  }, [selectedLanguage])
+
   // Text-to-Speech functionality
-  const speakMessage = async (text: string) => {
+  const speakMessage = useCallback(async (text: string) => {
     if (!voiceEnabled || isSpeaking) return
     
     try {
@@ -411,33 +447,7 @@ export function ChatBot({ className }: ChatBotProps) {
       setIsSpeaking(false)
       toast.error('Voice output failed')
     }
-  }
-
-  // Fallback browser TTS
-  const fallbackTTS = (text: string) => {
-    if ('speechSynthesis' in window) {
-      const utterance = new SpeechSynthesisUtterance(text)
-      utterance.lang = selectedLanguage === 'en' ? 'en-US' : selectedLanguage
-      utterance.rate = 0.9
-      utterance.pitch = 1.0
-      utterance.volume = 0.8
-      
-      utterance.onend = () => setIsSpeaking(false)
-      utterance.onerror = () => {
-        setIsSpeaking(false)
-        toast.error('Voice output failed')
-      }
-      
-      speechSynthesis.speak(utterance)
-      
-      toast.info('Using browser voice synthesis', {
-        description: 'Backend TTS unavailable'
-      })
-    } else {
-      setIsSpeaking(false)
-      toast.error('Text-to-speech not supported in this browser')
-    }
-  }
+  }, [voiceEnabled, isSpeaking, selectedLanguage, fallbackTTS])
 
   // Language detection and translation
   const handleLanguageDetectionAndTranslation = async (message: string) => {

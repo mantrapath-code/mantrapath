@@ -132,7 +132,29 @@ Respond with empathy, understanding, and practical wellness guidance. If user se
       if ((err as any).name !== 'AbortError') {
         console.error('Failed to send message:', err)
         setError('Failed to send message')
-        toast.error('Failed to send message to chatbot')
+        
+        // Provide a helpful fallback response instead of just an error
+        const fallbackResponses = [
+          "I'm sorry, I'm having some connection issues right now. In the meantime, here are some wellness tips: Take a few deep breaths, drink some water, and remember that you're not alone. 💙",
+          "I can't connect to the server at the moment, but I want you to know that your wellness matters. Try stepping outside for some fresh air or listening to calming music. 🌱",
+          "While I work on reconnecting, here's a gentle reminder: it's okay to take things one moment at a time. Consider doing a brief mindfulness exercise or reaching out to someone you trust. ✨",
+          "I'm experiencing technical difficulties, but your mental health journey is important. Take a moment to check in with yourself - how are you feeling right now? Remember to be kind to yourself. 🌸"
+        ]
+        
+        const randomResponse = fallbackResponses[Math.floor(Math.random() * fallbackResponses.length)]
+        
+        const fallbackMessage: ChatMessage = {
+          id: (Date.now() + 1).toString(),
+          sender: 'assistant',
+          content: randomResponse,
+          timestamp: new Date().toISOString(),
+          messageType: 'fallback',
+          source: 'fallback',
+          confidence_score: 0.5
+        }
+        
+        setMessages(prev => [...prev, fallbackMessage])
+        toast.warning('Using offline mode - limited functionality available')
       }
     } finally {
       setIsTyping(false)

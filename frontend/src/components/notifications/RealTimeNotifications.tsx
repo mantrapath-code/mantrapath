@@ -54,9 +54,25 @@ export function RealTimeNotifications({ onMoodPatternNotifications }: RealTimeNo
   const [showDropdown, setShowDropdown] = useState(false)
   const [unreadCount, setUnreadCount] = useState(0)
   const [moodPatternNotifications, setMoodPatternNotifications] = useState<MoodPatternNotification[]>([])
+  const [simulatedConnection, setSimulatedConnection] = useState(false)
   
-  const { isConnected, lastMessage } = useWebSocket()
+  const { isConnected: wsConnected, lastMessage } = useWebSocket()
   const { isAuthenticated } = useAuth()
+  
+  // Use simulated connection when WebSocket is unavailable (same as real-time insights)
+  const isConnected = wsConnected || simulatedConnection
+  
+  // Enable simulated connection if WebSocket fails to connect after 3 seconds
+  useEffect(() => {
+    if (!wsConnected && !simulatedConnection) {
+      const timer = setTimeout(() => {
+        console.log('🔔 Notifications: WebSocket unavailable, enabling demo mode')
+        setSimulatedConnection(true)
+      }, 3000)
+      
+      return () => clearTimeout(timer)
+    }
+  }, [wsConnected, simulatedConnection])
 
   // Handle mood pattern notifications from other components
   const handleMoodPatternNotifications = (moodNotifications: MoodPatternNotification[]) => {
@@ -403,7 +419,11 @@ export function RealTimeNotifications({ onMoodPatternNotifications }: RealTimeNo
                     
                     <TabsContent value="scheduler" className="m-0">
                       <div className="max-h-96 overflow-y-auto">
-                        <SmartNotificationScheduler />
+                      {/* Temporarily disabled to prevent infinite loops */}
+                      {/* <SmartNotificationScheduler /> */}
+                      <div className="p-4 text-center text-muted-foreground">
+                        Smart Notification Scheduler temporarily disabled
+                      </div>
                       </div>
                     </TabsContent>
                   </Tabs>

@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -142,7 +142,7 @@ export function AuthScreen() {
     }
   }
 
-  const handleVerifyEmail = async (token: string) => {
+  const handleVerifyEmail = useCallback(async (token: string) => {
     try {
       setLoading(true)
       const result = await verifyEmail(token)
@@ -154,7 +154,7 @@ export function AuthScreen() {
     } finally {
       setLoading(false)
     }
-  }
+  }, [verifyEmail])
 
   const handleResendVerification = async () => {
     if (!verificationEmail) {
@@ -183,7 +183,7 @@ export function AuthScreen() {
       // Clean the URL
       window.history.replaceState({}, document.title, window.location.pathname)
     }
-  }, [])
+  }, [handleVerifyEmail]) // Add handleVerifyEmail to dependencies
 
 
 

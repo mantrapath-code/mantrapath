@@ -5,7 +5,7 @@ Supporting Voice, AI, Cultural Intelligence, and Core Service Events
 
 # Import core event functions from sibling events module
 try:
-    from ..core_events import (
+    from shared.core_events import (
         publish_mood_entry_created,
         publish_journal_entry_created,
         publish_challenge_progress_updated,
@@ -22,7 +22,7 @@ except ImportError as e:
     CORE_EVENTS_AVAILABLE = False
 
 try:
-    from .voice_events import (
+    from shared.events.voice_events import (
         VoiceActivityEvent,
         VoiceIntentEvent,
         VoiceEventType,
@@ -33,7 +33,7 @@ except ImportError:
     VOICE_EVENTS_AVAILABLE = False
 
 try:
-    from .ai_events import (
+    from shared.events.ai_events import (
         AIProcessingEvent,
         CrossServiceIntelligenceEvent,
         AIEventType,
@@ -44,7 +44,7 @@ except ImportError:
     AI_EVENTS_AVAILABLE = False
 
 try:
-    from .cultural_events import (
+    from shared.events.cultural_events import (
         CulturalContextEvent,
         RegionalIntelligenceEvent,
         CulturalEventType,
@@ -55,7 +55,7 @@ except ImportError:
     CULTURAL_EVENTS_AVAILABLE = False
 
 try:
-    from .enhanced_bus import (
+    from shared.events.enhanced_bus import (
         EnhancedEventBus,
         get_enhanced_event_bus,
         cleanup_enhanced_event_bus,

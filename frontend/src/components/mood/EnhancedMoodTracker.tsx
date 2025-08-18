@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo, useCallback } from 'react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
@@ -90,6 +90,65 @@ export function EnhancedMoodTracker({
   const [todayEntryCount, setTodayEntryCount] = useState(0)
   const [isFirstEntryToday, setIsFirstEntryToday] = useState(true)
 
+  // Memoize state setters to prevent infinite loops
+  const handleVoiceEnabledChange = useCallback((checked: boolean) => {
+    setVoiceEnabled(checked)
+  }, [])
+
+  const handleWeatherEnabledChange = useCallback((checked: boolean) => {
+    setWeatherEnabled(checked)
+  }, [])
+
+  const handleRealtimeEnabledChange = useCallback((checked: boolean) => {
+    setRealtimeEnabled(checked)
+  }, [])
+
+  const handleActiveTabChange = useCallback((value: string) => {
+    setActiveTab(value)
+  }, [])
+
+  // Memoize the cultural context object to prevent unnecessary re-renders
+  const memoizedCulturalContext = useMemo(() => {
+    if (!currentCulturalContext) return undefined
+    return {
+      region: currentCulturalContext.region,
+      language: currentCulturalContext.language,
+      weatherMetaphors: {}
+    }
+  }, [currentCulturalContext?.region, currentCulturalContext?.language])
+
+  // Memoize the voice cultural context object to prevent unnecessary re-renders
+  const memoizedVoiceCulturalContext = useMemo(() => {
+    if (!currentCulturalContext) return undefined
+    return {
+      region: currentCulturalContext.region,
+      language: currentCulturalContext.language,
+      voicePrompts: {
+        'en-US': 'Tell me how you\'re feeling today...',
+        'ja-JP': '今日の気分を教えてください...',
+        'es-ES': 'Dime cómo te sientes hoy...',
+        'fr-FR': 'Dis-moi comment tu te sens aujourd\'hui...'
+      }
+    }
+  }, [currentCulturalContext?.region, currentCulturalContext?.language])
+
+  // Memoize the last mood entry time to prevent unnecessary recalculations
+  const lastMoodEntryTime = useMemo(() => {
+    if (!lastMoodEntry?.timestamp) return null
+    return new Date(lastMoodEntry.timestamp).toLocaleTimeString()
+  }, [lastMoodEntry?.timestamp])
+
+  // Memoize the cultural context object for callbacks to prevent unnecessary re-renders
+  const memoizedCallbackCulturalContext = useMemo(() => {
+    return {
+      region: 'US',
+      language: 'en',
+      culturalEmotions: [],
+      moodExpressionPatterns: {},
+      celebrationTriggers: []
+    }
+  }, [])
+
   useEffect(() => {
     // Check if user has already logged mood today
     const today = new Date().toDateString()
@@ -97,7 +156,27 @@ export function EnhancedMoodTracker({
     setIsFirstEntryToday(!lastEntryDate || lastEntryDate !== today)
   }, [])
 
-  const handleMoodEntryAdded = (moodData: any) => {
+  // Initialize cultural context from props if provided
+  useEffect(() => {
+    if (culturalContext && !currentCulturalContext) {
+      setCurrentCulturalContext(culturalContext as CulturalMoodContext)
+    }
+  }, [culturalContext, currentCulturalContext])
+
+  // Sync state with props changes
+  useEffect(() => {
+    setVoiceEnabled(enableVoice)
+  }, [enableVoice])
+
+  useEffect(() => {
+    setWeatherEnabled(showEmotionalWeather)
+  }, [showEmotionalWeather])
+
+  useEffect(() => {
+    setRealtimeEnabled(enableRealtime)
+  }, [enableRealtime])
+
+  const handleMoodEntryAdded = useCallback((moodData: any) => {
     const entry: MoodEntry = {
       mood_score: moodData.mood_score || moodData.mood || 0,
       energy_level: moodData.energy_level || moodData.energy || 0,
@@ -114,14 +193,14 @@ export function EnhancedMoodTracker({
     localStorage.setItem('lastMoodEntryDate', new Date().toDateString())
     
     onMoodEntryAdded?.(entry)
-  }
+  }, [onMoodEntryAdded])
 
-  const handleVoiceInput = (transcript: string) => {
+  const handleVoiceInput = useCallback((transcript: string) => {
     // Auto-fill notes in quick entry with voice transcript
     console.log('Voice input received:', transcript)
-  }
+  }, [])
 
-  const handleVoiceComplete = async (finalTranscript: string, confidence: number) => {
+  const handleVoiceComplete = useCallback(async (finalTranscript: string, confidence: number) => {
     if (confidence > 0.3 && finalTranscript.trim()) {
       try {
         // Process voice input and extract mood
@@ -146,13 +225,14 @@ export function EnhancedMoodTracker({
           
           // Trigger cultural context update if language detected
           if (moodData.language && onCulturalContextChange) {
-            onCulturalContextChange({
+            const contextUpdate = {
               region: moodData.language === 'hi' ? 'IN' : moodData.language === 'es' ? 'ES' : 'US',
               language: moodData.language,
               culturalEmotions: [],
               moodExpressionPatterns: {},
               celebrationTriggers: []
-            })
+            }
+            onCulturalContextChange(contextUpdate)
           }
         } else {
           // Even if we couldn't extract specific mood, still create an entry
@@ -178,10 +258,10 @@ export function EnhancedMoodTracker({
         })
       }
     }
-  }
+  }, [handleMoodEntryAdded, onCulturalContextChange])
 
   // Helper function to extract mood from text using multi-language keyword analysis
-  const extractMoodFromText = (text: string): { mood: number; energy: number; stress: number; language?: string } | null => {
+  const extractMoodFromText = useCallback((text: string): { mood: number; energy: number; stress: number; language?: string } | null => {
     const lowerText = text.toLowerCase()
     
     // Multi-language mood indicators
@@ -270,18 +350,18 @@ export function EnhancedMoodTracker({
     }
     
     return { mood, energy, stress, language: detectedLanguage }
-  }
+  }, [])
 
   // Helper function to get mood label
-  const getMoodLabel = (score: number): string => {
+  const getMoodLabel = useCallback((score: number): string => {
     if (score >= 8) return 'Excellent'
     if (score >= 6) return 'Good'
     if (score >= 4) return 'Neutral'
     if (score >= 2) return 'Low'
     return 'Very Low'
-  }
+  }, [])
 
-  const handleCulturalMoodSubmit = (mood: number, expression: string, celebration?: string) => {
+  const handleCulturalMoodSubmit = useCallback((mood: number, expression: string, celebration?: string) => {
     const culturalEntry: MoodEntry = {
       mood_score: mood,
       energy_level: mood, // Use same value for simplicity
@@ -291,18 +371,18 @@ export function EnhancedMoodTracker({
     }
 
     handleMoodEntryAdded(culturalEntry)
-  }
+  }, [handleMoodEntryAdded])
 
-  const handleWeatherUpdate = (data: EmotionalWeatherData) => {
+  const handleWeatherUpdate = useCallback((data: EmotionalWeatherData) => {
     setWeatherData(data)
-  }
+  }, [])
 
-  const handleCulturalContextChange = (context: CulturalMoodContext) => {
+  const handleCulturalContextChange = useCallback((context: CulturalMoodContext) => {
     setCurrentCulturalContext(context)
     onCulturalContextChange?.(context)
-  }
+  }, [onCulturalContextChange])
 
-  const getGreeting = () => {
+  const getGreeting = useMemo(() => {
     const hour = new Date().getHours()
     const culturalGreetings = currentCulturalContext?.language === 'ja-JP' 
       ? { morning: 'おはようございます', afternoon: 'こんにちは', evening: 'こんばんは' }
@@ -315,7 +395,7 @@ export function EnhancedMoodTracker({
     if (hour < 12) return culturalGreetings.morning
     if (hour < 18) return culturalGreetings.afternoon
     return culturalGreetings.evening
-  }
+  }, [currentCulturalContext?.language])
 
   return (
     <div className={`space-y-6 ${className}`}>
@@ -328,7 +408,7 @@ export function EnhancedMoodTracker({
         <div>
           <h2 className="text-2xl font-bold flex items-center gap-2">
             <Heart className="text-red-500" />
-            {getGreeting()}
+            {getGreeting}
           </h2>
           <p className="text-muted-foreground">
             {isFirstEntryToday 
@@ -363,8 +443,9 @@ export function EnhancedMoodTracker({
                 <span className="text-sm">Voice Input</span>
               </div>
               <Switch 
+                key="voice-switch"
                 checked={voiceEnabled} 
-                onCheckedChange={setVoiceEnabled}
+                onCheckedChange={handleVoiceEnabledChange}
               />
             </div>
             
@@ -374,8 +455,9 @@ export function EnhancedMoodTracker({
                 <span className="text-sm">Weather Forecast</span>
               </div>
               <Switch 
+                key="weather-switch"
                 checked={weatherEnabled} 
-                onCheckedChange={setWeatherEnabled}
+                onCheckedChange={handleWeatherEnabledChange}
               />
             </div>
             
@@ -385,8 +467,9 @@ export function EnhancedMoodTracker({
                 <span className="text-sm">Real-time Sync</span>
               </div>
               <Switch 
+                key="realtime-switch"
                 checked={realtimeEnabled} 
-                onCheckedChange={setRealtimeEnabled}
+                onCheckedChange={handleRealtimeEnabledChange}
               />
             </div>
           </div>
@@ -406,11 +489,7 @@ export function EnhancedMoodTracker({
               showDetails={true}
               autoRefresh={realtimeEnabled}
               onWeatherUpdate={handleWeatherUpdate}
-              culturalContext={currentCulturalContext ? {
-                region: currentCulturalContext.region,
-                language: currentCulturalContext.language,
-                weatherMetaphors: {}
-              } : undefined}
+              culturalContext={memoizedCulturalContext}
             />
           </motion.div>
         )}
@@ -425,13 +504,13 @@ export function EnhancedMoodTracker({
             {lastMoodEntry && (
               <Badge variant="outline" className="ml-auto">
                 <CheckCircle size={12} className="mr-1" />
-                Last: {new Date(lastMoodEntry.timestamp!).toLocaleTimeString()}
+                Last: {lastMoodEntryTime}
               </Badge>
             )}
           </CardTitle>
         </CardHeader>
         <CardContent>
-          <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
+          <Tabs value={activeTab} onValueChange={handleActiveTabChange} className="w-full">
             <TabsList className="grid w-full grid-cols-2">
               <TabsTrigger value="quick" className="flex items-center gap-2">
                 <Clock size={16} />
@@ -494,16 +573,7 @@ export function EnhancedMoodTracker({
                     onVoiceInput={handleVoiceInput}
                     onVoiceComplete={handleVoiceComplete}
                     currentLanguage={currentCulturalContext?.language || 'en-US'}
-                    culturalContext={currentCulturalContext ? {
-                      region: currentCulturalContext.region,
-                      language: currentCulturalContext.language,
-                      voicePrompts: {
-                        'en-US': 'Tell me how you\'re feeling today...',
-                        'ja-JP': '今日の気分を教えてください...',
-                        'es-ES': 'Dime cómo te sientes hoy...',
-                        'fr-FR': 'Dis-moi comment tu te sens aujourd\'hui...'
-                      }
-                    } : undefined}
+                    culturalContext={memoizedVoiceCulturalContext}
                   />
                 ) : (
                   <div className="text-center py-8 text-muted-foreground">

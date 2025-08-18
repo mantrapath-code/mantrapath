@@ -185,7 +185,15 @@ class WorkflowBuilder:
         # Add context parameters
         if context:
             context_mapping = action_template.get("context_mapping", {})
-            for context_key, context_value in context.items():
+            # Convert CulturalContext to dict if it's a Pydantic model
+            if hasattr(context, 'model_dump'):
+                context_dict = context.model_dump()
+            elif hasattr(context, 'dict'):
+                context_dict = context.dict()
+            else:
+                context_dict = context
+            
+            for context_key, context_value in context_dict.items():
                 if context_key in context_mapping:
                     action_param = context_mapping[context_key]
                     parameters[action_param] = context_value
@@ -310,7 +318,7 @@ class WorkflowBuilder:
                 "retry_count": 3
             },
             "chatbot_service": {
-                "base_url": "http://chatbot-service:8008",
+                "base_url": "http://chatbot-service:8004",
                 "timeout": 30,
                 "retry_count": 2
             },

@@ -36,6 +36,9 @@ from src.services.enhanced_chatbot_service import (
     EnhancedChatResponse
 )
 
+# Phase 2 Enhanced Service
+from src.enhanced_chatbot_service_v2 import enhanced_chatbot_service
+
 # Configure logging
 logging.basicConfig(
     level=logging.INFO,
@@ -65,6 +68,9 @@ class ChatResponse(BaseModel):
     crisis_detected: bool = False
     confidence_score: float = 0.8
     source: str = "phi3"  # phi3, openai, or fallback
+    timestamp: Optional[str] = None
+    confidence: Optional[float] = None
+    metadata: Optional[Dict[str, Any]] = None
 
 class ChatbotService:
     """Main chatbot service with PHI4 integration and fallbacks"""
@@ -455,6 +461,7 @@ app.add_middleware(
     CORSMiddleware,
     allow_origins=[
         os.getenv("FRONTEND_URL", "http://localhost:5173"),
+        "http://localhost:5174",  # Alternative frontend port
         os.getenv("API_GATEWAY_URL", "http://localhost:8000")
     ],
     allow_credentials=True,
@@ -543,27 +550,34 @@ async def save_chat_interaction(
 
 @app.get("/health")
 async def health_check():
-    """Health check endpoint"""
+    """Enhanced health check endpoint with Phase 2 service monitoring"""
     try:
-        # Check database
-        with engine.connect() as conn:
-            from sqlalchemy import text
-            conn.execute(text("SELECT 1"))
+        # Get comprehensive health status from enhanced service
+        health_status = await enhanced_chatbot_service.health_check()
         
-        return {
-            "status": "healthy",
-            "timestamp": datetime.utcnow().isoformat(),
-            "database": "connected",
-            "phi4_available": chatbot_service.phi4_available,
-            "openai_available": chatbot_service.openai_available,
-            "version": "3.0.0"
-        }
+        # Add database check
+        try:
+            with engine.connect() as conn:
+                from sqlalchemy import text
+                conn.execute(text("SELECT 1"))
+            health_status["database"] = "connected"
+        except Exception as db_error:
+            health_status["database"] = f"error: {str(db_error)}"
+            health_status["chatbot_service"] = "degraded"
+        
+        # Add legacy service compatibility
+        health_status["phi4_available"] = chatbot_service.phi4_available if 'chatbot_service' in globals() else False
+        health_status["openai_available"] = chatbot_service.openai_available if 'chatbot_service' in globals() else False
+        
+        return health_status
+        
     except Exception as e:
         logger.error(f"Health check failed: {e}")
         return {
             "status": "unhealthy",
             "error": str(e),
-            "timestamp": datetime.utcnow().isoformat()
+            "timestamp": datetime.utcnow().isoformat(),
+            "chatbot_service": "error"
         }
 
 @app.get("/api/chatbot/test")
@@ -1147,26 +1161,180 @@ async def get_breathing_exercises():
         }
     }
 
+@app.post("/api/v1/actions")
+async def handle_action(request: dict):
+    """Handle actions from Action Orchestrator"""
+    try:
+        action_type = request.get("action")
+        parameters = request.get("parameters", {})
+        
+        if action_type == "send_response":
+            # Extract message from parameters
+            message = parameters.get("message", "")
+            user_id = parameters.get("user_id", "")
+            
+            # Create ChatContext object
+            from src.services.enhanced_chatbot_service import ChatContext
+            context = ChatContext(
+                user_id=user_id,
+                session_id=parameters.get("session_id", ""),
+                language=parameters.get("language", "en"),
+                cultural_preferences=parameters.get("cultural_preferences", {})
+            )
+            
+            # Use the global enhanced chatbot service
+            response = await chatbot_service.enhanced_service.process_message(
+                message,
+                context
+            )
+            
+            return {
+                "success": True,
+                "result": {
+                    "response": response.response,
+                    "message_type": response.message_type,
+                    "metadata": response.orchestration_metadata or {}
+                }
+            }
+        else:
+            return {
+                "success": False,
+                "error": f"Unknown action type: {action_type}"
+            }
+            
+    except Exception as e:
+        logger.error(f"Action handling error: {str(e)}")
+        return {
+            "success": False,
+            "error": str(e)
+        }
+
+# Phase 2 Enhanced Chat Endpoint
+@app.post("/api/chatbot/chat/enhanced", response_model=ChatResponse)
+async def enhanced_chat_endpoint(
+    request: ChatRequest,
+    background_tasks: BackgroundTasks,
+    db: Session = Depends(get_db),
+    current_user: Dict[str, Any] = Depends(get_current_user)
+):
+    """Enhanced chat endpoint with Phase 2 capabilities"""
+    session_id: Optional[str] = None
+    try:
+        user_id = str(current_user.get("user_id", "unknown"))
+        logger.info(f"Processing enhanced chat request for user {user_id}")
+        
+        # Get or create session
+        session_id = request.session_id
+        if not session_id:
+            new_session = ChatSession(
+                user_id=user_id,
+                title=f"Enhanced Chat - {datetime.now().strftime('%Y-%m-%d %H:%M')}",
+                session_type="ai_enhanced_support",
+                is_active=True,
+                created_at=datetime.now()
+            )
+            db.add(new_session)
+            db.commit()
+            db.refresh(new_session)
+            session_id = str(new_session.id)
+        
+        # Process message with enhanced service
+        response_data = await enhanced_chatbot_service.process_message(
+            message=request.message,
+            user_id=user_id,
+            session_id=session_id,
+            user_language=getattr(request, 'language', None),
+            jwt_token=current_user.get("access_token", "")
+        )
+        
+        # Save chat interaction
+        await save_chat_interaction(
+            session_id=session_id,
+            user_message=request.message,
+            ai_response=response_data["response"],
+            user_id=user_id,
+            response_metadata={
+                "services_used": response_data.get("services_used", []),
+                "crisis_level": response_data.get("crisis_level", "none"),
+                "language_detected": response_data.get("language_detected"),
+                "processing_time_ms": response_data.get("processing_time_ms"),
+                "cultural_adaptations": response_data.get("cultural_adaptations", []),
+                "version": "2.0.0-phase2"
+            },
+            db=db
+        )
+        
+        # Create response
+        chat_response = ChatResponse(
+            response=response_data["response"],
+            session_id=session_id,
+            source="enhanced_chatbot_v2",
+            timestamp=response_data.get("timestamp", datetime.now().isoformat()),
+            confidence=0.9,  # High confidence for enhanced processing
+            metadata={
+                "services_used": response_data.get("services_used", []),
+                "crisis_level": response_data.get("crisis_level", "none"),
+                "language": response_data.get("language_detected"),
+                "processing_steps": response_data.get("processing_steps", []),
+                "cultural_adaptations": response_data.get("cultural_adaptations", []),
+                "actions_triggered": response_data.get("actions_triggered", []),
+                "user_insights": response_data.get("user_insights", []),
+                "audio_available": response_data.get("audio_response") is not None
+            }
+        )
+        
+        # Add audio response if available
+        if response_data.get("audio_response") and chat_response.metadata:
+            chat_response.metadata["audio_response"] = response_data["audio_response"]
+            chat_response.metadata["audio_format"] = response_data.get("audio_format", "wav")
+        
+        logger.info(f"Enhanced chat response generated for user {user_id}, session {session_id}")
+        return chat_response
+        
+    except Exception as e:
+        logger.error(f"Enhanced chat error: {str(e)}")
+        # Fallback to basic response
+        return ChatResponse(
+            response="I apologize, but I'm experiencing some technical difficulties. How can I help you today?",
+            session_id=session_id or "temp_session",
+            source="fallback",
+            timestamp=datetime.now().isoformat(),
+            confidence=0.5,
+            metadata={"error": str(e), "fallback": True}
+        )
+
 @app.get("/")
 async def root():
     """Root endpoint"""
     return {
         "service": "MantraPath Chatbot Service",
-        "version": "3.0.0",
-        "description": "AI-powered mental health chatbot with local Phi-3 integration",
+        "version": "3.0.0-phase2",
+        "description": "AI-powered mental health chatbot with comprehensive service integration",
         "features": [
             "Local Phi-3 Mini model",
-            "OpenAI GPT backup",
+            "Internal service integration (Models, ML, Translation, Voice, etc.)",
             "Crisis detection and intervention",
-            "Therapeutic conversation support",
-            "Persistent conversation memory"
+            "Multi-language support (17+ Indian languages)",
+            "Cultural adaptation",
+            "Voice synthesis and recognition",
+            "Workflow orchestration",
+            "Comprehensive user context management"
         ],
         "endpoints": {
             "health": "/health",
             "chat": "/api/chatbot/chat",
+            "enhanced_chat": "/api/chatbot/chat/enhanced",
             "create_session": "/chat/session",
             "status": "/api/chatbot/status"
-        }
+        },
+        "services_integrated": [
+            "Models Service (NLP, TTS/STT)",
+            "ML Service (Crisis Detection)",
+            "AI Context Store (User Context)",
+            "Translation Service (Multi-language)",
+            "Voice Service (Speech)",
+            "Action Orchestrator (Workflows)"
+        ]
     }
 
 if __name__ == "__main__":

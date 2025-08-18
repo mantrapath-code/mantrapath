@@ -218,7 +218,7 @@ export function InsightsPage({ onBack }: InsightsPageProps) {
       >
         <EmotionalWeatherWidget 
           showDetails={true}
-          autoRefresh={true}
+          autoRefresh={false}
           onWeatherUpdate={(data) => {
             console.log('Weather updated:', data)
           }}

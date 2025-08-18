@@ -108,6 +108,8 @@ class EnhancedChatbotService:
     ) -> Optional[OrchestrationResponse]:
         """Orchestrate conversation through Action Orchestrator"""
         try:
+            logger.info(f"Starting orchestration for user_id: {context.user_id}, session_id: {context.session_id}, message: {message}")
+            
             # Build orchestration request
             orchestration_context: Dict[str, Any] = {
                 "conversation_history": context.conversation_history or [],
@@ -126,10 +128,18 @@ class EnhancedChatbotService:
                 context=orchestration_context
             )
             
-            return await action_orchestrator_client.orchestrate_action(request, jwt_token)
+            logger.info(f"Sending orchestration request: user_id={request.user_id}, session_id={request.session_id}")
+            result = await action_orchestrator_client.orchestrate_action(request, jwt_token)
+            
+            if result:
+                logger.info(f"Orchestration successful: intent={result.intent.intent_type}, confidence={result.intent.confidence}")
+            else:
+                logger.warning("Orchestration returned None - will fallback")
+                
+            return result
             
         except Exception as e:
-            logger.error(f"Conversation orchestration failed: {e}")
+            logger.error(f"Conversation orchestration failed: {e}", exc_info=True)
             return None
     
     async def _build_enhanced_response(

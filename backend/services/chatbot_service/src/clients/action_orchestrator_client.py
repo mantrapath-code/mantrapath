@@ -97,6 +97,9 @@ class ActionOrchestratorClient:
                 "context": request.context or {}
             }
             
+            logger.info(f"Sending orchestration request to {self.action_orchestrator_url}/api/v1/orchestrate")
+            logger.info(f"Payload: user_id={payload['user_id']}, session_id={payload['session_id']}, message='{payload['voice_input']}'")
+            
             async with httpx.AsyncClient(timeout=self.timeout) as client:
                 response = await client.post(
                     f"{self.action_orchestrator_url}/api/v1/orchestrate",
@@ -104,8 +107,11 @@ class ActionOrchestratorClient:
                     headers=headers
                 )
                 
+                logger.info(f"Action Orchestrator response status: {response.status_code}")
+                
                 if response.status_code == 200:
                     data = response.json()
+                    logger.info(f"Action Orchestrator success: workflow_id={data.get('workflow_id')}")
                     return self._parse_orchestration_response(data)
                 else:
                     logger.warning(

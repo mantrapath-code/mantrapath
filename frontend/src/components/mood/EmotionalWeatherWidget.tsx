@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -42,6 +42,8 @@ interface EmotionalWeatherData {
 }
 
 interface EmotionalWeatherWidgetProps {
+  className?: string
+  size?: string
   showDetails?: boolean
   autoRefresh?: boolean
   onWeatherUpdate?: (data: EmotionalWeatherData) => void
@@ -68,8 +70,10 @@ const priorityColors = {
 }
 
 export function EmotionalWeatherWidget({ 
+  className = "", 
+  size = "default", 
   showDetails = true, 
-  autoRefresh = false, 
+  autoRefresh = false, // Default to false to prevent auto-refresh issues
   onWeatherUpdate,
   culturalContext 
 }: EmotionalWeatherWidgetProps) {
@@ -78,7 +82,7 @@ export function EmotionalWeatherWidget({
   const [error, setError] = useState<string | null>(null)
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null)
 
-  const fetchWeatherData = async () => {
+  const fetchWeatherData = useCallback(async () => {
     try {
       setIsLoading(true)
       setError(null)
@@ -94,10 +98,12 @@ export function EmotionalWeatherWidget({
       
       if (data) {
         setWeatherData(data)
-        setLastUpdated(new Date())
+        const now = new Date()
+        setLastUpdated(now)
         onWeatherUpdate?.(data)
         
-        if (lastUpdated) {
+        // Only show toast for manual refreshes, not initial loads
+        if (lastUpdated && (now.getTime() - lastUpdated.getTime()) > 5000) {
           toast.success('Emotional weather updated', {
             description: `${data.weather_emoji} ${data.weather_description}`
           })
@@ -125,17 +131,26 @@ export function EmotionalWeatherWidget({
     } finally {
       setIsLoading(false)
     }
-  }
+  }, [onWeatherUpdate]) // Removed lastUpdated from dependencies to prevent infinite loop
 
   useEffect(() => {
     fetchWeatherData()
     
     // Auto-refresh every 30 minutes if enabled
+    let interval: NodeJS.Timeout | null = null
     if (autoRefresh) {
-      const interval = setInterval(fetchWeatherData, 30 * 60 * 1000)
-      return () => clearInterval(interval)
+      interval = setInterval(fetchWeatherData, 30 * 60 * 1000)
     }
-  }, [autoRefresh])
+    
+    return () => {
+      if (interval) {
+        clearInterval(interval)
+      }
+      // Clean up state to prevent memory leaks
+      setWeatherData(null)
+      setError(null)
+    }
+  }, [fetchWeatherData, autoRefresh])
 
   const getWeatherIcon = (emoji: string) => {
     const IconComponent = weatherIcons[emoji] || weatherIcons.default
