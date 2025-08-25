@@ -33,10 +33,9 @@ interface EmotionalWeatherData {
   risk_factors: string[]
   protective_factors: string[]
   recommendations: Array<{
-    id: string
-    text: string
-    priority: string
     type: string
+    title: string
+    description: string
   }>
   confidence_score: number
 }
@@ -63,17 +62,11 @@ const weatherIcons: Record<string, React.ComponentType<any>> = {
   'default': Cloud
 }
 
-const priorityColors = {
-  high: 'bg-red-100 text-red-800 border-red-200',
-  medium: 'bg-yellow-100 text-yellow-800 border-yellow-200',
-  low: 'bg-blue-100 text-blue-800 border-blue-200'
-}
-
 export function EmotionalWeatherWidget({ 
   className = "", 
   size = "default", 
   showDetails = true, 
-  autoRefresh = false, // Default to false to prevent auto-refresh issues
+  autoRefresh = false, // Disabled by default to prevent flickering
   onWeatherUpdate,
   culturalContext 
 }: EmotionalWeatherWidgetProps) {
@@ -81,6 +74,7 @@ export function EmotionalWeatherWidget({
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null)
+  const [isRefreshing, setIsRefreshing] = useState(false)
 
   const fetchWeatherData = useCallback(async () => {
     try {
@@ -97,10 +91,26 @@ export function EmotionalWeatherWidget({
       }
       
       if (data) {
-        setWeatherData(data)
+        // Transform data to match expected format
+        const transformedData: EmotionalWeatherData = {
+          forecast_date: data.forecast_date,
+          predicted_mood_range: data.predicted_mood_range,
+          weather_emoji: data.weather_emoji,
+          weather_description: data.weather_description,
+          risk_factors: data.risk_factors || [],
+          protective_factors: data.protective_factors || [],
+          recommendations: (data.recommendations || []).map((rec: any) => ({
+            type: rec.type || 'general',
+            title: rec.title || rec.text || 'Recommendation',
+            description: rec.description || rec.text || ''
+          })),
+          confidence_score: data.confidence_score
+        }
+        
+        setWeatherData(transformedData)
         const now = new Date()
         setLastUpdated(now)
-        onWeatherUpdate?.(data)
+        onWeatherUpdate?.(transformedData)
         
         // Only show toast for manual refreshes, not initial loads
         if (lastUpdated && (now.getTime() - lastUpdated.getTime()) > 5000) {
@@ -234,10 +244,14 @@ export function EmotionalWeatherWidget({
             <Button
               variant="ghost"
               size="sm"
-              onClick={fetchWeatherData}
-              disabled={isLoading}
+              onClick={async () => {
+                setIsRefreshing(true)
+                await fetchWeatherData()
+                setIsRefreshing(false)
+              }}
+              disabled={isLoading || isRefreshing}
             >
-              <ArrowClockwise size={14} className={isLoading ? 'animate-spin' : ''} />
+              <ArrowClockwise size={14} className={isLoading || isRefreshing ? 'animate-spin' : ''} />
             </Button>
           </div>
         </CardTitle>
@@ -341,14 +355,19 @@ export function EmotionalWeatherWidget({
                         Recommendations
                       </h4>
                       <div className="space-y-2">
-                        {weatherData.recommendations.map((rec) => (
+                        {weatherData.recommendations.map((rec, index) => (
                           <div 
-                            key={rec.id}
+                            key={index}
                             className={`p-3 rounded-lg border text-sm ${
-                              priorityColors[rec.priority as keyof typeof priorityColors] || priorityColors.low
+                              rec.type === 'activity' ? 'bg-green-50 border-green-200 text-green-800' :
+                              rec.type === 'self_care' ? 'bg-blue-50 border-blue-200 text-blue-800' :
+                              rec.type === 'social' ? 'bg-purple-50 border-purple-200 text-purple-800' :
+                              rec.type === 'support' ? 'bg-yellow-50 border-yellow-200 text-yellow-800' :
+                              'bg-gray-50 border-gray-200 text-gray-800'
                             }`}
                           >
-                            {rec.text}
+                            <div className="font-medium mb-1">{rec.title}</div>
+                            <div className="text-xs opacity-80">{rec.description}</div>
                           </div>
                         ))}
                       </div>

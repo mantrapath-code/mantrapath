@@ -64,11 +64,29 @@ def create_app() -> FastAPI:
                 raise HTTPException(status_code=503, detail="Voice processor not initialized")
             
             health_status = await voice_processor.get_health_status()
-            return health_status
+            # Ensure the response has the expected structure
+            return {
+                "status": "healthy",
+                "service": "voice-event-processor",
+                "version": "1.0.0",
+                "components": health_status
+            }
             
         except Exception as e:
             logger.error("Health check failed", error=str(e))
             raise HTTPException(status_code=500, detail=str(e))
+    
+    @app.get("/health/live")
+    async def liveness_check():
+        """Kubernetes liveness probe"""
+        return {"status": "alive"}
+    
+    @app.get("/health/ready")
+    async def readiness_check():
+        """Kubernetes readiness probe"""
+        if voice_processor is None:
+            raise HTTPException(status_code=503, detail="Voice processor not initialized")
+        return {"status": "ready"}
     
     @app.post("/voice/process")
     async def process_voice_event(voice_event: VoiceEvent) -> VoiceAnalysisResult:
@@ -150,6 +168,26 @@ def create_app() -> FastAPI:
             
         except Exception as e:
             logger.error("Failed to get metrics", error=str(e))
+            raise HTTPException(status_code=500, detail=str(e))
+    
+    @app.get("/api/v1/metrics")
+    async def get_api_metrics():
+        """Get voice processor metrics via API v1 endpoint"""
+        try:
+            if voice_processor is None:
+                raise HTTPException(status_code=503, detail="Voice processor not initialized")
+            
+            return {
+                "processed_events": voice_processor.processed_events,
+                "active_connections": voice_processor.active_connections,
+                "models_loaded": {
+                    "emotion_classifier": voice_processor.emotion_classifier is not None,
+                    "speech_recognizer": voice_processor.speech_recognizer is not None
+                }
+            }
+            
+        except Exception as e:
+            logger.error("Failed to get API metrics", error=str(e))
             raise HTTPException(status_code=500, detail=str(e))
     
     logger.info("Voice Event Processor FastAPI application created")

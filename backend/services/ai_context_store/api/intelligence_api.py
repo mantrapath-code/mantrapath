@@ -19,6 +19,35 @@ backend_root = os.path.dirname(os.path.dirname(service_root))
 sys.path.insert(0, backend_root)
 sys.path.insert(0, service_root)
 
+from shared.auth import get_current_user, verify_service_token
+from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
+
+security = HTTPBearer()
+
+def get_current_user_or_service(credentials: HTTPAuthorizationCredentials = Depends(security)):
+    """
+    Get current user or verify service token
+    
+    Returns either a User object or a dict with service info
+    """
+    try:
+        # First try to verify as service token
+        service_payload = verify_service_token(credentials.credentials)
+        if service_payload:
+            return {
+                "type": "service",
+                "service_name": service_payload.get("service"),
+                "is_service": True
+            }
+        
+        # If not service token, try regular user authentication
+        return get_current_user(credentials)
+        
+    except Exception as e:
+        logger.error(f"Authentication failed: {e}")
+        raise HTTPException(status_code=401, detail="Invalid authentication credentials")
+
+# Replace existing import
 from shared.auth import get_current_user
 from shared.models import User
 from models.context_models import IntelligenceInsight

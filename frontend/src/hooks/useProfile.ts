@@ -72,10 +72,28 @@ export function useProfile(): UseProfileReturn {
   const updateProfile = async (data: Partial<UserProfile>) => {
     try {
       setError(null)
-      const updatedProfile = await apiService.updateProfile(data) as UserProfile
-      setProfile(updatedProfile)
+      
+      // Map frontend fields to backend fields (only send supported fields)
+      const updateData: any = {}
+      if (data.bio !== undefined) updateData.bio = data.bio
+      if (data.timezone !== undefined) updateData.timezone = data.timezone
+      if (data.theme !== undefined) updateData.theme_preference = data.theme
+      if (data.privacy_level !== undefined) updateData.privacy_mode = data.privacy_level === 'private'
+      
+      // Note: location and date_of_birth are not supported by backend ProfileUpdate schema
+      // These will be ignored for now until backend support is added
+      
+      console.log('🔄 Updating profile with data:', updateData)
+      
+      // Send update to backend
+      const response = await apiService.updateProfile(updateData)
+      console.log('✅ Profile update response:', response)
+      
+      // Refresh profile data from server to ensure consistency
+      await fetchProfile()
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to update profile')
+      console.error('❌ Profile update error:', err)
       throw err
     }
   }

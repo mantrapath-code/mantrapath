@@ -191,6 +191,54 @@ def create_refresh_token(data: Dict[Any, Any]) -> str:
     encoded_jwt = jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
     return encoded_jwt
 
+def create_service_token(service_name: str, expires_delta: Optional[timedelta] = None) -> str:
+    """
+    Create a service-to-service authentication token
+    
+    Args:
+        service_name: Name of the service requesting the token
+        expires_delta: Token expiration time
+    
+    Returns:
+        JWT token for service authentication
+    """
+    if expires_delta:
+        expire = datetime.utcnow() + expires_delta
+    else:
+        expire = datetime.utcnow() + timedelta(hours=24)  # Long-lived for services
+    
+    to_encode = {
+        "sub": f"service:{service_name}",
+        "service": service_name,
+        "type": "service_token",
+        "exp": expire,
+        "iat": datetime.utcnow(),
+        "is_service": True
+    }
+    
+    return jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
+
+def verify_service_token(token: str) -> Optional[dict]:
+    """
+    Verify a service-to-service authentication token
+    
+    Args:
+        token: JWT token to verify
+    
+    Returns:
+        Token payload if valid, None otherwise
+    """
+    try:
+        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+        
+        # Check if it's a service token
+        if payload.get("type") != "service_token" or not payload.get("is_service"):
+            return None
+            
+        return payload
+    except jwt.PyJWTError:
+        return None
+
 def verify_token(token: str, expected_type: Optional[str] = None) -> Optional[Dict[Any, Any]]:
     """Verify and decode JWT token"""
     try:

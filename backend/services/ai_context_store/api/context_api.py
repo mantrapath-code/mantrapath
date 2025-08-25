@@ -19,7 +19,8 @@ backend_root = os.path.dirname(os.path.dirname(service_root))
 sys.path.insert(0, backend_root)
 sys.path.insert(0, service_root)
 
-from shared.auth import get_current_user
+from shared.auth import get_current_user, verify_service_token
+from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from shared.models import User
 from models.context_models import (
     UserContext, ContextQuery, ContextUpdate, ContextType,
@@ -34,24 +35,49 @@ router = APIRouter()
 context_aggregator_service = None
 intelligence_engine = None
 
+security = HTTPBearer()
+
 def set_services(aggregator, engine):
     """Set service references"""
     global context_aggregator_service, intelligence_engine
     context_aggregator_service = aggregator
     intelligence_engine = engine
 
+def get_current_user_or_service(credentials: HTTPAuthorizationCredentials = Depends(security)):
+    """
+    Get current user or verify service token
+    
+    Returns either a User object or a dict with service info
+    """
+    try:
+        # First try to verify as service token
+        service_payload = verify_service_token(credentials.credentials)
+        if service_payload:
+            return {
+                "type": "service",
+                "service_name": service_payload.get("service"),
+                "is_service": True
+            }
+        
+        # If not service token, try regular user authentication
+        return get_current_user(credentials)
+        
+    except Exception as e:
+        logger.error(f"Authentication failed: {e}")
+        raise HTTPException(status_code=401, detail="Invalid authentication credentials")
+
 @router.get("/user/{user_id}", response_model=UserContext)
 async def get_user_context(
     user_id: str,
     include_history: bool = Query(False, description="Include context history"),
-    current_user: User = Depends(get_current_user)
+    auth_info = Depends(get_current_user_or_service)
 ):
     """
     Get comprehensive user context
     """
     try:
-        # Check authorization (users can only access their own context)
-        if current_user.id != user_id:
+        # Check authorization (users can only access their own context, services can access any)
+        if auth_info.get("type") != "service" and auth_info.get("id") != user_id:
             raise HTTPException(status_code=403, detail="Not authorized to access this user's context")
         
         if not context_aggregator_service:
@@ -73,7 +99,7 @@ async def get_user_context(
 @router.post("/update")
 async def update_user_context(
     context_update: ContextUpdate,
-    current_user: User = Depends(get_current_user)
+    current_user: User = Depends(get_current_user_or_service)
 ):
     """
     Update user context with new data
@@ -106,7 +132,7 @@ async def update_user_context(
 @router.get("/user/{user_id}/summary")
 async def get_context_summary(
     user_id: str,
-    current_user: User = Depends(get_current_user)
+    current_user: User = Depends(get_current_user_or_service)
 ):
     """
     Get a summary of user context
@@ -165,7 +191,7 @@ async def get_context_summary(
 @router.get("/user/{user_id}/completeness")
 async def get_context_completeness(
     user_id: str,
-    current_user: User = Depends(get_current_user)
+    current_user: User = Depends(get_current_user_or_service)
 ):
     """
     Get context completeness breakdown for a user
@@ -218,7 +244,7 @@ async def get_context_completeness(
 @router.get("/user/{user_id}/activity")
 async def get_user_activity(
     user_id: str,
-    current_user: User = Depends(get_current_user)
+    current_user: User = Depends(get_current_user_or_service)
 ):
     """
     Get user activity metrics
@@ -284,7 +310,7 @@ async def get_user_activity(
 @router.post("/user/{user_id}/refresh")
 async def refresh_user_context(
     user_id: str,
-    current_user: User = Depends(get_current_user)
+    current_user: User = Depends(get_current_user_or_service)
 ):
     """
     Force refresh of user context and regenerate insights

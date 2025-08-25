@@ -156,84 +156,68 @@ class CrisisPredictionAPI {
     return response.resolution_result
   }
 
-  // Dashboard endpoints
+  // Dashboard endpoints - Fixed to use ML service directly
   async getDashboardMetrics(): Promise<{ metrics: CrisisMetrics; status: SystemStatus }> {
     try {
-      // Try the authenticated endpoint first
-      const response = await this.makeRequest<{
-        success: boolean
-        dashboard_metrics: CrisisMetrics
-        system_status: SystemStatus
-        timestamp: string
-      }>('/ml/dashboard/metrics')
+      // Use ML service directly since API Gateway doesn't have ML dashboard routes
+      const publicResponse = await fetch('http://localhost:8008/dashboard/public-status')
       
-      return {
-        metrics: response.dashboard_metrics,
-        status: response.system_status,
-      }
-    } catch (error) {
-      // Fallback to public endpoint or demo data
-      console.warn('Authenticated dashboard endpoint failed, using public data')
-      
-      try {
-        // Try public endpoint directly (bypass API gateway)
-        const publicResponse = await fetch('http://localhost:8008/dashboard/public-status')
+      if (publicResponse.ok) {
+        const publicData = await publicResponse.json()
         
-        if (publicResponse.ok) {
-          const publicData = await publicResponse.json()
-          
-          return {
-            metrics: {
-              total_predictions: publicData.anonymized_metrics.total_predictions_24h,
-              high_risk_alerts: publicData.anonymized_metrics.high_risk_alerts_24h,
-              medium_risk_alerts: publicData.anonymized_metrics.medium_risk_alerts_24h,
-              low_risk_alerts: publicData.anonymized_metrics.low_risk_alerts_24h,
-              intervention_success_rate: 0.85,
-              avg_response_time: publicData.anonymized_metrics.avg_response_time_seconds,
-              system_uptime: publicData.anonymized_metrics.system_uptime_percent,
-              false_positive_rate: 0.12
+        return {
+          metrics: {
+            total_predictions: publicData.anonymized_metrics.total_predictions_24h,
+            high_risk_alerts: publicData.anonymized_metrics.high_risk_alerts_24h,
+            medium_risk_alerts: publicData.anonymized_metrics.medium_risk_alerts_24h,
+            low_risk_alerts: publicData.anonymized_metrics.low_risk_alerts_24h,
+            intervention_success_rate: 0.85,
+            avg_response_time: publicData.anonymized_metrics.avg_response_time_seconds,
+            system_uptime: publicData.anonymized_metrics.system_uptime_percent,
+            false_positive_rate: 0.12
+          },
+          status: {
+            dashboard_status: publicData.system_health.dashboard_status === 'operational' ? 'operational' : 'degraded',
+            metrics: {} as CrisisMetrics,
+            system_health: {
+              uptime_percent: publicData.anonymized_metrics.system_uptime_percent,
+              avg_response_time_ms: publicData.anonymized_metrics.avg_response_time_seconds * 1000,
+              false_positive_rate: 0.12,
+              redis_connected: publicData.system_health.redis_connected,
+              dashboard_available: publicData.dashboard_active
             },
-            status: {
-              dashboard_status: publicData.system_health.dashboard_status === 'operational' ? 'operational' : 'degraded',
-              metrics: {} as CrisisMetrics,
-              system_health: {
-                uptime_percent: publicData.anonymized_metrics.system_uptime_percent,
-                avg_response_time_ms: publicData.anonymized_metrics.avg_response_time_seconds * 1000,
-                false_positive_rate: 0.12,
-                redis_connected: publicData.system_health.redis_connected,
-                dashboard_available: true
-              },
-              version: publicData.system_health.version
-            }
+            version: publicData.system_health.version
           }
         }
-      } catch (publicError) {
-        console.warn('Public endpoint also failed, using demo data')
+      } else {
+        throw new Error('ML dashboard service unavailable')
       }
+    } catch (error) {
+      console.warn('ML dashboard endpoint failed, using fallback data:', error)
       
-      // Final fallback: Demo data
+      // Return fallback data to prevent dashboard from crashing
       return {
         metrics: {
-          total_predictions: 127,
-          high_risk_alerts: 3,
-          medium_risk_alerts: 8,
-          low_risk_alerts: 12,
-          intervention_success_rate: 0.94,
-          avg_response_time: 0.8,
-          system_uptime: 99.7,
-          false_positive_rate: 0.08
+          total_predictions: 0,
+          high_risk_alerts: 0,
+          medium_risk_alerts: 0,
+          low_risk_alerts: 0,
+          intervention_success_rate: 0,
+          avg_response_time: 0,
+          system_uptime: 0,
+          false_positive_rate: 0
         },
         status: {
-          dashboard_status: 'operational',
+          dashboard_status: 'degraded',
           metrics: {} as CrisisMetrics,
           system_health: {
-            uptime_percent: 99.7,
-            avg_response_time_ms: 800,
-            false_positive_rate: 0.08,
-            redis_connected: true,
-            dashboard_available: true
+            uptime_percent: 0,
+            avg_response_time_ms: 0,
+            false_positive_rate: 0,
+            redis_connected: false,
+            dashboard_available: false
           },
-          version: '2.0.0-demo'
+          version: 'offline'
         }
       }
     }

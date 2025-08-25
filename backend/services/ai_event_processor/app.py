@@ -1,7 +1,8 @@
 import asyncio
 import os
 from contextlib import asynccontextmanager
-from typing import Dict, Any
+from typing import Dict, Any, Optional
+from datetime import datetime, timezone
 
 from fastapi import FastAPI, HTTPException, BackgroundTasks
 from fastapi.middleware.cors import CORSMiddleware
@@ -15,16 +16,17 @@ from models.ai_models import (
     EmotionAnalysisRequest,
     EmotionAnalysisResponse,
     ContextUpdateRequest,
-    PredictiveAnalysisResponse
+    PredictiveAnalysisResponse,
+    PredictiveAnalysisResult
 )
 
 logger = structlog.get_logger(__name__)
 
 # Global services
-ai_processor: AIEventProcessor = None
-emotion_analyzer: EmotionAnalyzer = None
-cultural_processor: CulturalIntelligenceProcessor = None
-predictive_engine: PredictiveInterventionEngine = None
+ai_processor: Optional[AIEventProcessor] = None
+emotion_analyzer: Optional[EmotionAnalyzer] = None
+cultural_processor: Optional[CulturalIntelligenceProcessor] = None
+predictive_engine: Optional[PredictiveInterventionEngine] = None
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -130,7 +132,19 @@ async def create_app() -> FastAPI:
                 context=request.context
             )
             
-            return EmotionAnalysisResponse(**result)
+            # Create EmotionAnalysisResponse with proper field mapping
+            return EmotionAnalysisResponse(
+                user_id=request.user_id,
+                result=result,
+                processing_time_ms=result.processing_time_ms or 0.0,
+                timestamp=datetime.now(timezone.utc),
+                language=result.language or request.language,
+                cultural_adaptation={
+                    "adapted_culture": result.language if result.language != "en" else None,
+                    "adaptation_applied": result.has_cultural_adaptation,
+                    "cultural_context": result.cultural_context
+                } if result.has_cultural_adaptation else None
+            )
             
         except Exception as e:
             logger.error("Emotion analysis failed", error=str(e), user_id=request.user_id)
@@ -164,8 +178,24 @@ async def create_app() -> FastAPI:
             if not predictive_engine:
                 raise HTTPException(status_code=503, detail="Predictive engine not available")
             
-            result = await predictive_engine.analyze_intervention_needs(user_id)
-            return PredictiveAnalysisResponse(**result)
+            analysis = await predictive_engine.analyze_intervention_needs(user_id)
+            
+            # Create proper response structure
+            result = PredictiveAnalysisResult(
+                intervention_needed=analysis["intervention_needed"],
+                confidence=analysis["confidence"],
+                intervention_type=analysis.get("intervention_type"),
+                urgency_level=analysis["urgency_level"],
+                recommended_actions=analysis["recommended_actions"],
+                cultural_considerations=analysis.get("cultural_considerations")
+            )
+            
+            return PredictiveAnalysisResponse(
+                user_id=user_id,
+                result=result,
+                processing_time_ms=analysis["processing_time_ms"],
+                factors_analyzed=analysis.get("risk_factors", [])
+            )
             
         except Exception as e:
             logger.error("Predictive analysis failed", error=str(e), user_id=user_id)

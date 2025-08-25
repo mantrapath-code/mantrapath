@@ -7,7 +7,15 @@ to get user context and intelligence insights.
 
 import httpx
 import structlog
+import os
+import sys
 from typing import Dict, Any
+
+# Add backend path for shared auth
+sys.path.append('/app')
+sys.path.append('/app/shared')
+
+from shared.auth import create_service_token
 
 logger = structlog.get_logger(__name__)
 
@@ -17,12 +25,21 @@ class AIContextStoreClient:
     def __init__(self, base_url: str):
         self.base_url = base_url
         self.client = httpx.AsyncClient(timeout=30.0)
+        self.service_token = create_service_token("proactive_assistance_engine")
+    
+    def _get_auth_headers(self) -> Dict[str, str]:
+        """Get authentication headers for service requests"""
+        return {
+            "Authorization": f"Bearer {self.service_token}",
+            "Content-Type": "application/json"
+        }
     
     async def get_user_context(self, user_id: str) -> Dict[str, Any]:
         """Get comprehensive user context"""
         try:
             response = await self.client.get(
-                f"{self.base_url}/api/v1/context/user/{user_id}"
+                f"{self.base_url}/api/v1/context/user/{user_id}",
+                headers=self._get_auth_headers()
             )
             response.raise_for_status()
             return response.json()
@@ -41,7 +58,8 @@ class AIContextStoreClient:
         """Get AI intelligence insights for user"""
         try:
             response = await self.client.get(
-                f"{self.base_url}/api/v1/intelligence/insights/{user_id}"
+                f"{self.base_url}/api/v1/intelligence/insights/{user_id}",
+                headers=self._get_auth_headers()
             )
             response.raise_for_status()
             return response.json()
@@ -61,7 +79,8 @@ class AIContextStoreClient:
             
             response = await self.client.post(
                 f"{self.base_url}/api/v1/context/update",
-                json=update_data
+                json=update_data,
+                headers=self._get_auth_headers()
             )
             response.raise_for_status()
             return True

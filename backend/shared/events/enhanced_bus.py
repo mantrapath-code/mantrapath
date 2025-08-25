@@ -679,7 +679,7 @@ def get_enhanced_event_bus() -> EnhancedEventBus:
         # Environment-aware configuration
         env = os.getenv("ENV", "development").lower()
         use_nats = os.getenv("USE_NATS_EVENT_BUS", "true").lower() == "true"
-        nats_servers = os.getenv("NATS_SERVERS", "nats://localhost:4222")
+        nats_servers = os.getenv("NATS_SERVERS") or os.getenv("NATS_URL", "nats://localhost:4222")
         
         # If we're in a test environment, check if NATS is actually available
         if env in ["test", "testing"] and use_nats:

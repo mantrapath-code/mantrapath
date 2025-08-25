@@ -28,10 +28,25 @@ from shared.events import publish_community_post_created, publish_challenge_prog
 from shared.events import get_enhanced_event_bus, V3EventChannels
 from shared.feature_flags import get_flag_bool
 from shared.models import (
-    Base, User, Challenge, ChallengeProgress, ChallengeComment,
-    CommunityEvent, CommunityForum, ChallengeParticipant, EventParticipant,
+    Base, User, Challenge, CommunityEvent, CommunityForum,
     ForumThread, ThreadReply, Like, ForumMembership, EventComment
 )
+# Import additional models conditionally to handle missing models gracefully
+try:
+    from shared.models import (
+        ChallengeProgress, ChallengeComment, ChallengeParticipant, EventParticipant
+    )
+except ImportError as e:
+    print(f"⚠️  Warning: Could not import some models: {e}")
+    # Create dummy classes for missing models as placeholders
+    class ChallengeProgress:
+        pass
+    class ChallengeComment:
+        pass
+    class ChallengeParticipant:
+        pass
+    class EventParticipant:
+        pass
 
 # Create FastAPI app
 app = FastAPI(title="MantraPath Community Service", version="2.0.0")

@@ -6,18 +6,18 @@ import { JournalSection } from "@/components/journal"
 import { ChatBot } from "@/components/chatbot"
 import { EnhancedCommunitySection } from "@/components/community"
 import { WellnessDashboard } from "@/components/dashboard"
-import { CrisisPredictionDashboard } from "@/components/dashboard"
 import { RealTimeNotifications } from "@/components/notifications"
 import { AuthScreen } from "@/components/auth"
 import { EmailVerification } from "@/components/auth"
 import { DevelopmentBanner } from "@/components/common"
-import { PerformanceDashboard } from "@/components/common/PerformanceDashboard"
 import { ProfileDropdown, ProfileDashboard } from "@/components/profile"
-import { InsightsPage } from "@/pages/InsightsPage"
+import { EnhancedInsightsPage } from "@/pages/EnhancedInsightsPage"
 import { AchievementsPage } from "@/pages/AchievementsPage"
+import { ProactiveAssistancePanel } from "@/components/assistance"
 import { AuthProvider, useAuth } from "@/hooks/useAuth"
 import { useMoodBasedTheme } from "@/hooks/useMoodTheme"
 import { useEnhancedWebSocket } from "@/hooks/useEnhancedWebSocket"
+import { RealtimeProvider } from "@/contexts/RealtimeContext"
 import { useDeviceCapabilities } from "@/hooks/useDeviceCapabilities"
 import { useResponsiveLayout, useResponsiveNavigation, useResponsiveInteractions } from "@/hooks/useResponsiveLayout"
 import { useTouchGestures } from "@/hooks/useTouchGestures"
@@ -50,13 +50,16 @@ function AppContent() {
   // Initialize mood-based theme system
   const { currentTheme } = useMoodBasedTheme()
   
-  // Initialize enhanced WebSocket connection for real-time features (optional)
-  // Temporarily disable to prevent infinite loops
-  const { isConnected, connectionError, connectionStats } = { 
-    isConnected: false, 
-    connectionError: null, 
-    connectionStats: { totalConnections: 0, healthyConnections: 0, failedConnections: 0, averageLatency: 0 }
-  }
+  // Initialize enhanced WebSocket connection for real-time features (Sprint 2)
+  const { isConnected, connectionError, connectionStats } = useEnhancedWebSocket([], {
+    maxConnections: 3,
+    heartbeatInterval: 30000,
+    reconnectStrategy: {
+      maxAttempts: 3,
+      baseDelay: 2000,
+      backoffMultiplier: 1.5
+    }
+  })
   
   // Fallback mode when WebSocket is not available
   const isOfflineMode = !import.meta.env.VITE_WS_URL && !isConnected
@@ -346,10 +349,9 @@ function AppContent() {
                   <TabsList className="grid grid-cols-3 w-full">
                     <TabsTrigger value="dashboard">Dashboard</TabsTrigger>
                     <TabsTrigger value="insights">Insights</TabsTrigger>
-                    <TabsTrigger value="crisis">Monitor</TabsTrigger>
-                  </TabsList>
-                  <TabsList className="grid grid-cols-3 w-full mt-2">
                     <TabsTrigger value="achievements">Goals</TabsTrigger>
+                  </TabsList>
+                  <TabsList className="grid grid-cols-2 w-full mt-2">
                     <TabsTrigger value="journal">Journal</TabsTrigger>
                     <TabsTrigger value="community">Community</TabsTrigger>
                   </TabsList>
@@ -359,10 +361,9 @@ function AppContent() {
               {/* Desktop Navigation - Grid Layout */}
               {deviceCapabilities.isDesktop && (
                 <div className="hidden lg:block mb-6">
-                  <TabsList className="grid grid-cols-6 w-full">
+                  <TabsList className="grid grid-cols-5 w-full">
                     <TabsTrigger value="dashboard">Dashboard</TabsTrigger>
                     <TabsTrigger value="insights">Insights</TabsTrigger>
-                    <TabsTrigger value="crisis">Crisis Monitor</TabsTrigger>
                     <TabsTrigger value="achievements">Achievements</TabsTrigger>
                     <TabsTrigger value="journal">Journal</TabsTrigger>
                     <TabsTrigger value="community">Community</TabsTrigger>
@@ -377,21 +378,6 @@ function AppContent() {
                 >
                   <WellnessDashboard />
                 </motion.div>
-                
-                {/* Performance Dashboard - Only show on desktop for now */}
-                {deviceCapabilities.isDesktop && (
-                  <motion.div
-                    initial={{ opacity: 0, y: 20 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    transition={{ delay: 0.1 }}
-                  >
-                    <PerformanceDashboard
-                      metrics={metrics}
-                      alerts={alerts}
-                      onRefresh={() => window.location.reload()}
-                    />
-                  </motion.div>
-                )}
               </TabsContent>
 
               <TabsContent value="insights" className="space-y-6">
@@ -399,16 +385,7 @@ function AppContent() {
                   initial={{ opacity: 0, y: 20 }}
                   animate={{ opacity: 1, y: 0 }}
                 >
-                  <InsightsPage />
-                </motion.div>
-              </TabsContent>
-
-              <TabsContent value="crisis" className="space-y-6">
-                <motion.div
-                  initial={{ opacity: 0, y: 20 }}
-                  animate={{ opacity: 1, y: 0 }}
-                >
-                  <CrisisPredictionDashboard />
+                  <EnhancedInsightsPage />
                 </motion.div>
               </TabsContent>
 
@@ -665,6 +642,9 @@ function AppContent() {
         <div className="h-20 lg:hidden" />
       )}
       
+      {/* Sprint 2: Proactive Assistance Panel */}
+      <ProactiveAssistancePanel />
+      
       <footer className="border-t bg-card/50 mt-12">
         <div className="container mx-auto px-4 py-6">
           <div className="text-center text-sm text-muted-foreground">
@@ -687,7 +667,9 @@ function AppContent() {
 function App() {
   return (
     <AuthProvider>
-      <AppContent />
+      <RealtimeProvider>
+        <AppContent />
+      </RealtimeProvider>
     </AuthProvider>
   )
 }

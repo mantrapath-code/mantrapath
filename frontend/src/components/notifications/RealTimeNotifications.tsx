@@ -419,11 +419,7 @@ export function RealTimeNotifications({ onMoodPatternNotifications }: RealTimeNo
                     
                     <TabsContent value="scheduler" className="m-0">
                       <div className="max-h-96 overflow-y-auto">
-                      {/* Temporarily disabled to prevent infinite loops */}
-                      {/* <SmartNotificationScheduler /> */}
-                      <div className="p-4 text-center text-muted-foreground">
-                        Smart Notification Scheduler temporarily disabled
-                      </div>
+                        <SmartNotificationScheduler />
                       </div>
                     </TabsContent>
                   </Tabs>

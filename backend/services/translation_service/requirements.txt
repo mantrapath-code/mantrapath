@@ -16,8 +16,10 @@ python-jose[cryptography]==3.3.0
 python-multipart==0.0.6
 passlib[bcrypt]==1.7.4
 
-# Translation Services (simplified local approach)
+# Translation Services
 requests==2.31.0
+googletrans==4.0.0rc1
+argostranslate==1.9.6
 googletrans==4.0.0rc1
 argostranslate==1.9.6
 

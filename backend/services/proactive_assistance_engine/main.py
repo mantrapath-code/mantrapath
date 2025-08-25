@@ -16,9 +16,20 @@ from fastapi import FastAPI, HTTPException, BackgroundTasks, UploadFile, File, F
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import Response
 import structlog
+import sys
+from prometheus_client import generate_latest, CONTENT_TYPE_LATEST
+
+# Ensure backend root is on sys.path so `shared` package is importable
+_BACKEND_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", ".."))
+if _BACKEND_ROOT not in sys.path:
+    sys.path.insert(0, _BACKEND_ROOT)
 
 from src.core.assistance_orchestrator import ProactiveAssistanceOrchestrator
-from src.models.assistance_models import AssistanceEvaluation, UserAssistanceNeeds
+# Use shared assistance models when available
+try:
+    from shared.models.assistance import AssistanceEvaluation, UserAssistanceNeeds
+except Exception:
+    from src.models.assistance_models import AssistanceEvaluation, UserAssistanceNeeds
 
 logger = structlog.get_logger(__name__)
 
@@ -128,6 +139,12 @@ def create_app() -> FastAPI:
         integration_status = await assistance_orchestrator.get_integration_status()
         return integration_status
     
+    @app.get("/metrics")
+    async def metrics_prometheus():
+        """Prometheus metrics endpoint"""
+        data = generate_latest()
+        return Response(content=data, media_type=CONTENT_TYPE_LATEST)
+
     @app.get("/api/v1/metrics")
     async def get_metrics():
         """Get service performance metrics"""

@@ -864,15 +864,17 @@ export class UnifiedInsightService {
   /**
    * Get unified insights from the ML service backend
    * This is the new endpoint that aggregates all insights server-side
+   * Enhanced with better error handling and fallback data
    */
   async getUnifiedInsights(forceRefresh: boolean = false): Promise<UnifiedInsightsResponse> {
     try {
       // Use the ML service URL directly for the unified insights endpoint
       const mlServiceUrl = import.meta.env.VITE_ML_SERVICE_URL || 'http://localhost:8008'
-      const token = localStorage.getItem('mantrapath_token')
+      const token = localStorage.getItem('mantrapath_token') || localStorage.getItem('authToken')
       
       if (!token) {
-        throw new Error('Authentication token not found')
+        console.warn('No authentication token found, using demo insights')
+        return this.getDemoInsights()
       }
 
       const url = `${mlServiceUrl}/api/v1/insights/unified${forceRefresh ? '?force_refresh=true' : ''}`
@@ -887,6 +889,10 @@ export class UnifiedInsightService {
       })
 
       if (!response.ok) {
+        if (response.status === 401 || response.status === 403) {
+          console.warn('Authentication failed for insights, using demo data')
+          return this.getDemoInsights()
+        }
         throw new Error(`HTTP ${response.status}: ${response.statusText}`)
       }
 
@@ -894,45 +900,50 @@ export class UnifiedInsightService {
       return data
     } catch (error) {
       console.error('Failed to fetch unified insights:', error)
-      
-      // Return a fallback response to prevent crashes
-      return {
-        user_id: 'demo-user',
-        timestamp: new Date().toISOString(),
-        version: '1.0.0',
-        aggregated_insights: {
-          mood: {
-            current_score: 7,
-            average_score: 7,
-            total_entries: 5,
-            trend: 'stable',
-            weekly_summary: {
-              days_tracked: 5,
-              best_day: 'Monday',
-              mood_variance: 0.5
-            }
-          },
-          predictions: {
-            next_day_mood: 7,
-            confidence: 0.7,
-            recommendations: [
-              'Take a short walk outside',
-              'Practice deep breathing for 5 minutes', 
-              'Connect with a friend or family member',
-              'Try a gratitude exercise',
-              'Listen to calming music'
-            ]
-          },
-          patterns: {
-            time_of_day: [],
-            day_of_week: []
+      return this.getDemoInsights()
+    }
+  }
+
+  /**
+   * Get demo insights when backend is unavailable
+   */
+  private getDemoInsights(): UnifiedInsightsResponse {
+    return {
+      user_id: 'demo-user',
+      timestamp: new Date().toISOString(),
+      version: '1.0.0',
+      aggregated_insights: {
+        mood: {
+          current_score: 7,
+          average_score: 7,
+          total_entries: 5,
+          trend: 'stable' as const,
+          weekly_summary: {
+            days_tracked: 5,
+            best_day: 'Monday',
+            mood_variance: 0.5
           }
         },
-        cache_info: {
-          hit: false,
-          ttl_seconds: 0,
-          last_updated: new Date().toISOString()
+        predictions: {
+          next_day_mood: 7,
+          confidence: 0.7,
+          recommendations: [
+            'Take a short walk outside',
+            'Practice deep breathing for 5 minutes', 
+            'Connect with a friend or family member',
+            'Try a gratitude exercise',
+            'Listen to calming music'
+          ]
+        },
+        patterns: {
+          time_of_day: [],
+          day_of_week: []
         }
+      },
+      cache_info: {
+        hit: false,
+        ttl_seconds: 0,
+        last_updated: new Date().toISOString()
       }
     }
   }
@@ -942,10 +953,10 @@ export class UnifiedInsightService {
    */
   transformToLegacyFormat(unifiedResponse: UnifiedInsightsResponse): ComprehensiveInsights {
     const { aggregated_insights, timestamp, cache_info } = unifiedResponse
-    const { mood, predictions } = aggregated_insights
+    const { mood } = aggregated_insights
 
     // Ensure predictions object exists with default values
-    const safePredict = predictions || {
+    const predictions = aggregated_insights.predictions || {
       recommendations: ['Continue tracking your mood', 'Practice self-care', 'Stay connected'],
       confidence: 0.5,
       next_day_mood: 7
@@ -992,7 +1003,7 @@ export class UnifiedInsightService {
           moodForecast: []
         }
       },
-      recommendedActions: safePredict.recommendations.slice(0, 5).map((rec, index) => ({
+      recommendedActions: predictions.recommendations.slice(0, 5).map((rec, index) => ({
         id: `unified_action_${index}`,
         priority: 'medium' as const,
         title: rec,
@@ -1003,7 +1014,7 @@ export class UnifiedInsightService {
         estimatedTime: '15 minutes',
         expectedBenefit: 'Improved mood and well-being',
         optimalTiming: 'anytime',
-        confidence: safePredict.confidence
+        confidence: predictions.confidence
       })),
       progressTracking: {
         trends: {

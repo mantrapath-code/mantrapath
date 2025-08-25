@@ -65,6 +65,20 @@ try:
 except ImportError:
     ENHANCED_BUS_AVAILABLE = False
 
+try:
+    from shared.events.schemas import (
+        AssistanceInterventionNeeded,
+        AssistanceTriggered,
+        AssistanceDelivered,
+        AssistanceUserResponse,
+        ContextUpdated,
+        AIEmotionDetected,
+        VoiceActivityDetected,
+    )
+    SCHEMAS_AVAILABLE = True
+except ImportError:
+    SCHEMAS_AVAILABLE = False
+
 # Export available components
 __all__ = []
 
@@ -111,4 +125,15 @@ if ENHANCED_BUS_AVAILABLE:
         'get_enhanced_event_bus',
         'cleanup_enhanced_event_bus',
         'V3EventChannels'
+    ])
+
+if SCHEMAS_AVAILABLE:
+    __all__.extend([
+        'AssistanceInterventionNeeded',
+        'AssistanceTriggered',
+        'AssistanceDelivered',
+        'AssistanceUserResponse',
+        'ContextUpdated',
+        'AIEmotionDetected',
+        'VoiceActivityDetected',
     ])

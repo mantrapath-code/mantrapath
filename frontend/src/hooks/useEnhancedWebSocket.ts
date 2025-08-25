@@ -1,13 +1,96 @@
 import { useEffect, useRef, useState, useCallback } from 'react'
 import { toast } from 'sonner'
 import { usePerformanceMonitor } from './usePerformanceMonitor'
+import type { 
+  BackendEventTypeMap, 
+  AllEventData,
+  EmotionData,
+  RiskData,
+  InterventionData,
+  ContextData,
+  AggregatedData,
+  IntelligenceData,
+  AssistanceData,
+  DeliveryData,
+  FeedbackData,
+  EvaluationData,
+  VoiceData,
+  SessionData,
+  CommandData,
+  NotificationData,
+  InteractionData,
+  MoodEntryData,
+  PatternData,
+  QuestionData,
+  ChatMessageData,
+  ChatInsight,
+  CrisisData
+} from '../types/backend-events'
+
+// Real Backend WebSocket Endpoints - Sprint 2 Integration (Fixed Docker Ports)
+export const BACKEND_WEBSOCKET_ENDPOINTS = {
+  // Primary WebSocket connection (Notification Service Port 8007 - Docker corrected)
+  notifications: (userId: string) => `ws://localhost:8007/ws/${userId}`,
+  
+  // API Gateway voice streaming (Port 8000)
+  voiceStream: `ws://localhost:8000/api/v3/voice/stream`,
+  
+  // Individual services (if needed for direct connections)
+  assistance: (userId: string) => `ws://localhost:8018/ws/${userId}`,
+  aiContext: (userId: string) => `ws://localhost:8013/ws/${userId}`,
+  aiEvents: (userId: string) => `ws://localhost:8014/ws/${userId}`,
+  voiceEvents: (userId: string) => `ws://localhost:8015/ws/${userId}`
+}
+
+// Sprint 2 Event Types - Based on Real Backend Services
+export interface BackendEventTypes {
+  // AI Events (from AI Event Processor Port 8014)
+  'ai.emotion_detected': (data: EmotionData) => void
+  'ai.risk_score_updated': (data: RiskData) => void
+  'ai.intervention_needed': (data: InterventionData) => void
+  
+  // Context Events (from AI Context Store Port 8013)
+  'context.updated': (data: ContextData) => void
+  'context.aggregated': (data: AggregatedData) => void
+  'context.intelligence_generated': (data: IntelligenceData) => void
+  
+  // Assistance Events (from Proactive Assistance Engine Port 8018) - Primary Focus
+  'assistance.triggered': (data: AssistanceData) => void
+  'assistance.delivered': (data: DeliveryData) => void
+  'assistance.accepted': (data: FeedbackData) => void
+  'assistance.declined': (data: FeedbackData) => void
+  'assistance.evaluation_complete': (data: EvaluationData) => void
+  
+  // Voice Events (from Voice Event Processor Port 8015 + API Gateway Port 8000)
+  'voice.activity_detected': (data: VoiceData) => void
+  'voice.session_started': (data: SessionData) => void
+  'voice.session_ended': (data: SessionData) => void
+  'voice.command_processed': (data: CommandData) => void
+  
+  // Notification Events (from Notification Service Port 3001)
+  'notification.sent': (data: NotificationData) => void
+  'notification.delivered': (data: DeliveryData) => void
+  'notification.interacted': (data: InteractionData) => void
+  
+  // Mood Events (from Mood Service Port 8002)
+  'mood.entry_created': (data: MoodEntryData) => void
+  'mood.pattern_detected': (data: PatternData) => void
+  'mood.adaptive_question_triggered': (data: QuestionData) => void
+  
+  // Chat Events (from Chatbot Service Port 8004)
+  'chat.message_received': (data: ChatMessageData) => void
+  'chat.intervention_suggested': (data: InterventionData) => void
+  'chat.crisis_detected': (data: CrisisData) => void
+}
 
 export interface WebSocketMessage {
-  type: string
-  data: any
+  type: keyof BackendEventTypes | string
+  data: AllEventData
   timestamp: string
   id?: string
   priority?: 'low' | 'normal' | 'high' | 'critical'
+  servicePort?: number
+  source?: string
 }
 
 export interface WebSocketConnection {
@@ -370,10 +453,24 @@ export function useEnhancedWebSocket(
   const routeEvent = useCallback((message: WebSocketMessage) => {
     const handlers = eventHandlersRef.current.get(message.type) || []
     const sortedHandlers = handlers.sort((a, b) => b.priority - a.priority)
-    
+
+    // Assistance, context, ai, voice: normalize known topics
+    const knownTopics = [
+      'assistance.intervention_needed',
+      'assistance.triggered',
+      'assistance.delivered',
+      'assistance.accepted',
+      'assistance.declined',
+      'context.updated',
+      'ai.emotion_detected',
+      'voice.activity_detected'
+    ]
+
+    const type = knownTopics.includes(message.type) ? message.type : message.type
+
     sortedHandlers.forEach(handler => {
       try {
-        handler.handler(message)
+        handler.handler({ ...message, type })
       } catch (error) {
         console.error(`Error in event handler ${handler.id}:`, error)
       }
@@ -485,48 +582,64 @@ export function useEnhancedWebSocket(
     }
   }, [urls, maxConnections, createConnection, releaseConnection])
 
-  // Add default event handlers for common message types
+  // Add default event handlers for Sprint 2 backend events
   useEffect(() => {
-    const defaultHandlers: EventHandler[] = [
+    const sprint2Handlers: EventHandler[] = [
       {
-        id: 'default_notification',
+        id: 'notification_handler',
         handler: (message) => {
-          if (message.type === 'notification') {
-            toast.info(message.data.title, {
-              description: message.data.message
+          if (message.type === 'notification.sent' && 'title' in message.data && 'message' in message.data) {
+            const notificationData = message.data as NotificationData
+            toast.info(notificationData.title, {
+              description: notificationData.message
             })
           }
         },
         priority: 1
       },
       {
-        id: 'default_mood_alert',
+        id: 'assistance_handler',
         handler: (message) => {
-          if (message.type === 'mood_pattern_alert') {
-            toast.warning('Mood Pattern Alert', {
-              description: message.data.message
+          if (message.type === 'assistance.triggered' && 'suggestion' in message.data) {
+            const assistanceData = message.data as AssistanceData
+            toast('Proactive Assistance', {
+              description: assistanceData.suggestion.message
+            })
+          }
+        },
+        priority: 2
+      },
+      {
+        id: 'mood_pattern_handler',
+        handler: (message) => {
+          if (message.type === 'mood.pattern_detected' && 'pattern' in message.data) {
+            const patternData = message.data as PatternData
+            toast.warning('Mood Pattern Detected', {
+              description: patternData.pattern.description
             })
           }
         },
         priority: 1
       },
       {
-        id: 'default_breathing_reminder',
+        id: 'crisis_handler',
         handler: (message) => {
-          if (message.type === 'breathing_reminder') {
-            toast('Breathing Exercise Reminder', {
-              description: 'Take a moment to breathe and center yourself'
+          if (message.type === 'chat.crisis_detected' && 'severity' in message.data) {
+            const crisisData = message.data as CrisisData
+            toast.error('Crisis Alert', {
+              description: `${crisisData.severity} severity detected. Please seek support.`
             })
           }
         },
-        priority: 1
+        priority: 3
       }
     ]
 
-    defaultHandlers.forEach(handler => {
-      addEventHandler('notification', handler)
-      addEventHandler('mood_pattern_alert', handler)
-      addEventHandler('breathing_reminder', handler)
+    sprint2Handlers.forEach(handler => {
+      addEventHandler('notification.sent', handler)
+      addEventHandler('assistance.triggered', handler)
+      addEventHandler('mood.pattern_detected', handler)
+      addEventHandler('chat.crisis_detected', handler)
     })
   }, [addEventHandler])
 

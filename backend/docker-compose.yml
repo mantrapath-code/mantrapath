@@ -251,6 +251,7 @@ services:
       - AGENT_REDIS_URL=redis://agent-redis:6379
       - JWT_SECRET_KEY=${JWT_SECRET_KEY:-your-super-secret-jwt-key-change-in-production}
       - PHI4_MODEL_AVAILABLE=true
+      - OLLAMA_URL=http://host.docker.internal:11434
       
       # Phase 1 Service Integration URLs (corrected ports)
       - MODELS_SERVICE_URL=http://models-service:8080
@@ -305,7 +306,7 @@ services:
       - mantrapath-network
     restart: unless-stopped
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8004/health"]
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8004/health')"]
       interval: 30s
       timeout: 10s
       retries: 5
@@ -697,6 +698,7 @@ services:
       - JWT_SECRET_KEY=${JWT_SECRET_KEY:-your-super-secret-jwt-key-change-in-production}
       - LOG_LEVEL=info
       - ENVIRONMENT=development
+      - DEMO_MODE=true  # Enable demonstration mode with sample assistance content
       # Service Integration URLs
       - AI_EVENT_PROCESSOR_URL=http://ai-event-processor:8014
       - AI_CONTEXT_STORE_URL=http://ai-context-store:8013

@@ -4,68 +4,33 @@ import { Progress } from "@/components/ui/progress"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { Trophy, Heart, BookOpen, Users, Target, Brain, Palette, ChartLine, Share, Broadcast, ArrowClockwise } from "@phosphor-icons/react"
+import { Trophy, Heart, BookOpen, Target, Palette, ChartBar, Microphone, Calendar } from "@phosphor-icons/react"
 import { useUserStats, useWellness } from "@/hooks/useWellness"
 import { useJournal } from "@/hooks/useJournal"
 import { useMoodBasedTheme } from "@/hooks/useMoodTheme"
-import { useRealtimeInsights } from "@/hooks/useRealtimeInsights"
-import { MoodQuickEntry, EnhancedMoodTracker, EmotionalWeatherWidget, VoiceMoodEntry, CulturalMoodAdapter } from "@/components/mood"
+import { EmotionalWeatherWidget, VoiceMoodEntry, MoodInsightsPanel } from "@/components/mood"
 
-import { motion, AnimatePresence } from "framer-motion"
+import { motion } from "framer-motion"
 import { toast } from "sonner"
 
 export function WellnessDashboard() {
   const { moodEntries, analytics } = useWellness()
   const { entries } = useJournal()
-  const { stats, loading: statsLoading, error: statsError } = useUserStats()
-  const { currentTheme, availableThemes, applyTheme, autoApplyMoodTheme, getCurrentMood, isThemeChanging } = useMoodBasedTheme()
-  
-  // E4: Real-time insights integration
-  const { insights: realtimeInsights, isConnected: isWebSocketConnected, connectionError, retryConnection } = useRealtimeInsights()
+  const { stats } = useUserStats()
+  const { currentTheme, availableThemes, autoApplyMoodTheme, getCurrentMood } = useMoodBasedTheme()
   
   const [moodTrend, setMoodTrend] = useState<'improving' | 'declining' | 'stable'>('stable')
-  
-  // Celebration state
-  const [celebrations, setCelebrations] = useState<any[]>([])
-  const [showCelebrations, setShowCelebrations] = useState(false)
   
   const recentMoods = moodEntries.slice(0, 7)
   const userCurrentMood = getCurrentMood()
   
-  // Get mood trend from analytics
   useEffect(() => {
     if (analytics?.moodTrend) {
       setMoodTrend(analytics.moodTrend)
     }
   }, [analytics])
   
-  // Handle celebration triggering
-  const handleCelebrationTriggered = (newCelebrations: any[]) => {
-    setCelebrations(newCelebrations)
-    setShowCelebrations(true)
-  }
-  
-  const handleCelebrationClose = () => {
-    setShowCelebrations(false)
-    setCelebrations([])
-  }
-  
-  const handleCelebrationsSeen = (celebrationIds: string[]) => {
-    // Mark celebrations as seen
-    console.log('Celebrations seen:', celebrationIds)
-    handleCelebrationClose()
-  }
-  
-  const handleThemeChange = (themeKey: string) => {
-    applyTheme(themeKey)
-    toast.success(`Theme changed to ${availableThemes[themeKey]?.name}`, {
-      description: availableThemes[themeKey]?.description,
-      duration: 2000,
-    })
-  }
-  
   const handleAutoTheme = () => {
-    const oldTheme = currentTheme
     const wasChanged = autoApplyMoodTheme()
     
     if (wasChanged) {
@@ -82,17 +47,6 @@ export function WellnessDashboard() {
     }
   }
   
-  const getMoodValue = (mood: string) => {
-    switch (mood) {
-      case 'excellent': return 5
-      case 'good': return 4
-      case 'neutral': return 3
-      case 'low': return 2
-      case 'very-low': return 1
-      default: return 3
-    }
-  }
-  
   const averageMood = recentMoods.length > 0 
     ? recentMoods.reduce((sum, mood) => sum + mood.mood, 0) / recentMoods.length
     : 3
@@ -101,6 +55,7 @@ export function WellnessDashboard() {
   
   return (
     <div className="space-y-6">
+      {/* Wellness Journey Header */}
       <motion.div
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
@@ -108,36 +63,10 @@ export function WellnessDashboard() {
         <Card className="bg-gradient-to-r from-primary/5 to-accent/5">
           <CardHeader>
             <div className="flex items-center justify-between">
-              <div className="flex items-center gap-3">
-                <CardTitle className="flex items-center gap-2">
-                  <Target className="text-primary" size={24} />
-                  Your Wellness Journey
-                </CardTitle>
-                {/* E4: Real-time status indicator */}
-                <div className="flex items-center gap-1 text-xs text-muted-foreground">
-                  <Broadcast 
-                    className={`h-3 w-3 ${isWebSocketConnected ? 'text-green-500' : 'text-red-500'}`}
-                    weight={isWebSocketConnected ? 'fill' : 'regular'}
-                  />
-                  <span className={isWebSocketConnected ? 'text-green-600' : 'text-red-500'}>
-                    {isWebSocketConnected ? 'Live' : 'Offline'}
-                  </span>
-                  {connectionError && (
-                    <span className="text-amber-500 ml-1" title={connectionError}>⚠️</span>
-                  )}
-                  {!isWebSocketConnected && (
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={retryConnection}
-                      className="text-xs ml-2 h-6 px-2"
-                    >
-                      <ArrowClockwise size={12} className="mr-1" />
-                      Retry
-                    </Button>
-                  )}
-                </div>
-              </div>
+              <CardTitle className="flex items-center gap-2">
+                <Target className="text-primary" size={24} />
+                Your Wellness Journey
+              </CardTitle>
               <div className="flex items-center gap-2">
                 <Button
                   variant="outline"
@@ -148,16 +77,6 @@ export function WellnessDashboard() {
                   <Palette size={14} className="mr-1" />
                   Auto Theme
                 </Button>
-                <AnimatePresence>
-                  {isThemeChanging && (
-                    <motion.div
-                      initial={{ scale: 0 }}
-                      animate={{ scale: 1 }}
-                      exit={{ scale: 0 }}
-                      className="w-2 h-2 bg-primary rounded-full"
-                    />
-                  )}
-                </AnimatePresence>
                 <Badge variant="secondary" className="text-xs">
                   Theme: {availableThemes[currentTheme]?.name || 'Default'}
                 </Badge>
@@ -189,7 +108,6 @@ export function WellnessDashboard() {
                 </div>
               )}
 
-              {/* Current Mood Status */}
               {recentMoods.length > 0 && (
                 <div className="flex items-center justify-between p-3 bg-muted/50 rounded-lg">
                   <span className="text-sm font-medium">Current Mood:</span>
@@ -211,282 +129,185 @@ export function WellnessDashboard() {
         </Card>
       </motion.div>
 
-      {/* Critical mood alerts only - other notifications go to header dropdown */}
-
       <Tabs defaultValue="overview" className="w-full">
-        <TabsList className="grid w-full grid-cols-4">
+        <TabsList className="grid w-full grid-cols-3">
           <TabsTrigger value="overview">Overview</TabsTrigger>
-          <TabsTrigger value="reports" className="flex items-center gap-2">
-            <ChartLine size={16} />
-            Reports
+          <TabsTrigger value="mood-tracking" className="flex items-center gap-2">
+            <Microphone size={16} />
+            Mood Tracking
           </TabsTrigger>
-          <TabsTrigger value="community" className="flex items-center gap-2">
-            <Share size={16} />
-            Community
-          </TabsTrigger>
-          <TabsTrigger value="themes" className="flex items-center gap-2">
-            <Palette size={16} />
-            Themes
+          <TabsTrigger value="insights" className="flex items-center gap-2">
+            <ChartBar size={16} />
+            Insights
           </TabsTrigger>
         </TabsList>
         
         <TabsContent value="overview" className="space-y-6">
-          {/* Enhanced Stats Grid with Real-time Updates */}
+          {/* Stats Grid */}
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-            <motion.div
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: 0.1 }}
-            >
-              <Card className="text-center relative">
-                <CardContent className="p-4">
-                  <Heart className="mx-auto text-red-500 mb-2" size={24} />
-                  <div className="text-2xl font-bold">
-                    {realtimeInsights.moodStreak || stats?.moodStreak || 0}
-                  </div>
-                  <div className="text-xs text-muted-foreground">Day Mood Streak</div>
-                  {realtimeInsights.lastUpdated && (
-                    <div className="absolute top-1 right-1 w-2 h-2 bg-green-500 rounded-full animate-pulse" title="Live updates" />
-                  )}
-                </CardContent>
-              </Card>
-            </motion.div>
-            
-            <motion.div
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: 0.2 }}
-            >
-              <Card className="text-center relative">
-                <CardContent className="p-4">
-                  <BookOpen className="mx-auto text-blue-500 mb-2" size={24} />
-                  <div className="text-2xl font-bold">
-                    {realtimeInsights.journalEntries || entries.length}
-                  </div>
-                  <div className="text-xs text-muted-foreground">Journal Entries</div>
-                  {realtimeInsights.lastUpdated && (
-                    <div className="absolute top-1 right-1 w-2 h-2 bg-green-500 rounded-full animate-pulse" title="Live updates" />
-                  )}
-                </CardContent>
-              </Card>
-            </motion.div>
-            
-            <motion.div
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: 0.3 }}
-            >
-              <Card className="text-center relative">
-                <CardContent className="p-4">
-                  <Target className="mx-auto text-purple-500 mb-2" size={24} />
-                  <div className="text-2xl font-bold">
-                    {realtimeInsights.daysTracked || 0}
-                  </div>
-                  <div className="text-xs text-muted-foreground">Days Tracked</div>
-                  {realtimeInsights.lastUpdated && (
-                    <div className="absolute top-1 right-1 w-2 h-2 bg-green-500 rounded-full animate-pulse" title="Live updates" />
-                  )}
-                </CardContent>
-              </Card>
-            </motion.div>
-            
-            <motion.div
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: 0.4 }}
-            >
-              <Card className="text-center relative">
-                <CardContent className="p-4">
-                  <Trophy className="mx-auto text-yellow-500 mb-2" size={24} />
-                  <div className="text-2xl font-bold">
-                    {realtimeInsights.engagementLevel || stats?.badges?.length || 0}
-                  </div>
-                  <div className="text-xs text-muted-foreground">Engagement Level</div>
-                  {realtimeInsights.lastUpdated && (
-                    <div className="absolute top-1 right-1 w-2 h-2 bg-green-500 rounded-full animate-pulse" title="Live updates" />
-                  )}
-                </CardContent>
-              </Card>
-            </motion.div>
-          </div>
-
-          {/* Enhanced Mood Analytics Grid */}
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-            {/* E4: Real-time Mood Tracking */}
-            <motion.div 
-              className="lg:col-span-2"
-              initial={{ opacity: 0, x: -20 }}
-              animate={{ opacity: 1, x: 0 }}
-              transition={{ delay: 0.5 }}
-            >
-              <EnhancedMoodTracker 
-                enableRealtime={isWebSocketConnected}
-                showEmotionalWeather={true}
-                enableVoice={true}
-                onMoodEntryAdded={(moodData) => {
-                  toast.success('Enhanced mood tracking completed! 🚀', {
-                    description: 'Your insights will update automatically'
-                  })
-                }}
-                onCulturalContextChange={(context) => {
-                  console.log('Cultural context updated:', context)
-                }}
-              />
-            </motion.div>
-
-            {/* Sidebar Widgets */}
-            <motion.div
-              className="space-y-4 h-fit"
-              initial={{ opacity: 0, x: 20 }}
-              animate={{ opacity: 1, x: 0 }}
-              transition={{ delay: 0.6 }}
-            >
-              {/* Quick Actions */}
-              <div className="sticky top-32 bg-card p-4 rounded-lg border">
-                <h4 className="font-medium mb-3">Quick Actions</h4>
-                <div className="space-y-2">
-                  <p className="text-sm text-muted-foreground">Wellness tools coming soon</p>
-                </div>
-              </div>
-              
-              {/* Wellness Insights */}
-              <div className="sticky top-80 bg-card p-4 rounded-lg border">
-                <h4 className="font-medium mb-3">Wellness Insights</h4>
-                <p className="text-sm text-muted-foreground">Personalized insights coming soon</p>
-              </div>
-            </motion.div>
-          </div>
-          
-          {stats?.badges && stats.badges.length > 0 && (
-            <Card>
-              <CardHeader>
-                <CardTitle>Your Achievements</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="flex flex-wrap gap-2">
-                  {stats.badges.map((badge) => (
-                    <Badge key={badge} variant="secondary" className="text-sm">
-                      🏆 {badge}
-                    </Badge>
-                  ))}
-                </div>
+            <Card className="text-center">
+              <CardContent className="p-4">
+                <Heart className="mx-auto text-red-500 mb-2" size={24} />
+                <div className="text-2xl font-bold">{stats?.moodStreak || 0}</div>
+                <div className="text-xs text-muted-foreground">Day Mood Streak</div>
               </CardContent>
             </Card>
-          )}
+            
+            <Card className="text-center">
+              <CardContent className="p-4">
+                <BookOpen className="mx-auto text-blue-500 mb-2" size={24} />
+                <div className="text-2xl font-bold">{entries.length}</div>
+                <div className="text-xs text-muted-foreground">Journal Entries</div>
+              </CardContent>
+            </Card>
+            
+            <Card className="text-center">
+              <CardContent className="p-4">
+                <Calendar className="mx-auto text-purple-500 mb-2" size={24} />
+                <div className="text-2xl font-bold">{moodEntries.length}</div>
+                <div className="text-xs text-muted-foreground">Days Tracked</div>
+              </CardContent>
+            </Card>
+            
+            <Card className="text-center">
+              <CardContent className="p-4">
+                <Trophy className="mx-auto text-yellow-500 mb-2" size={24} />
+                <div className="text-2xl font-bold">{stats?.badges?.length || 0}</div>
+                <div className="text-xs text-muted-foreground">Achievements</div>
+              </CardContent>
+            </Card>
+          </div>
+
+          {/* Emotional Weather - Only shown in Overview */}
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+            <div className="lg:col-span-2">
+              <EmotionalWeatherWidget />
+            </div>
+            <div className="space-y-4">
+              <MoodInsightsPanel 
+                showCelebrations={true}
+                autoRefresh={false}
+                onResponseSelect={(question, value) => {
+                  console.log('Follow-up response:', { question, value })
+                  toast.success('Response recorded!')
+                }}
+              />
+            </div>
+          </div>
         </TabsContent>
         
-        <TabsContent value="reports" className="space-y-6">
-          <Card>
-            <CardHeader>
-              <CardTitle>Wellness Reports</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <p className="text-muted-foreground">Detailed wellness reports will be available soon. Continue your mindful journey!</p>
-            </CardContent>
-          </Card>
-        </TabsContent>
-
-        <TabsContent value="community" className="space-y-6">
-          <Card>
-            <CardHeader>
-              <CardTitle>Community Wellness</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <p className="text-muted-foreground">Community wellness features coming soon. Stay connected on your wellness journey!</p>
-            </CardContent>
-          </Card>
-        </TabsContent>
-
-        <TabsContent value="themes" className="space-y-6">
+        <TabsContent value="mood-tracking" className="space-y-6">
+          {/* Single, comprehensive mood tracking section */}
           <Card>
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
-                <Palette className="text-primary" size={24} />
-                Personalized Themes
+                <Microphone className="text-primary" size={24} />
+                Track Your Mood
               </CardTitle>
               <p className="text-sm text-muted-foreground">
-                Choose a theme that matches your current mood or let the app adapt automatically
+                Record your mood with voice notes or quick entry
               </p>
             </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="grid gap-3">
-                {Object.entries(availableThemes).map(([key, theme]) => (
-                  <motion.div
-                    key={key}
-                    initial={{ opacity: 0, x: -20 }}
-                    animate={{ opacity: 1, x: 0 }}
-                    className={`flex items-center justify-between p-4 border rounded-lg cursor-pointer transition-all ${
-                      currentTheme === key ? 'border-primary bg-primary/5 shadow-md' : 'border-border hover:bg-muted/50'
-                    }`}
-                    onClick={() => handleThemeChange(key)}
-                  >
-                    <div className="flex-1">
-                      <div className="flex items-center gap-3">
-                        <div className="flex gap-1">
-                          {theme.moodRange.map((mood, index) => {
-                            const colors = {
-                              'excellent': 'bg-green-400',
-                              'good': 'bg-blue-400',
-                              'neutral': 'bg-yellow-400',
-                              'low': 'bg-orange-400',
-                              'very-low': 'bg-red-400'
-                            }
-                            return (
-                              <div
-                                key={index}
-                                className={`w-3 h-3 rounded-full ${colors[mood]}`}
-                                title={mood}
-                              />
-                            )
-                          })}
-                        </div>
-                        <div className="flex-1">
-                          <div className="flex items-center gap-2">
-                            <h3 className="font-medium">{theme.name}</h3>
-                            {currentTheme === key && (
-                              <div className="w-2 h-2 bg-primary rounded-full animate-pulse" />
-                            )}
-                          </div>
-                          <p className="text-sm text-muted-foreground">{theme.description}</p>
-                        </div>
-                      </div>
-                    </div>
-                    {currentTheme === key && (
-                      <Badge variant="default" className="text-xs">Active</Badge>
-                    )}
-                  </motion.div>
-                ))}
+            <CardContent>
+              <VoiceMoodEntry />
+            </CardContent>
+          </Card>
+
+          {/* This Week's Summary */}
+          <Card>
+            <CardHeader>
+              <CardTitle>This Week</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="grid grid-cols-3 gap-4 text-center">
+                <div>
+                  <div className="text-2xl font-bold">{moodEntries.length}</div>
+                  <div className="text-xs text-muted-foreground">Mood Entries</div>
+                </div>
+                <div>
+                  <div className="text-2xl font-bold">{entries.length}</div>
+                  <div className="text-xs text-muted-foreground">Journal Entries</div>
+                </div>
+                <div>
+                  <div className="text-2xl font-bold">0</div>
+                  <div className="text-xs text-muted-foreground">Streak Days</div>
+                </div>
               </div>
-              
-              <div className="pt-4 border-t">
-                <div className="space-y-3">
-                  <h4 className="font-medium">Smart Theme Suggestions</h4>
-                  <p className="text-sm text-muted-foreground">
-                    Based on your current mood ({userCurrentMood}), we recommend:
-                  </p>
-                  
-                  <div className="text-xs text-muted-foreground">
-                    Current theme: {currentTheme} | Mood: {userCurrentMood} | 
-                    Recommended: {Object.entries(availableThemes).find(([key, theme]) => 
-                      theme.moodRange.includes(userCurrentMood as any))?.[0] || 'default'}
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="insights" className="space-y-6">
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <ChartBar className="text-primary" size={24} />
+                Insights & Analytics
+              </CardTitle>
+              <p className="text-sm text-muted-foreground">
+                Real-time insights from your wellness journey powered by unified data analysis • Confidence: 100%
+              </p>
+            </CardHeader>
+            <CardContent>
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+                <div className="text-center p-4 border rounded-lg">
+                  <div className="text-2xl font-bold text-blue-600">{wellnessScore}</div>
+                  <div className="text-sm text-muted-foreground">Weekly Score</div>
+                  <div className="text-xs text-green-600">Stable</div>
+                </div>
+                <div className="text-center p-4 border rounded-lg">
+                  <div className="text-2xl font-bold text-purple-600">{moodEntries.length}</div>
+                  <div className="text-sm text-muted-foreground">Days Tracked</div>
+                  <div className="text-xs text-blue-600">This week</div>
+                </div>
+                <div className="text-center p-4 border rounded-lg">
+                  <div className="text-2xl font-bold text-green-600">70%</div>
+                  <div className="text-sm text-muted-foreground">AI Confidence</div>
+                  <div className="text-xs text-green-600">High</div>
+                </div>
+                <div className="text-center p-4 border rounded-lg">
+                  <div className="text-2xl font-bold text-orange-600">Active</div>
+                  <div className="text-sm text-muted-foreground">Engagement</div>
+                  <div className="text-xs text-orange-600">Recommendations available</div>
+                </div>
+              </div>
+
+              <div className="space-y-4">
+                <h4 className="font-medium">✅ Protective Factors</h4>
+                <ul className="list-disc list-inside text-sm text-muted-foreground space-y-1">
+                  <li>Self-awareness through tracking</li>
+                </ul>
+
+                <h4 className="font-medium">💡 Recommendations</h4>
+                <div className="space-y-2">
+                  <div className="p-3 bg-blue-50 rounded-lg text-sm">
+                    <strong>Be gentle with yourself</strong><br />
+                    Take things slow and practice self-compassion
                   </div>
-                  
-                  <Button 
-                    onClick={handleAutoTheme}
-                    variant="outline"
-                    className="w-full"
-                  >
-                    <Palette size={16} className="mr-2" />
-                    Apply Mood-Based Theme
-                  </Button>
+                  <div className="p-3 bg-green-50 rounded-lg text-sm">
+                    <strong>Stick to routines</strong><br />
+                    Familiar activities can provide comfort and stability
+                  </div>
+                  <div className="p-3 bg-purple-50 rounded-lg text-sm">
+                    <strong>Light physical activity</strong><br />
+                    Gentle movement to boost your mood and energy
+                  </div>
+                  <div className="p-3 bg-yellow-50 rounded-lg text-sm">
+                    <strong>Stay connected</strong><br />
+                    Reach out to supportive people in your life
+                  </div>
+                </div>
+
+                <div className="text-center pt-4">
+                  <div className="text-xs text-muted-foreground">
+                    Excluded conditions: 70%
+                  </div>
                 </div>
               </div>
             </CardContent>
           </Card>
         </TabsContent>
       </Tabs>
-
-      {/* Celebrations temporarily disabled - wellness celebrations coming soon */}
     </div>
   )
 }

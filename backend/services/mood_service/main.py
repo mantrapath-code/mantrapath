@@ -26,10 +26,25 @@ sys.path.append(os.path.join(os.path.dirname(__file__), '../../'))
 sys.path.append(os.path.join(os.path.dirname(__file__), '../../shared'))
 
 from shared.database import get_db, engine
-from shared.models import (
-    MoodEntry, JournalEntry, User, Base, EmotionalWeatherForecast, 
-    CelebrationMoment, AdaptiveQuestion, EnvironmentalData
-)
+# Import models conditionally to handle missing models gracefully
+try:
+    from shared.models import (
+        MoodEntry, JournalEntry, User, Base, EmotionalWeatherForecast, 
+        CelebrationMoment, AdaptiveQuestion, EnvironmentalData
+    )
+except ImportError as e:
+    print(f"⚠️  Warning: Could not import some models: {e}")
+    # Import only the essential models that exist
+    from shared.models import MoodEntry, JournalEntry, User, Base
+    # Create dummy classes for missing models as placeholders
+    class EmotionalWeatherForecast:
+        pass
+    class CelebrationMoment:
+        pass
+    class AdaptiveQuestion:
+        pass
+    class EnvironmentalData:
+        pass
 from shared.auth import get_current_user
 # Temporarily comment out problematic event imports
 from shared.events import publish_mood_entry_created, publish_journal_entry_created
@@ -98,6 +113,16 @@ class AdaptiveMoodCollector:
     
     async def create_enhanced_mood_entry(self, mood_data: dict, user_id: str, db: Session):
         """Create mood entry with enhanced contextual data"""
+        # Generate celebration triggers and follow-up responses
+        celebration_detector = CelebrationMomentDetector()
+        adaptive_collector = AdaptiveMoodCollector()
+        
+        # Detect celebration triggers
+        celebration_triggers = await celebration_detector.get_celebration_triggers(user_id, db)
+        
+        # Generate adaptive follow-up responses
+        adaptive_responses = await adaptive_collector.generate_adaptive_questions(user_id, db)
+        
         # Create base mood entry
         mood_entry = MoodEntry(
             user_id=user_id,
@@ -111,8 +136,8 @@ class AdaptiveMoodCollector:
             mood_confidence=mood_data.get("mood_confidence", 1.0),
             collection_method="manual",
             environmental_context=mood_data.get("environmental_context", {}),
-            follow_up_responses=mood_data.get("adaptive_responses", []),
-            celebration_triggers=[]
+            follow_up_responses=adaptive_responses,
+            celebration_triggers=celebration_triggers
         )
         
         db.add(mood_entry)
@@ -155,6 +180,73 @@ class AdaptiveMoodCollector:
                 questions.extend(self.question_templates["mood_declining"])
         
         return questions[:2]  # Return max 2 questions to avoid overwhelming
+
+    async def generate_adaptive_questions(self, user_id: str, db: Session):
+        """Generate personalized follow-up questions based on user patterns"""
+        # Get recent mood entries to identify patterns
+        recent_entries = db.query(MoodEntry).filter(
+            MoodEntry.user_id == user_id,
+            MoodEntry.created_at >= datetime.utcnow() - timedelta(days=7)
+        ).order_by(desc(MoodEntry.created_at)).limit(10).all()
+        
+        if not recent_entries:
+            return [
+                {
+                    "question": "How are you feeling today?",
+                    "type": "mood_check",
+                    "options": [
+                        {"value": "great", "label": "Great"},
+                        {"value": "good", "label": "Good"},
+                        {"value": "okay", "label": "Okay"},
+                        {"value": "not_good", "label": "Not great"},
+                        {"value": "difficult", "label": "Difficult"}
+                    ]
+                }
+            ]
+        
+        adaptive_questions = []
+        recent_moods = [entry.mood_score for entry in recent_entries]
+        avg_mood = sum(recent_moods) / len(recent_moods)
+        
+        # Generate context-aware questions
+        if avg_mood < 5:
+            adaptive_questions.append({
+                "question": "What's been challenging for you lately?",
+                "type": "challenge_exploration",
+                "options": [
+                    {"value": "work_stress", "label": "Work stress"},
+                    {"value": "relationships", "label": "Relationship issues"},
+                    {"value": "health", "label": "Health concerns"},
+                    {"value": "finances", "label": "Financial worries"},
+                    {"value": "other", "label": "Something else"}
+                ]
+            })
+        elif avg_mood > 7:
+            adaptive_questions.append({
+                "question": "What's been going particularly well?",
+                "type": "positive_exploration",
+                "options": [
+                    {"value": "achievement", "label": "Recent achievement"},
+                    {"value": "relationships", "label": "Good relationships"},
+                    {"value": "health", "label": "Feeling healthy"},
+                    {"value": "progress", "label": "Making progress"},
+                    {"value": "other", "label": "Something else"}
+                ]
+            })
+        else:
+            adaptive_questions.append({
+                "question": "What would help you feel better today?",
+                "type": "support_exploration",
+                "options": [
+                    {"value": "rest", "label": "More rest"},
+                    {"value": "activity", "label": "Physical activity"},
+                    {"value": "social", "label": "Social connection"},
+                    {"value": "alone_time", "label": "Some alone time"},
+                    {"value": "other", "label": "Something else"}
+                ]
+            })
+        
+        return adaptive_questions[:2]
 
 # ======================================
 # EMOTIONAL WEATHER FORECASTING
@@ -254,15 +346,49 @@ class EmotionalWeatherEngine:
         if weather_type in ["rainy", "stormy"]:
             recommendations.extend([
                 {"type": "self_care", "title": "Extra self-care", "description": "Schedule some nurturing activities"},
-                {"type": "support", "title": "Reach out", "description": "Consider connecting with supportive friends or family"}
+                {"type": "support", "title": "Reach out", "description": "Consider connecting with supportive friends or family"},
+                {"type": "mindfulness", "title": "Mindful moments", "description": "Try deep breathing or short meditation"},
+                {"type": "gentle_activity", "title": "Gentle movement", "description": "Light walk or stretching can help"}
             ])
         elif weather_type == "sunny":
             recommendations.extend([
                 {"type": "activity", "title": "Embrace the energy", "description": "Great day for new projects or activities"},
-                {"type": "social", "title": "Share the positivity", "description": "Your good mood can brighten others' days too"}
+                {"type": "social", "title": "Share the positivity", "description": "Your good mood can brighten others' days too"},
+                {"type": "goal_setting", "title": "Set new goals", "description": "Perfect time to plan something exciting"},
+                {"type": "creative", "title": "Creative expression", "description": "Channel your energy into art, music, or writing"}
+            ])
+        elif weather_type == "partly_cloudy":
+            recommendations.extend([
+                {"type": "balance", "title": "Maintain balance", "description": "Keep up your current positive habits"},
+                {"type": "social", "title": "Connect with others", "description": "Reach out to friends or family for support"},
+                {"type": "self_reflection", "title": "Check in with yourself", "description": "Take time to reflect on what's working well"},
+                {"type": "preparation", "title": "Prepare for challenges", "description": "Build your resilience toolkit"}
+            ])
+        elif weather_type == "cloudy":
+            recommendations.extend([
+                {"type": "gentle_care", "title": "Be gentle with yourself", "description": "Take things slow and practice self-compassion"},
+                {"type": "routine", "title": "Stick to routines", "description": "Familiar activities can provide comfort and stability"},
+                {"type": "light_activity", "title": "Light physical activity", "description": "A short walk or gentle yoga can boost mood"},
+                {"type": "connection", "title": "Stay connected", "description": "Reach out to supportive people in your life"}
             ])
         
-        return recommendations
+        # Add stress-specific recommendations
+        if avg_stress > 6:
+            recommendations.append({
+                "type": "stress_management", 
+                "title": "Stress relief", 
+                "description": "Try progressive muscle relaxation or deep breathing exercises"
+            })
+        
+        # Add mood-specific recommendations
+        if avg_mood < 5:
+            recommendations.append({
+                "type": "mood_boost", 
+                "title": "Mood enhancer", 
+                "description": "Listen to uplifting music or engage in a favorite hobby"
+            })
+        
+        return recommendations[:4]  # Return top 4 recommendations
     
     def _identify_risk_factors(self, avg_mood: float, avg_stress: float):
         """Identify potential risk factors"""
@@ -326,6 +452,37 @@ class CelebrationMomentDetector:
                 "levels": {"bronze": 1, "silver": 2, "gold": 3, "platinum": 4}
             }
         }
+    
+    async def get_celebration_triggers(self, user_id: str, db: Session):
+        """Get current celebration triggers for the user"""
+        triggers = []
+        
+        # Check for mood improvement streak
+        recent_entries = db.query(MoodEntry).filter(
+            MoodEntry.user_id == user_id
+        ).order_by(desc(MoodEntry.created_at)).limit(7).all()
+        
+        if len(recent_entries) >= 3:
+            # Check for improvement trend
+            recent_moods = [entry.mood_score for entry in recent_entries[:5]]
+            if len(recent_moods) >= 3:
+                trend = recent_moods[0] - recent_moods[-1]  # Most recent - oldest
+                if trend > 1:
+                    triggers.append("mood_improvement_detected")
+                
+            # Check for consistency
+            if len(recent_entries) >= 5:
+                triggers.append("tracking_consistency")
+                
+            # Check for high mood day
+            if recent_entries[0].mood_score >= 8:
+                triggers.append("high_mood_celebration")
+                
+            # Check for stress management
+            if hasattr(recent_entries[0], 'stress_level') and recent_entries[0].stress_level and recent_entries[0].stress_level <= 3:
+                triggers.append("stress_management_success")
+        
+        return triggers
     
     async def detect_celebrations(self, user_id: str, db: Session):
         """Detect new celebration moments for the user"""

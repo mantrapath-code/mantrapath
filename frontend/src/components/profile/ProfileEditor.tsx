@@ -48,10 +48,17 @@ export function ProfileEditor({ profile, user }: ProfileEditorProps) {
       setIsSaving(true)
       setMessage('')
       
-      await updateProfile(formData)
-      setMessage('Profile updated successfully!')
+      // Only send supported fields to backend
+      const supportedData = {
+        bio: formData.bio,
+        timezone: formData.timezone
+        // Note: location and date_of_birth are not yet supported by backend
+      }
       
-      setTimeout(() => setMessage(''), 3000)
+      await updateProfile(supportedData)
+      setMessage('Profile updated successfully! (Note: Location and Date of Birth will be supported in a future update)')
+      
+      setTimeout(() => setMessage(''), 5000)
     } catch (error) {
       setMessage('Failed to update profile. Please try again.')
       console.error('Profile update error:', error)

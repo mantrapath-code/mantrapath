@@ -22,9 +22,9 @@ class AIEventProcessorClient:
     async def analyze_intervention_needs(self, user_id: str) -> Dict[str, Any]:
         """Get intervention analysis from AI Event Processor"""
         try:
-            # Use existing predictive engine endpoint
-            response = await self.client.post(
-                f"{self.base_url}/api/v1/intervention/analyze/{user_id}"
+            # Use the correct predictive engine endpoint
+            response = await self.client.get(
+                f"{self.base_url}/api/v1/predict/intervention/{user_id}"
             )
             response.raise_for_status()
             return response.json()

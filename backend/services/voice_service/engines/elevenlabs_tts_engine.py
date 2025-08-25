@@ -112,6 +112,24 @@ class ElevenLabsTTSEngine(BaseTTSEngine):
             }
         }
     
+    def _select_default_voice(self, language: str = "en", **kwargs) -> str:
+        """Select default voice based on language and preferences"""
+        # Default voice selection logic
+        if language in ["hi", "bn", "ta", "te", "ml", "kn", "gu", "mr", "pa", "ur"]:
+            # For Indian languages, use a neutral voice
+            return "rachel"
+        elif kwargs.get("gender") == "male":
+            return "drew"
+        else:
+            return "rachel"  # Default female voice
+    
+    def _estimate_duration(self, text: str, speed: float = 1.0) -> float:
+        """Estimate audio duration based on text length and speed"""
+        # Rough estimation: ~150 words per minute, ~5 characters per word
+        words = len(text) / 5
+        base_duration = (words / 150) * 60  # seconds
+        return base_duration / speed
+    
     def health_check(self) -> Dict[str, Any]:
         """Check ElevenLabs engine health"""
         try:

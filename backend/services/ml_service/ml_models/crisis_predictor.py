@@ -520,6 +520,66 @@ class CrisisPredictionSystem:
         except Exception as e:
             logger.warning(f"Could not load pre-trained crisis models: {e}")
     
+    def _error_fallback_response(self, user_data: Dict[str, Any], error_msg: str) -> Dict[str, Any]:
+        """Fallback response when crisis prediction encounters an error"""
+        user_id = user_data.get("user_id", "unknown")
+        
+        return {
+            "user_id": user_id,
+            "timestamp": datetime.utcnow().isoformat(),
+            "crisis_probability": 0.5,  # Neutral probability due to error
+            "risk_level": "UNKNOWN",
+            "confidence": 0.0,
+            "time_to_crisis": {"estimate": "unknown", "confidence": 0.0},
+            "key_risk_factors": ["System error during assessment"],
+            "protective_factors": [],
+            "recommended_interventions": [
+                "Manual assessment recommended",
+                "Contact mental health professional if concerned"
+            ],
+            "model_components": {
+                "lstm_score": 0.0,
+                "prophet_trend": "error",
+                "anomaly_score": 0.0,
+                "risk_factor_score": 0.0
+            },
+            "urgency_level": "LOW",
+            "model_version": self.model_version,
+            "data_quality_score": 0.0,
+            "error": True,
+            "error_message": error_msg,
+            "status": "error"
+        }
+    
+    def _insufficient_data_response(self, user_id: str) -> Dict[str, Any]:
+        """Response when there's insufficient data for crisis prediction"""
+        return {
+            "user_id": user_id,
+            "timestamp": datetime.utcnow().isoformat(),
+            "crisis_probability": 0.3,  # Low-moderate default
+            "risk_level": "INSUFFICIENT_DATA",
+            "confidence": 0.1,
+            "time_to_crisis": {"estimate": "unknown", "confidence": 0.0},
+            "key_risk_factors": ["Insufficient historical data"],
+            "protective_factors": [],
+            "recommended_interventions": [
+                "Encourage regular mood tracking",
+                "Schedule check-in in 3-5 days",
+                "Provide crisis resources"
+            ],
+            "model_components": {
+                "lstm_score": 0.0,
+                "prophet_trend": "insufficient_data",
+                "anomaly_score": 0.0,
+                "risk_factor_score": 0.0
+            },
+            "urgency_level": "LOW",
+            "model_version": self.model_version,
+            "data_quality_score": 0.1,
+            "error": False,
+            "status": "insufficient_data"
+        }
+    
     def _fallback_risk_assessment(self, user_data: Dict[str, Any]) -> Dict[str, Any]:
         """Fallback risk assessment when advanced ML is not available"""
         mood_entries = user_data.get("mood_entries", [])
