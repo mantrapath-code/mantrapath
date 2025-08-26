@@ -73,13 +73,14 @@ class AIContextStoreClient:
             logger.error(f"AI Context Store health check failed: {e}")
             return False
     
-    async def get_user_context(self, user_id: str, jwt_token: Optional[str] = None) -> Optional[UserContext]:
+    async def get_user_context(self, user_id: str, jwt_token: Optional[str] = None, refresh_data: bool = False) -> Optional[UserContext]:
         """
         Get comprehensive user context from AI Context Store
         
         Args:
             user_id: User ID to get context for
             jwt_token: JWT token for authentication
+            refresh_data: Whether to refresh data from all services
             
         Returns:
             UserContext object or None if failed
@@ -93,10 +94,15 @@ class AIContextStoreClient:
             if jwt_token:
                 headers["Authorization"] = f"Bearer {jwt_token}"
             
+            params = {}
+            if refresh_data:
+                params["refresh_data"] = "true"
+            
             async with httpx.AsyncClient(timeout=self.timeout) as client:
                 response = await client.get(
                     f"{self.ai_context_store_url}/api/v1/context/user/{user_id}",
-                    headers=headers
+                    headers=headers,
+                    params=params
                 )
                 
                 if response.status_code == 200:

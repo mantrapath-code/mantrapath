@@ -1,4 +1,4 @@
-import { useState, useCallback, useRef } from 'react'
+import { useState, useCallback, useRef, useEffect } from 'react'
 import { apiService } from '@/services/api'
 import { toast } from 'sonner'
 
@@ -102,7 +102,10 @@ SYSTEM_CONTEXT: You are Mantra-Mitra, an empathetic AI wellness companion. You h
 Respond with empathy, understanding, and practical wellness guidance. If user seems distressed, offer immediate support options. Mention relevant features when appropriate.`
       }
 
-      const response = await apiService.chatWithBotEnhanced(enhancedContent, currentSessionId || undefined)
+      // Check if this is a mood/wellness related query and request context refresh
+      const isMoodQuery = /mood|feeling|emotion|journal|community|track|pattern|trend|wellbeing|wellness|mental health|how have i been|how am i doing/i.test(content)
+      
+      const response = await apiService.chatWithBotEnhanced(enhancedContent, currentSessionId || undefined, isMoodQuery)
       
       // Update session ID if this is a new conversation
       if (!currentSessionId) {
@@ -275,6 +278,56 @@ How are you feeling today? You can speak to me or type - whatever feels most com
     }
   }, [])
 
+  // Initialize chatbot - restore session and load history
+  const initializeChatbot = useCallback(async () => {
+    try {
+      // Load sessions first
+      await loadSessions()
+      
+      // Try to restore last session from localStorage
+      const lastSessionId = localStorage.getItem('mantrapath_last_chat_session')
+      
+      if (lastSessionId) {
+        // Try to load history for the last session
+        try {
+          await loadChatHistory(lastSessionId)
+          console.log('Restored chat session:', lastSessionId)
+        } catch (err) {
+          console.log('Could not restore last session, starting new one')
+          // If we can't restore, start fresh but don't show error to user
+          localStorage.removeItem('mantrapath_last_chat_session')
+          await startNewSession()
+        }
+      } else {
+        // No previous session, start a new one
+        await startNewSession()
+      }
+    } catch (err) {
+      console.error('Failed to initialize chatbot:', err)
+      // Fallback: start with welcome message without session
+      const welcomeMessage: ChatMessage = {
+        id: 'welcome',
+        sender: 'assistant',
+        content: 'Hello! I\'m Mantra-Mitra, your AI wellness companion. How are you feeling today?',
+        timestamp: new Date().toISOString(),
+        messageType: 'greeting'
+      }
+      setMessages([welcomeMessage])
+    }
+  }, [loadSessions, loadChatHistory, startNewSession])
+
+  // Save session ID to localStorage when it changes
+  useEffect(() => {
+    if (currentSessionId) {
+      localStorage.setItem('mantrapath_last_chat_session', currentSessionId)
+    }
+  }, [currentSessionId])
+
+  // Initialize on mount
+  useEffect(() => {
+    initializeChatbot()
+  }, []) // Empty dependency array - only run once on mount
+
   return {
     messages,
     sessions,
@@ -290,6 +343,7 @@ How are you feeling today? You can speak to me or type - whatever feels most com
       getBreathingExercises,
       clearConversation,
       stopGeneration,
+      initializeChatbot,
       quickActions
     }
   }

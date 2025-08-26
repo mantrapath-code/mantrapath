@@ -18,9 +18,26 @@ from shared.database import get_db
 from shared.auth import get_current_user
 from shared.models import User
 
-# Import the achievements engine
-sys.path.append(os.path.join(os.path.dirname(__file__), '../../services'))
-from achievements_engine import achievements_engine
+# Import the achievements engine - fix the path
+sys.path.append(os.path.join(os.path.dirname(__file__), '../'))
+try:
+    # Try to import the main achievements engine
+    import achievements_engine
+    from achievements_engine import AchievementsEngine
+    print("✅ Main achievement engine imported successfully")
+    ACHIEVEMENTS_AVAILABLE = True
+except ImportError as e:
+    print(f"⚠️  Warning: Could not import achievements_engine: {e}")
+    # Fallback mock system - should only be used when main system is unavailable
+    class AchievementsEngine:
+        def __init__(self):
+            pass
+        def check_achievements(self, user_id: str, mood_data: dict):
+            return []
+        def get_user_achievements(self, user_id: str):
+            return []
+    achievements_engine = None
+    ACHIEVEMENTS_AVAILABLE = False
 
 # Create achievement router
 achievement_router = APIRouter(prefix="/api/v1/achievements", tags=["achievements"])

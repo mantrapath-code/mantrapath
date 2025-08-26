@@ -250,6 +250,33 @@ async def enhanced_chat_endpoint(
         
         return fallback_response
 
+async def get_chat_history(session_id: str, limit: int = 10, db: Session = None) -> List[Dict[str, Any]]:
+    """Get recent chat history for context"""
+    try:
+        if not db:
+            return []
+            
+        messages = db.query(ChatMessage)\
+            .filter(ChatMessage.session_id == session_id)\
+            .order_by(ChatMessage.timestamp.desc())\
+            .limit(limit)\
+            .all()
+        
+        history = []
+        for msg in reversed(messages):  # Reverse to get chronological order
+            history.append({
+                "role": "user" if msg.message_type == "user" else "assistant",
+                "content": msg.content,
+                "timestamp": msg.timestamp.isoformat() if msg.timestamp else None,
+                "metadata": msg.metadata or {}
+            })
+        
+        return history
+        
+    except Exception as e:
+        logger.error(f"Error getting chat history: {e}")
+        return []
+
 async def save_chat_interaction(
     session_id: str,
     user_message: str,

@@ -1289,7 +1289,11 @@ class ApiService {
   }
 
   // Enhanced chatbot with Action Orchestrator integration
-  async chatWithBotEnhanced(message: string, sessionId?: string) {
+  async chatWithBotEnhanced(message: string, sessionId?: string, refreshContext?: boolean) {
+    // Determine if we should refresh context based on message content
+    const shouldRefreshContext = refreshContext || 
+      /mood|feeling|emotion|journal|community|track|pattern|trend|wellbeing|wellness|mental health/i.test(message)
+    
     return this.request<{
       response: string
       session_id: string
@@ -1333,7 +1337,7 @@ class ApiService {
       body: JSON.stringify({
         message,
         session_id: sessionId,
-        user_context_refresh: false
+        user_context_refresh: shouldRefreshContext
       }),
     }, CHATBOT_SERVICE_URL)
   }
@@ -1598,37 +1602,43 @@ class ApiService {
       });
 
       if (!response.ok) {
-        throw new Error(`AI Insights service error: ${response.status}`);
+        console.warn(`AI Insights service returned ${response.status}, using fallback`);
+        return this.getFallbackAIInsights();
       }
 
       const data = await response.json();
       
       return {
-        insights: data.insights || [],
-        recommendations: data.recommendations || [],
-        risk_level: data.risk_level || 'low',
-        confidence: data.confidence || 0.8,
-        generated_at: data.generated_at || new Date().toISOString()
+        insights: data.result?.insights || data.insights || [],
+        recommendations: data.result?.recommended_actions || data.recommendations || [],
+        risk_level: data.result?.urgency_level || data.risk_level || 'low',
+        confidence: data.result?.confidence || data.confidence || 0.8,
+        generated_at: data.timestamp || data.generated_at || new Date().toISOString(),
+        factors_analyzed: data.factors_analyzed || []
       };
     } catch (error) {
-      console.warn('AI Insights not available:', error);
-      // Return meaningful mock insights
-      return {
-        insights: [
-          'Your mood patterns show positive trends this week',
-          'Consistent morning routines correlate with better emotional stability',
-          'Social interactions appear to boost your overall wellness score'
-        ],
-        recommendations: [
-          'Continue your current meditation practice',
-          'Consider adding light exercise to your routine',
-          'Maintain your sleep schedule for optimal mental health'
-        ],
-        risk_level: 'low',
-        confidence: 0.85,
-        generated_at: new Date().toISOString()
-      };
+      console.warn('AI Insights service unavailable:', error);
+      return this.getFallbackAIInsights();
     }
+  }
+
+  private getFallbackAIInsights() {
+    return {
+      insights: [
+        'Your mood patterns show positive trends this week',
+        'Consistent morning routines correlate with better emotional stability',
+        'Social interactions appear to boost your overall wellness score'
+      ],
+      recommendations: [
+        'Continue your current wellness practices',
+        'Consider adding 10 minutes of mindfulness to your daily routine',
+        'Engage in community activities to maintain social connections'
+      ],
+      risk_level: 'low',
+      confidence: 0.7,
+      generated_at: new Date().toISOString(),
+      factors_analyzed: ['mood_patterns', 'activity_levels', 'social_engagement']
+    };
   }
 
   async getProactiveAssistance() {

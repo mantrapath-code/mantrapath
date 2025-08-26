@@ -16,6 +16,9 @@ RUN pip install --no-cache-dir -r requirements.txt
 # Copy shared modules to make them importable
 COPY shared /app/shared
 
+# Copy the achievements engine for proper import
+COPY services/achievements_engine.py /app/achievements_engine.py
+
 # Copy the service files directly to the app directory
 COPY services/mood_service /app/
 

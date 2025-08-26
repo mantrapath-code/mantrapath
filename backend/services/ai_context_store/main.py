@@ -11,7 +11,8 @@ Features:
 - Redis caching for performance
 """
 
-from fastapi import FastAPI, Depends, HTTPException, BackgroundTasks
+from fastapi import FastAPI, Depends, HTTPException, BackgroundTasks, Request
+from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
 from pydantic import BaseModel
@@ -189,32 +190,142 @@ async def root():
         }
     }
 
-@app.get("/metrics")
-async def get_metrics():
-    """Get service metrics"""
+@app.get("/health")
+async def health_check():
+    """Health check endpoint"""
     global context_aggregator_service, intelligence_engine, event_processor
     
     try:
-        metrics = {
-            "timestamp": datetime.now(timezone.utc).isoformat(),
-            "service": "ai_context_store",
-            "status": "healthy"
-        }
+        status = "healthy"
+        services = {}
         
         if context_aggregator_service:
-            metrics["context_aggregator"] = await context_aggregator_service.get_metrics()
-        
+            services["context_aggregator"] = "healthy"
+        else:
+            services["context_aggregator"] = "not_initialized"
+            status = "degraded"
+            
         if intelligence_engine:
-            metrics["intelligence_engine"] = await intelligence_engine.get_metrics()
-        
+            services["intelligence_engine"] = "healthy"
+        else:
+            services["intelligence_engine"] = "not_initialized"
+            
         if event_processor:
-            metrics["event_processor"] = await event_processor.get_metrics()
+            services["event_processor"] = "healthy"
+        else:
+            services["event_processor"] = "not_initialized"
         
-        return metrics
+        return {
+            "status": status,
+            "service": "ai_context_store",
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+            "version": "1.0.0",
+            "services": services
+        }
         
     except Exception as e:
-        logger.error(f"❌ Error getting metrics: {e}")
-        raise HTTPException(status_code=500, detail="Failed to get metrics")
+        logger.error(f"❌ Health check failed: {e}")
+        return {
+            "status": "unhealthy",
+            "service": "ai_context_store",
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+            "error": str(e)
+        }
+
+@app.get("/api/v1/context/user/{user_id}")
+async def get_user_context(
+    user_id: str, 
+    request: Request,
+    current_user: User = Depends(get_current_user),
+    refresh_data: bool = False
+):
+    """Get comprehensive user context"""
+    try:
+        # Verify user access - handle both dictionary and object current_user
+        if hasattr(current_user, 'id'):
+            current_user_id = str(current_user.id)
+            user_role = getattr(current_user, 'role', 'user')
+        elif isinstance(current_user, dict):
+            current_user_id = str(current_user.get('user_id', current_user.get('sub', '')))
+            user_role = current_user.get('role', 'user')
+        else:
+            current_user_id = str(current_user)
+            user_role = 'user'
+        
+        if current_user_id != str(user_id) and user_role != "admin":
+            logger.warning(f"Authorization failed: current_user_id={current_user_id}, requested_user_id={user_id}, role={user_role}")
+            raise HTTPException(status_code=403, detail="Not authorized to access this user's context")
+        
+        # If refresh requested, collect fresh data
+        if refresh_data and context_aggregator_service:
+            # Extract JWT token from request headers
+            from fastapi import Request
+            request = Request
+            auth_header = request.headers.get("authorization", "")
+            jwt_token = auth_header.replace("Bearer ", "") if auth_header.startswith("Bearer ") else ""
+            
+            if jwt_token:
+                context = await context_aggregator_service.collect_comprehensive_user_data(
+                    user_id, 
+                    jwt_token
+                )
+            else:
+                context = await context_aggregator_service.get_user_context(user_id)
+        else:
+            context = await context_aggregator_service.get_user_context(user_id) if context_aggregator_service else None
+        
+        if not context:
+            return {"user_id": user_id, "context": None, "message": "No context found"}
+            
+        return context.model_dump()
+        
+    except Exception as e:
+        logger.error(f"Error getting user context: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/api/v1/context/user/{user_id}/refresh")
+async def refresh_user_context(
+    user_id: str,
+    background_tasks: BackgroundTasks,
+    current_user: User = Depends(get_current_user)
+):
+    """Trigger comprehensive data collection for user context"""
+    try:
+        # Verify user access
+        if current_user.id != user_id and current_user.role != "admin":
+            raise HTTPException(status_code=403, detail="Not authorized to refresh this user's context")
+        
+        if not context_aggregator_service:
+            raise HTTPException(status_code=503, detail="Context aggregator service not available")
+        
+        # Add to background tasks to avoid blocking
+        background_tasks.add_task(
+            trigger_context_refresh,
+            user_id
+        )
+        
+        return {
+            "status": "context_refresh_triggered",
+            "user_id": user_id,
+            "message": "Context refresh started in background"
+        }
+        
+    except Exception as e:
+        logger.error(f"Error triggering context refresh: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+async def trigger_context_refresh(user_id: str):
+    """Background task to refresh user context"""
+    try:
+        if context_aggregator_service:
+            # For now, we'll collect context without JWT token
+            # In production, this should be enhanced to get proper auth
+            await context_aggregator_service.get_user_context(user_id)
+            logger.info(f"✅ Context refresh completed for user {user_id}")
+        else:
+            logger.warning(f"Cannot refresh context for user {user_id} - service not available")
+    except Exception as e:
+        logger.error(f"Background context refresh failed for user {user_id}: {e}")
 
 if __name__ == "__main__":
     import uvicorn

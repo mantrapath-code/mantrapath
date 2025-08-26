@@ -47,6 +47,13 @@ AdaptiveQuestion = shared_models_module.AdaptiveQuestion
 EnvironmentalData = shared_models_module.EnvironmentalData
 Base = shared_models_module.Base
 
+# Memory Service Models (Sprint 3)
+UserInteraction = shared_models_module.UserInteraction
+MoodPattern = shared_models_module.MoodPattern
+BehavioralInsight = shared_models_module.BehavioralInsight
+MemorySession = shared_models_module.MemorySession
+MemoryAggregation = shared_models_module.MemoryAggregation
+
 from .assistance import (
     AssistanceEvaluation,
     InterventionAnalysis,
@@ -106,5 +113,11 @@ __all__ = [
     'ServiceMetrics',
     'CulturalProfile',
     'AssistanceType',
-    'UrgencyLevel'
+    'UrgencyLevel',
+    # Memory Service Models (Sprint 3)
+    'UserInteraction',
+    'MoodPattern',
+    'BehavioralInsight',
+    'MemorySession',
+    'MemoryAggregation'
 ]

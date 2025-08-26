@@ -19,6 +19,7 @@ import {
 } from '@phosphor-icons/react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { toast } from 'sonner'
+import { apiService } from '@/services/api'
 
 // Speech Recognition type declarations
 declare global {
@@ -43,6 +44,7 @@ type VoiceMode = 'push-to-talk' | 'continuous' | 'auto'
 interface VoiceMoodEntryProps {
   onVoiceInput?: (transcript: string) => void
   onVoiceComplete?: (finalTranscript: string, confidence: number) => void
+  onMoodSaved?: (moodData: any) => void
   voiceState?: VoiceState
   supportedLanguages?: string[]
   currentLanguage?: string
@@ -65,6 +67,7 @@ interface VoicePermissions {
 export function VoiceMoodEntry({
   onVoiceInput,
   onVoiceComplete,
+  onMoodSaved,
   voiceState: externalVoiceState,
   supportedLanguages = ['en-US', 'es-ES', 'fr-FR', 'de-DE', 'ja-JP'],
   currentLanguage = 'en-US',
@@ -419,36 +422,106 @@ export function VoiceMoodEntry({
 
   const processVoiceInputWithBackend = async (transcript: string, confidence: number) => {
     try {
-      // Use the voice service's emotion analysis
-      const response = await fetch('http://localhost:8011/emotion-analysis', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({
-          text: transcript,
-          language: currentLanguage
+      setInternalVoiceState('processing')
+      
+      let moodData: {
+        mood_score: number;
+        energy_level: number;
+        stress_level: number;
+        notes: string;
+        mood_label: string;
+        detected_emotions: any;
+      } | null = null
+      
+      // Try to use the voice service's emotion analysis
+      try {
+        const response = await fetch('http://localhost:8011/emotion-analysis', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({
+            text: transcript,
+            language: currentLanguage
+          })
         })
-      })
 
-      if (response.ok) {
-        const emotionResult = await response.json()
+        if (response.ok) {
+          const emotionResult = await response.json()
+          moodData = mapEmotionToMood(emotionResult, transcript)
+        } else {
+          console.warn('Emotion analysis failed:', await response.text())
+        }
+      } catch (emotionError) {
+        console.warn('Emotion analysis service not available:', emotionError)
+      }
+      
+      // Fallback: create a basic mood entry with just the transcript
+      if (!moodData) {
+        moodData = {
+          mood_score: 5, // Default neutral mood
+          energy_level: 5,
+          stress_level: 5,
+          notes: transcript,
+          mood_label: 'Voice Note',
+          detected_emotions: null
+        }
+      }
+      
+      // Save the mood data to the backend (moodData is guaranteed to be non-null here)
+      try {
+        const savedMoodEntry = await apiService.createMoodEntry({
+          mood_score: moodData.mood_score,
+          energy_level: moodData.energy_level,
+          stress_level: moodData.stress_level,
+          notes: moodData.notes,
+          mood_confidence: confidence,
+          context_tags: ['voice_input'],
+          environmental_context: {
+            source: 'voice',
+            detected_emotions: moodData.detected_emotions,
+            language: currentLanguage,
+            original_transcript: transcript
+          }
+        })
         
-        // Extract mood information from emotion analysis
-        const moodData = mapEmotionToMood(emotionResult, transcript)
-        
-        // Show enhanced feedback
-        if (moodData) {
-          toast.success('Voice mood detected!', {
-            description: `${moodData.mood_label} with ${Math.round(confidence * 100)}% confidence`,
+        if (savedMoodEntry) {
+          const successMessage = moodData.detected_emotions 
+            ? `${moodData.mood_label} mood recorded with ${Math.round(confidence * 100)}% confidence`
+            : 'Voice note saved successfully'
+            
+          toast.success('Voice mood saved!', {
+            description: successMessage,
             duration: 4000
           })
+          setInternalVoiceState('completed')
+          
+          // Notify parent component
+          onMoodSaved?.(savedMoodEntry)
+          
+          // Clear the transcript after successful save
+          setTimeout(() => {
+            setTranscript('')
+            setInternalVoiceState('idle')
+          }, 2000)
+        } else {
+          throw new Error('Failed to save mood entry')
         }
-      } else {
-        console.warn('Emotion analysis failed:', await response.text())
+      } catch (saveError) {
+        console.error('Failed to save mood entry:', saveError)
+        toast.error('Failed to save mood entry', {
+          description: 'Your voice was processed but could not be saved. Please try again.',
+          duration: 4000
+        })
+        setInternalVoiceState('error')
       }
     } catch (error) {
-      console.warn('Voice processing with backend failed:', error)
+      console.warn('Voice processing failed:', error)
+      toast.error('Voice processing failed', {
+        description: 'There was an error processing your voice input. Please try again.',
+        duration: 3000
+      })
+      setInternalVoiceState('error')
     }
   }
 

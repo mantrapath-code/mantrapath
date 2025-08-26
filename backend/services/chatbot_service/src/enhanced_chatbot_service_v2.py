@@ -231,8 +231,22 @@ class EnhancedChatbotServiceV2:
                     jwt_token
                 )
                 
-                # Get user context for personalization
-                user_context = await ai_context_store_client.get_user_context(user_id, jwt_token)
+                # Get user context for personalization with smart refresh
+                should_refresh = any(keyword in message.lower() for keyword in [
+                    'mood', 'feeling', 'journal', 'community', 'activity', 'progress', 'track', 'how am i', 'my'
+                ])
+                
+                user_context = await ai_context_store_client.get_user_context(
+                    user_id, 
+                    jwt_token, 
+                    refresh_data=should_refresh
+                )
+                
+                if user_context:
+                    logger.info(f"📊 Retrieved user context (refreshed: {should_refresh})")
+                else:
+                    logger.warning(f"⚠️ No context available for user {user_id}")
+                    
                 response_data["services_used"].append("context")
             
             # Step 6: Cultural Adaptation
@@ -729,7 +743,59 @@ Guidelines:
         
         # Add user context if available
         if user_context:
-            base_prompt += "\n\nConsider the user's history and preferences. Build on previous conversations when relevant."
+            context_info = []
+            
+            # Add mood context
+            if hasattr(user_context, 'mood_context') and user_context.mood_context:
+                mood_ctx = user_context.mood_context
+                if hasattr(mood_ctx, 'recent_average_mood'):
+                    avg_mood = getattr(mood_ctx, 'recent_average_mood', None)
+                    if avg_mood:
+                        context_info.append(f"Recent average mood: {avg_mood:.1f}/10")
+                
+                if hasattr(mood_ctx, 'mood_trend'):
+                    trend = getattr(mood_ctx, 'mood_trend', None)
+                    if trend:
+                        context_info.append(f"Mood trend: {trend}")
+                
+                if hasattr(mood_ctx, 'total_entries'):
+                    entries = getattr(mood_ctx, 'total_entries', 0)
+                    if entries > 0:
+                        context_info.append(f"Has tracked mood {entries} times")
+            
+            # Add community context
+            if hasattr(user_context, 'community_context') and user_context.community_context:
+                comm_ctx = user_context.community_context
+                if hasattr(comm_ctx, 'community_standing'):
+                    standing = getattr(comm_ctx, 'community_standing', None)
+                    if standing:
+                        activity_level = standing.replace('_', ' ')
+                        context_info.append(f"Community activity: {activity_level}")
+                
+                if hasattr(comm_ctx, 'common_topics'):
+                    topics = getattr(comm_ctx, 'common_topics', [])
+                    if topics:
+                        context_info.append(f"Interests: {', '.join(topics[:3])}")
+            
+            # Add journal context
+            if hasattr(user_context, 'content_context') and user_context.content_context:
+                content_ctx = user_context.content_context
+                if hasattr(content_ctx, 'total_entries'):
+                    entries = getattr(content_ctx, 'total_entries', 0)
+                    if entries > 0:
+                        context_info.append(f"Has written {entries} journal entries")
+                
+                if hasattr(content_ctx, 'common_themes'):
+                    themes = getattr(content_ctx, 'common_themes', [])
+                    if themes:
+                        context_info.append(f"Common themes: {', '.join(themes[:3])}")
+            
+            # Add context to prompt if we have any information
+            if context_info:
+                base_prompt += f"\n\nUser Context: {' | '.join(context_info)}"
+                base_prompt += "\n\nUse this context to provide more personalized and relevant responses. Reference their progress, acknowledge their efforts, and build on their interests when appropriate."
+            else:
+                base_prompt += "\n\nThis appears to be a new user or someone with limited activity. Be welcoming and help them get started with the platform."
         
         base_prompt += "\n\nRemember: Be human, be caring, and make this feel like a real, supportive conversation."
         

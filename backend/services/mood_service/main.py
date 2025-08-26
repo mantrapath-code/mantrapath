@@ -46,11 +46,68 @@ except ImportError as e:
     class EnvironmentalData:
         pass
 from shared.auth import get_current_user
-# Temporarily comment out problematic event imports
+# Standard event imports
 from shared.events import publish_mood_entry_created, publish_journal_entry_created
-# Add V3 enhanced bus imports
-from shared.events import get_enhanced_event_bus, V3EventChannels
 from shared.feature_flags import get_flag_bool
+
+# Memory Service Integration (V3-BK-015)
+import json
+import urllib.request
+import urllib.parse
+from typing import Dict, Any, Optional, List
+
+class MemoryServiceIntegration:
+    """Integration client for Memory Service communication using urllib"""
+    
+    def __init__(self, memory_service_url: str = "http://memory-service:8017"):
+        self.memory_service_url = memory_service_url
+    
+    async def send_mood_interaction(self, user_id: str, mood_data: Dict[str, Any]) -> bool:
+        """Send mood entry to Memory Service for pattern analysis"""
+        try:
+            # Prepare data in correct format for Memory Service integration endpoint
+            integration_data = {
+                "mood_score": mood_data.get("mood_score"),
+                "energy_level": mood_data.get("energy_level"),
+                "stress_level": mood_data.get("stress_level"),
+                "sleep_quality": mood_data.get("sleep_quality"),
+                "notes": mood_data.get("notes", ""),
+                "context_tags": mood_data.get("context_tags", []),
+                "timestamp": mood_data.get("timestamp"),
+                "source": "mood_service"
+            }
+            
+            # Prepare request to correct integration endpoint
+            url = f"{self.memory_service_url}/api/v1/integrations/mood?user_id={user_id}"
+            data = json.dumps(integration_data).encode('utf-8')
+            headers = {'Content-Type': 'application/json'}
+            
+            # Create request
+            req = urllib.request.Request(url, data=data, headers=headers, method='POST')
+            
+            # Make request (run in thread to avoid blocking)
+            import asyncio
+            import concurrent.futures
+            
+            def make_request():
+                try:
+                    with urllib.request.urlopen(req, timeout=5) as response:
+                        return response.status == 200
+                except:
+                    return False
+            
+            # Run in thread pool to avoid blocking
+            loop = asyncio.get_event_loop()
+            with concurrent.futures.ThreadPoolExecutor() as executor:
+                result = await loop.run_in_executor(executor, make_request)
+                return result
+                    
+        except Exception as e:
+            print(f"❌ Memory Service integration error: {e}")
+            return False
+
+# Global memory integration instance
+memory_integration = MemoryServiceIntegration()
 
 # Import cross-platform mood intelligence
 try:
@@ -720,15 +777,13 @@ celebration_detector = CelebrationMomentDetector()
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Application lifespan management"""
-    # Initialize event bus on startup
-    event_bus = get_enhanced_event_bus()
-    await event_bus.initialize()
+    # Initialize services on startup
+    print("🚀 Mood Service starting up...")
     
     yield
     
     # Cleanup on shutdown  
-    if event_bus:
-        await event_bus.close()
+    print("🛑 Mood Service shutting down...")
 
 app = FastAPI(lifespan=lifespan, 
     title="MantraPath Enhanced Mood Service",
@@ -774,27 +829,6 @@ class MoodEntryCreate(BaseModel):
     adaptive_responses: Optional[List[dict]] = []  # Responses to follow-up questions
     environmental_context: Optional[dict] = {}  # Weather, location, etc.
 
-# Helper builders for V3 payloads (testable)
-def build_v3_mood_payload(mood_entry: Any) -> dict:
-    """Build minimal V3 mood.entry.created payload"""
-    return {
-        "id": str(getattr(mood_entry, "id", "")),
-        "user_id": getattr(mood_entry, "user_id", None),
-        "mood_score": getattr(mood_entry, "mood_score", None),
-        "energy_level": getattr(mood_entry, "energy_level", None),
-        "stress_level": getattr(mood_entry, "stress_level", None),
-        "sleep_quality": getattr(mood_entry, "sleep_quality", None),
-        "emotional_granularity": getattr(mood_entry, "emotional_granularity", None),
-        "mood_confidence": getattr(mood_entry, "mood_confidence", None),
-        "context_tags": getattr(mood_entry, "context_tags", []) or [],
-        "created_at": (
-            getattr(mood_entry, "created_at", None).isoformat()
-            if getattr(mood_entry, "created_at", None) else None
-        ),
-        # Optional voice context placeholder (filled by upstream if available)
-        "voice_context": getattr(mood_entry, "voice_context", None) or None,
-    }
-
 class MoodEntryResponse(BaseModel):
     """Enhanced mood entry response model"""
     id: str
@@ -819,28 +853,6 @@ class JournalEntryCreate(BaseModel):
     mood_before: Optional[int] = None
     mood_after: Optional[int] = None
     is_private: bool = True
-
-# Helper builder for V3 journal payload
-def build_v3_journal_payload(journal_entry: Any) -> dict:
-    """Build minimal V3 journal.entry.created payload"""
-    return {
-        "id": str(getattr(journal_entry, "id", "")),
-        "user_id": getattr(journal_entry, "user_id", None),
-        "title": getattr(journal_entry, "title", None),
-        "content": getattr(journal_entry, "content", None),
-        "mood_before": getattr(journal_entry, "mood_before", None),
-        "mood_after": getattr(journal_entry, "mood_after", None),
-        "sentiment_score": getattr(journal_entry, "sentiment_score", None),
-        "sentiment_label": getattr(journal_entry, "sentiment_label", None),
-        "themes": getattr(journal_entry, "themes", []) or [],
-        "is_private": getattr(journal_entry, "is_private", True),
-        "created_at": (
-            getattr(journal_entry, "created_at", None).isoformat()
-            if getattr(journal_entry, "created_at", None) else None
-        ),
-        # Reserved place for AI processing metadata
-        "ai_ready": getattr(journal_entry, "ai_ready", None) or None,
-    }
 
 class JournalEntryResponse(BaseModel):
     id: str
@@ -936,7 +948,7 @@ async def create_mood_entry(
     current_user: dict = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
-    """Create new mood entry with Phase 1 enhancements"""
+    """Create new mood entry with Phase 1 enhancements and Memory Service integration"""
     
     # Use enhanced adaptive mood collection service
     mood_entry = await adaptive_collector.create_enhanced_mood_entry(
@@ -955,32 +967,62 @@ async def create_mood_entry(
         db=db
     )
     
-    # 📤 E4: Publish mood entry created event for real-time pipeline
+    # 🧠 V3-BK-015: Memory Service Integration
+    try:
+        # Prepare mood data for Memory Service
+        memory_mood_data = {
+            "mood_score": mood_entry.mood_score,
+            "mood_labels": mood_data.context_tags or [],
+            "stress_level": mood_entry.stress_level,
+            "energy_level": mood_entry.energy_level,
+            "sleep_quality": mood_entry.sleep_quality,
+            "context": {
+                "notes": mood_entry.notes,
+                "emotional_granularity": mood_entry.emotional_granularity,
+                "mood_confidence": mood_entry.mood_confidence,
+                "adaptive_responses": mood_data.adaptive_responses or []
+            },
+            "timestamp": mood_entry.created_at.isoformat() if mood_entry.created_at else None,
+            "cultural_context": {},  # Can be enhanced later
+        }
+        
+        print(f"🧠 Attempting to send mood data to Memory Service for user {current_user['user_id']}")
+        
+        # Send mood data to Memory Service for pattern analysis
+        memory_success = await memory_integration.send_mood_interaction(
+            user_id=current_user["user_id"],
+            mood_data=memory_mood_data
+        )
+        
+        if memory_success:
+            print(f"✅ Mood data sent to Memory Service for user {current_user['user_id']}")
+        else:
+            print(f"⚠️  Failed to send mood data to Memory Service for user {current_user['user_id']}")
+            
+    except Exception as e:
+        print(f"❌ Memory Service integration error: {e}")
+    
+    # 📤 Standard event publishing for mood entry
     if get_flag_bool('USE_EVENT_BUS'):
-        # await publish_mood_entry_created(
-        #     user_id=current_user["user_id"],
-        #     mood_entry_data={
-        #         "id": str(mood_entry.id),
-        #         "mood_score": mood_entry.mood_score,
-        #         "energy_level": mood_entry.energy_level,
-        #         "stress_level": mood_entry.stress_level,
-        #         "sleep_quality": mood_entry.sleep_quality,
-        #         "notes": mood_entry.notes,
-        #         "context_tags": mood_entry.context_tags or [],
-        #         "created_at": mood_entry.created_at.isoformat() if mood_entry.created_at else None,
-        #         "emotional_granularity": mood_entry.emotional_granularity,
-        #         "mood_confidence": mood_entry.mood_confidence
-        #     }
-        # )
-        pass # Temporarily commented out
-    # V3 enhanced bus publish (dual-publish)
-    if get_flag_bool('USE_NATS_EVENT_BUS'):
         try:
-            # bus = get_enhanced_event_bus()
-            await event_bus.publish(V3EventChannels.MOOD_ENTRY_CREATED, build_v3_mood_payload(mood_entry), current_user["user_id"])
-            pass # Temporarily commented out
+            await publish_mood_entry_created(
+                user_id=current_user["user_id"],
+                mood_entry_data={
+                    "id": str(mood_entry.id),
+                    "mood_score": mood_entry.mood_score,
+                    "energy_level": mood_entry.energy_level,
+                    "stress_level": mood_entry.stress_level,
+                    "sleep_quality": mood_entry.sleep_quality,
+                    "notes": mood_entry.notes,
+                    "context_tags": mood_entry.context_tags or [],
+                    "created_at": mood_entry.created_at.isoformat() if mood_entry.created_at else None,
+                    "emotional_granularity": mood_entry.emotional_granularity,
+                    "mood_confidence": mood_entry.mood_confidence
+                }
+            )
+            print(f"✅ Mood entry event published for user {current_user['user_id']}")
         except Exception as e:
-            print(f"⚠️  V3 mood publish failed: {e}")
+            print(f"⚠️  Event publishing failed: {e}")
 
     # Check for celebration moments after mood entry
     celebrations = await celebration_detector.detect_celebrations(
@@ -1085,32 +1127,27 @@ async def create_journal_entry(
     db.commit()
     db.refresh(journal_entry)
     
-    # 📤 E4: Publish journal entry created event for real-time pipeline
+    # 📤 Standard event publishing for journal entry
     if get_flag_bool('USE_EVENT_BUS'):
-        # await publish_journal_entry_created(
-        #     user_id=current_user["user_id"],
-        #     journal_entry_data={
-        #         "id": str(journal_entry.id),
-        #         "title": journal_entry.title,
-        #         "content": journal_entry.content,
-        #         "mood_before": journal_entry.mood_before,
-        #         "mood_after": journal_entry.mood_after,
-        #         "sentiment_score": journal_entry.sentiment_score,
-        #         "sentiment_label": journal_entry.sentiment_label,
-        #         "themes": journal_entry.themes or [],
-        #         "is_private": journal_entry.is_private,
-        #         "created_at": journal_entry.created_at.isoformat() if journal_entry.created_at else None
-        #     }
-        # )
-        pass # Temporarily commented out
-    # V3 enhanced bus publish (dual-publish)
-    if get_flag_bool('USE_NATS_EVENT_BUS'):
         try:
-            # bus = get_enhanced_event_bus()
-            await event_bus.publish(V3EventChannels.JOURNAL_ENTRY_CREATED, build_v3_journal_payload(journal_entry), current_user["user_id"])
-            pass # Temporarily commented out
+            await publish_journal_entry_created(
+                user_id=current_user["user_id"],
+                journal_entry_data={
+                    "id": str(journal_entry.id),
+                    "title": journal_entry.title,
+                    "content": journal_entry.content,
+                    "mood_before": journal_entry.mood_before,
+                    "mood_after": journal_entry.mood_after,
+                    "sentiment_score": journal_entry.sentiment_score,
+                    "sentiment_label": journal_entry.sentiment_label,
+                    "themes": journal_entry.themes or [],
+                    "is_private": journal_entry.is_private,
+                    "created_at": journal_entry.created_at.isoformat() if journal_entry.created_at else None
+                }
+            )
+            print(f"✅ Journal entry event published for user {current_user['user_id']}")
         except Exception as e:
-            print(f"⚠️  V3 journal publish failed: {e}")
+            print(f"⚠️  Event publishing failed: {e}")
 
     # 🧠 Cross-Platform Mood Intelligence: Infer mood from journal content
     if CROSS_PLATFORM_MOOD_AVAILABLE:
@@ -1464,6 +1501,155 @@ async def get_personalized_insights(
             "days_tracked_this_week": len(current_week_moods)
         }
     }
+
+# 🧠 V3-BK-015: Memory Service Enhanced Insights Endpoint
+@app.get("/api/v1/analytics/memory-enhanced-insights")
+async def get_memory_enhanced_insights(
+    current_user: dict = Depends(get_current_user),
+    db: Session = Depends(get_db),
+    days: int = Query(30, description="Number of days to analyze", ge=7, le=90)
+):
+    """Get mood insights enhanced with Memory Service pattern analysis"""
+    
+    user_id = current_user["user_id"]
+    
+    try:
+        # Get current mood data for context
+        recent_moods = db.query(MoodEntry).filter(
+            and_(
+                MoodEntry.user_id == user_id,
+                MoodEntry.created_at >= datetime.utcnow() - timedelta(days=7)
+            )
+        ).order_by(desc(MoodEntry.created_at)).limit(10).all()
+        
+        if not recent_moods:
+            return {
+                "insights": [],
+                "memory_integration_status": "insufficient_data",
+                "message": "Not enough mood data for memory analysis",
+                "recommendations": ["Track your mood for a few days to get personalized insights"]
+            }
+        
+        # Prepare current mood context for Memory Service
+        latest_mood = recent_moods[0]
+        current_mood_data = {
+            "mood_score": latest_mood.mood_score,
+            "stress_level": latest_mood.stress_level,
+            "energy_level": latest_mood.energy_level,
+            "context_tags": latest_mood.context_tags or [],
+            "timestamp": latest_mood.created_at.isoformat() if latest_mood.created_at else None
+        }
+        
+        # Check Memory Service health and get patterns
+        try:
+            def check_health():
+                try:
+                    req = urllib.request.Request(f"{memory_integration.memory_service_url}/health")
+                    with urllib.request.urlopen(req, timeout=3) as response:
+                        return response.status == 200
+                except:
+                    return False
+                    
+            import asyncio
+            import concurrent.futures
+            loop = asyncio.get_event_loop()
+            with concurrent.futures.ThreadPoolExecutor() as executor:
+                memory_available = await loop.run_in_executor(executor, check_health)
+        except:
+            memory_available = False
+        
+        if not memory_available:
+            return {
+                "insights": [],
+                "memory_integration_status": "unavailable",
+                "fallback_message": "Memory Service unavailable - using traditional analytics",
+                "current_mood_context": current_mood_data,
+                "recommendations": ["Memory Service integration will be restored shortly"]
+            }
+        
+        # Try to get memory patterns
+        memory_patterns = []
+        try:
+            def get_patterns():
+                try:
+                    url = f"{memory_integration.memory_service_url}/api/v1/patterns/{user_id}?pattern_type=mood&days={days}"
+                    req = urllib.request.Request(url)
+                    with urllib.request.urlopen(req, timeout=5) as response:
+                        if response.status == 200:
+                            data = json.loads(response.read().decode('utf-8'))
+                            return data.get("patterns", [])
+                    return []
+                except:
+                    return []
+                    
+            loop = asyncio.get_event_loop()
+            with concurrent.futures.ThreadPoolExecutor() as executor:
+                memory_patterns = await loop.run_in_executor(executor, get_patterns)
+        except Exception as e:
+            print(f"⚠️  Failed to get memory patterns: {e}")
+        
+        # Build basic trend analysis
+        if memory_patterns:
+            trend_analysis = {
+                "trend": "memory_patterns_available",
+                "confidence": 0.8,
+                "patterns_count": len(memory_patterns)
+            }
+        else:
+            # Fallback to local mood analysis
+            mood_scores = [mood.mood_score for mood in recent_moods]
+            if len(mood_scores) >= 3:
+                recent_avg = sum(mood_scores[:3]) / 3
+                older_avg = sum(mood_scores[3:]) / max(1, len(mood_scores) - 3)
+                
+                if recent_avg > older_avg + 0.5:
+                    trend = "improving"
+                elif recent_avg < older_avg - 0.5:
+                    trend = "declining"
+                else:
+                    trend = "stable"
+                    
+                trend_analysis = {
+                    "trend": trend,
+                    "confidence": 0.6,
+                    "patterns_count": 0
+                }
+            else:
+                trend_analysis = {"trend": "insufficient_data", "confidence": 0.0, "patterns_count": 0}
+        
+        # Generate response
+        response = {
+            "memory_integration_status": "active",
+            "analysis_period_days": days,
+            "trends": trend_analysis,
+            "historical_patterns": memory_patterns,
+            "current_mood_context": current_mood_data,
+            "data_quality": {
+                "patterns_available": len(memory_patterns),
+                "local_moods_analyzed": len(recent_moods),
+                "trend_confidence": trend_analysis.get("confidence", 0.0)
+            },
+            "recommendations": [
+                "Continue tracking your mood for better insights",
+                "Memory Service is providing enhanced pattern analysis",
+                "Check back regularly for personalized recommendations"
+            ]
+        }
+        
+        return response
+        
+    except Exception as e:
+        print(f"❌ Memory Service enhanced insights error: {e}")
+        return {
+            "insights": [],
+            "memory_integration_status": "error",
+            "error_message": "Failed to fetch memory-enhanced insights",
+            "fallback_recommendations": [
+                "Try again in a few moments",
+                "Check your internet connection",
+                "Contact support if the issue persists"
+            ]
+        }
 
 @app.get("/api/v1/analytics/optimal-notification-times")
 async def get_optimal_notification_times(

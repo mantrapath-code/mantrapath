@@ -190,11 +190,15 @@ async def create_app() -> FastAPI:
                 cultural_considerations=analysis.get("cultural_considerations")
             )
             
+            # Extract factor names from risk_factors dictionary
+            risk_factors_dict = analysis.get("risk_factors", {})
+            factors_analyzed = list(risk_factors_dict.keys()) if isinstance(risk_factors_dict, dict) else []
+            
             return PredictiveAnalysisResponse(
                 user_id=user_id,
                 result=result,
                 processing_time_ms=analysis["processing_time_ms"],
-                factors_analyzed=analysis.get("risk_factors", [])
+                factors_analyzed=factors_analyzed
             )
             
         except Exception as e:

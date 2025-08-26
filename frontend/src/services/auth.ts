@@ -1,5 +1,7 @@
 // Authentication service for managing tokens and user state
 
+import { parseGatewayResponse } from '@/utils/gateway'
+
 const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000'
 
 interface LoginResponse {
@@ -82,7 +84,15 @@ class AuthService {
       throw new Error(error.detail || 'Registration failed')
     }
 
-    const loginResponse: LoginResponse = await response.json()
+    const gatewayResponse = await response.json()
+    
+    // Parse API Gateway response
+    const authData = parseGatewayResponse<any>(gatewayResponse)
+    const loginResponse: LoginResponse = {
+      access_token: authData.access_token,
+      refresh_token: authData.refresh_token,
+      token_type: authData.token_type
+    }
     
     // Store the tokens
     this.setAuthData(loginResponse)
@@ -105,7 +115,15 @@ class AuthService {
       throw new Error(error.detail || 'Login failed')
     }
 
-    const loginResponse: LoginResponse = await response.json()
+    const gatewayResponse = await response.json()
+    
+    // Parse API Gateway response
+    const authData = parseGatewayResponse<any>(gatewayResponse)
+    const loginResponse: LoginResponse = {
+      access_token: authData.access_token,
+      refresh_token: authData.refresh_token,
+      token_type: authData.token_type
+    }
     
     // Store the tokens
     this.setAuthData(loginResponse)
@@ -142,9 +160,13 @@ class AuthService {
         return null
       }
 
-      const data = await response.json()
-      localStorage.setItem(this.ACCESS_TOKEN_KEY, data.access_token)
-      return data.access_token
+      const gatewayResponse = await response.json()
+      
+      // Parse API Gateway response
+      const authData = parseGatewayResponse<any>(gatewayResponse)
+      
+      localStorage.setItem(this.ACCESS_TOKEN_KEY, authData.access_token)
+      return authData.access_token
     } catch (error) {
       this.clearAuth()
       return null

@@ -29,6 +29,11 @@ from models.context_models import (
     ContextAggregator
 )
 
+# Import data collectors
+from data_collectors.mood_data_collector import MoodDataCollector
+from data_collectors.journal_data_collector import JournalDataCollector  
+from data_collectors.community_data_collector import CommunityDataCollector
+
 logger = logging.getLogger(__name__)
 
 class ContextAggregatorService:
@@ -46,7 +51,12 @@ class ContextAggregatorService:
         self.context_buffers: Dict[str, List[ContextEntry]] = defaultdict(list)
         self.buffer_flush_interval = 30  # seconds
         
-        logger.info("🔄 ContextAggregatorService initialized")
+        # Initialize data collectors
+        self.mood_collector = MoodDataCollector()
+        self.journal_collector = JournalDataCollector()
+        self.community_collector = CommunityDataCollector()
+        
+        logger.info("🔄 ContextAggregatorService initialized with data collectors")
     
     async def initialize(self):
         """Initialize the service"""
@@ -109,6 +119,67 @@ class ContextAggregatorService:
             
         except Exception as e:
             logger.error(f"❌ Error getting user context: {e}")
+            return None
+
+    async def collect_comprehensive_user_data(self, user_id: str, jwt_token: str) -> Optional[UserContext]:
+        """
+        Collect comprehensive user data from all services and create/update context
+        
+        Args:
+            user_id: User ID to collect data for
+            jwt_token: Authentication token for service calls
+            
+        Returns:
+            Updated UserContext with fresh data from all services
+        """
+        try:
+            logger.info(f"🔍 Collecting comprehensive data for user {user_id}")
+            
+            # Collect data from all sources in parallel
+            mood_data_task = self.mood_collector.collect_user_mood_data(user_id, jwt_token)
+            journal_data_task = self.journal_collector.collect_user_journal_data(user_id, jwt_token)
+            community_data_task = self.community_collector.collect_user_community_data(user_id, jwt_token)
+            
+            # Wait for all collections to complete
+            mood_data, journal_data, community_data = await asyncio.gather(
+                mood_data_task,
+                journal_data_task, 
+                community_data_task,
+                return_exceptions=True
+            )
+            
+            # Handle exceptions
+            if isinstance(mood_data, Exception):
+                logger.warning(f"Mood data collection failed: {mood_data}")
+                mood_data = {}
+            if isinstance(journal_data, Exception):
+                logger.warning(f"Journal data collection failed: {journal_data}")
+                journal_data = {}
+            if isinstance(community_data, Exception):
+                logger.warning(f"Community data collection failed: {community_data}")
+                community_data = {}
+            
+            # Create or update user context
+            context = await self.get_user_context(user_id) or await self._create_user_context(user_id)
+            
+            # Update context with collected data
+            if mood_data:
+                await self.update_user_context(user_id, ContextType.MOOD, mood_data)
+                
+            if journal_data:
+                await self.update_user_context(user_id, ContextType.CONTENT, journal_data)
+                
+            if community_data:
+                await self.update_user_context(user_id, ContextType.COMMUNITY, community_data)
+            
+            # Get the updated context
+            updated_context = await self.get_user_context(user_id)
+            
+            logger.info(f"✅ Comprehensive data collection completed for user {user_id}")
+            return updated_context
+            
+        except Exception as e:
+            logger.error(f"❌ Error collecting comprehensive user data: {e}")
             return None
     
     async def update_user_context(self, user_id: str, context_type: ContextType, data: Dict[str, Any]) -> bool:

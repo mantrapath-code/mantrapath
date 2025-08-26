@@ -8,7 +8,7 @@ import { Trophy, Heart, BookOpen, Target, Palette, ChartBar, Microphone, Calenda
 import { useUserStats, useWellness } from "@/hooks/useWellness"
 import { useJournal } from "@/hooks/useJournal"
 import { useMoodBasedTheme } from "@/hooks/useMoodTheme"
-import { EmotionalWeatherWidget, VoiceMoodEntry, MoodInsightsPanel } from "@/components/mood"
+import { EmotionalWeatherWidget, VoiceMoodEntry, MoodInsightsPanel, MoodQuickEntry } from "@/components/mood"
 
 import { motion } from "framer-motion"
 import { toast } from "sonner"
@@ -197,21 +197,48 @@ export function WellnessDashboard() {
         </TabsContent>
         
         <TabsContent value="mood-tracking" className="space-y-6">
-          {/* Single, comprehensive mood tracking section */}
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <Microphone className="text-primary" size={24} />
-                Track Your Mood
-              </CardTitle>
-              <p className="text-sm text-muted-foreground">
-                Record your mood with voice notes or quick entry
-              </p>
-            </CardHeader>
-            <CardContent>
-              <VoiceMoodEntry />
-            </CardContent>
-          </Card>
+          {/* Multiple mood tracking options */}
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            {/* Voice Mood Input */}
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <Microphone className="text-primary" size={24} />
+                  Voice Mood Input
+                </CardTitle>
+                <p className="text-sm text-muted-foreground">
+                  Record your mood with voice notes
+                </p>
+              </CardHeader>
+              <CardContent>
+                <VoiceMoodEntry 
+                  onMoodSaved={(moodData) => {
+                    toast.success('Voice mood saved successfully!')
+                    // You could trigger a data refresh here if needed
+                  }}
+                />
+              </CardContent>
+            </Card>
+
+            {/* Quick Mood Entry */}
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <Heart className="text-primary" size={24} />
+                  Quick Mood Entry
+                </CardTitle>
+                <p className="text-sm text-muted-foreground">
+                  Track your mood with sliders and notes
+                </p>
+              </CardHeader>
+              <CardContent>
+                <MoodQuickEntry onEntryAdded={(moodData) => {
+                  toast.success('Mood logged successfully!')
+                  // Refresh data if needed
+                }} />
+              </CardContent>
+            </Card>
+          </div>
 
           {/* This Week's Summary */}
           <Card>

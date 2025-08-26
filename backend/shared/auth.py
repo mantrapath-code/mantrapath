@@ -3,7 +3,8 @@ Shared authentication utilities
 """
 from datetime import datetime, timedelta
 from typing import Optional, Dict, Any
-import jwt
+from jose import jwt
+from jose.exceptions import JWTError
 from passlib.context import CryptContext
 import os
 import re
@@ -236,7 +237,7 @@ def verify_service_token(token: str) -> Optional[dict]:
             return None
             
         return payload
-    except jwt.PyJWTError:
+    except JWTError:
         return None
 
 def verify_token(token: str, expected_type: Optional[str] = None) -> Optional[Dict[Any, Any]]:
@@ -249,7 +250,7 @@ def verify_token(token: str, expected_type: Optional[str] = None) -> Optional[Di
             return None
             
         return payload
-    except jwt.PyJWTError:
+    except JWTError:
         return None
 
 def extract_user_id(token: str) -> Optional[str]:
