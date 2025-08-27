@@ -40,7 +40,7 @@ class ServiceRegistry:
         logger.info("Service registry stopped")
     
     async def _initialize_services(self):
-        """Initialize services from configuration"""
+        """Initialize services from configuration with standardized ports"""
         services_config = [
             ("auth", service_config.auth_service_url, service_config.auth_service_health_path),
             ("profile", service_config.profile_service_url, service_config.profile_service_health_path),
@@ -66,7 +66,7 @@ class ServiceRegistry:
                 weight=1
             )
             self._services[name] = [service_instance]
-            logger.info(f"Registered service: {name} at {url}")
+            logger.info(f"Registered service: {name} at {url} (health: {health_path})")
     
     async def register_service(self, service: ServiceInstance):
         """Register a new service instance"""

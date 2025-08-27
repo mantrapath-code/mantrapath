@@ -1,25 +1,22 @@
 """
-Request Proxy - Handles forwarding requests to backend services
+Request Proxy - Handles forwarding requests to backend services with connection pooling
 """
-import asyncio
 import logging
 from typing import Optional, Dict, Any
 from datetime import datetime
 import httpx
 from src.core.models import ProxyRequest, ProxyResponse, ServiceInstance
 from src.core.config import gateway_config
+from src.utils.connection_pool import get_connection_pool
 
 logger = logging.getLogger(__name__)
 
 class RequestProxy:
-    """Handles proxying requests to backend services"""
+    """Handles proxying requests to backend services with enhanced connection management"""
     
     def __init__(self):
-        self._client_timeout = httpx.Timeout(
-            timeout=gateway_config.health_check_timeout,
-            read=gateway_config.health_check_timeout,
-            write=gateway_config.health_check_timeout
-        )
+        self._connection_pool = get_connection_pool()
+        self._default_timeout = gateway_config.health_check_timeout
     
     async def proxy_request(
         self,
@@ -27,51 +24,58 @@ class RequestProxy:
         target_service: ServiceInstance,
         timeout: int = 30
     ) -> ProxyResponse:
-        """Proxy a request to a target service"""
+        """Proxy a request to a target service using connection pooling"""
         start_time = datetime.now()
         
         try:
+            # Get HTTP client from connection pool
+            client = await self._connection_pool.get_client(target_service.name)
+            
             # Construct target URL
             target_url = f"{target_service.url.rstrip('/')}{request.path}"
             
             # Prepare headers (exclude hop-by-hop headers)
             headers = self._prepare_headers(request.headers)
             
-            # Add request ID for tracing
-            headers['X-Request-ID'] = request.request_id
-            headers['X-Forwarded-By'] = 'mantrapath-gateway'
+            # Add request tracking headers
+            headers.update({
+                'X-Request-ID': request.request_id,
+                'X-Forwarded-By': 'mantrapath-gateway',
+                'X-Gateway-Service': target_service.name,
+                'X-Gateway-Timestamp': str(int(start_time.timestamp()))
+            })
             
-            # Create HTTP client with custom timeout
-            client_timeout = httpx.Timeout(timeout=timeout)
+            # Create request with timeout
+            request_timeout = httpx.Timeout(timeout)
             
-            async with httpx.AsyncClient(timeout=client_timeout) as client:
-                # Make the request
-                response = await client.request(
-                    method=request.method,
-                    url=target_url,
-                    headers=headers,
-                    params=request.query_params,
-                    content=request.body
-                )
-                
-                response_time = (datetime.now() - start_time).total_seconds()
-                
-                # Prepare response headers (exclude hop-by-hop headers)
-                response_headers = self._prepare_response_headers(dict(response.headers))
-                
-                proxy_response = ProxyResponse(
-                    status_code=response.status_code,
-                    headers=response_headers,
-                    body=response.content,
-                    response_time=response_time,
-                    service_name=target_service.name,
-                    request_id=request.request_id
-                )
-                
-                # Log request details
-                self._log_request(request, proxy_response, target_service)
-                
-                return proxy_response
+            # Make the request using the pooled client
+            response = await client.request(
+                method=request.method,
+                url=target_url,
+                headers=headers,
+                params=request.query_params,
+                content=request.body,
+                timeout=request_timeout
+            )
+            
+            response_time = (datetime.now() - start_time).total_seconds()
+            
+            # Prepare response headers (exclude hop-by-hop headers)
+            response_headers = self._prepare_response_headers(dict(response.headers))
+            
+            proxy_response = ProxyResponse(
+                status_code=response.status_code,
+                headers=response_headers,
+                body=response.content,
+                response_time=response_time,
+                service_name=target_service.name,
+                request_id=request.request_id
+            )
+            
+            # Log request details
+            self._log_request(request, proxy_response, target_service)
+            
+            return proxy_response
                 
         except httpx.TimeoutException:
             response_time = (datetime.now() - start_time).total_seconds()
@@ -141,7 +145,8 @@ class RequestProxy:
         
         # Add gateway headers
         clean_headers['X-Gateway'] = 'mantrapath-gateway'
-        clean_headers['X-Gateway-Version'] = '1.0.0'
+        clean_headers['X-Gateway-Version'] = '3.0.0'
+        clean_headers['X-Processing-Time'] = str(datetime.now().timestamp())
         
         return clean_headers
     
@@ -151,7 +156,17 @@ class RequestProxy:
         response: ProxyResponse,
         service: ServiceInstance
     ):
-        """Log request details"""
+        """Log request details with enhanced information"""
+        log_data = {
+            "method": request.method,
+            "path": request.path, 
+            "service": service.name,
+            "service_url": service.url,
+            "status_code": response.status_code,
+            "response_time": f"{response.response_time:.3f}s",
+            "request_id": request.request_id
+        }
+        
         if response.status_code >= 400:
             log_level = logging.WARNING if response.status_code < 500 else logging.ERROR
             logger.log(
@@ -160,7 +175,8 @@ class RequestProxy:
                 f"{service.name} ({service.url}) | "
                 f"Status: {response.status_code} | "
                 f"Time: {response.response_time:.3f}s | "
-                f"RequestID: {request.request_id}"
+                f"RequestID: {request.request_id}",
+                extra=log_data
             )
         else:
             logger.info(
@@ -168,18 +184,29 @@ class RequestProxy:
                 f"{service.name} | "
                 f"Status: {response.status_code} | "
                 f"Time: {response.response_time:.3f}s | "
-                f"RequestID: {request.request_id}"
+                f"RequestID: {request.request_id}",
+                extra=log_data
             )
     
     async def health_check(self, service: ServiceInstance) -> bool:
-        """Perform a health check on a service"""
+        """Perform a health check on a service using connection pool"""
         try:
+            client = await self._connection_pool.get_client(service.name)
             health_url = f"{service.url.rstrip('/')}{service.health_path}"
             
-            async with httpx.AsyncClient(timeout=self._client_timeout) as client:
-                response = await client.get(health_url)
-                return response.status_code == 200
+            # Use a shorter timeout for health checks
+            health_timeout = httpx.Timeout(self._default_timeout)
+            
+            response = await client.get(health_url, timeout=health_timeout)
+            is_healthy = response.status_code == 200
+            
+            logger.debug(f"Health check for {service.name}: {'✓' if is_healthy else '✗'} ({response.status_code})")
+            return is_healthy
                 
         except Exception as e:
             logger.debug(f"Health check failed for {service.name}: {e}")
             return False
+    
+    async def cleanup(self):
+        """Cleanup connection pool"""
+        await self._connection_pool.close_all()

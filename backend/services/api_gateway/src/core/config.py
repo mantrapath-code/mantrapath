@@ -86,58 +86,64 @@ class GatewayConfig(BaseSettings):
     }
 
 class ServiceConfig(BaseSettings):
-    """Service registry configuration"""
+    """Service registry configuration with standardized ports"""
     
+    # Gateway Ports Configuration
+    gateway_port: int = Field(default=8000, description="Main API Gateway port")
+    websocket_port: int = Field(default=8001, description="WebSocket port for real-time features")
+    metrics_port: int = Field(default=9090, description="Metrics and monitoring port")
+    
+    # Standardized Service Ports (8010-8030 range to avoid conflicts)
     # Auth Service
-    auth_service_url: str = Field(default="http://auth-service:8001")
+    auth_service_url: str = Field(default="http://auth-service:8010")
     auth_service_health_path: str = Field(default="/health")
     
-    # Profile Service
-    profile_service_url: str = Field(default="http://profile-service:8002")
+    # Profile Service  
+    profile_service_url: str = Field(default="http://profile-service:8011")
     profile_service_health_path: str = Field(default="/health")
     
     # Mood Service
-    mood_service_url: str = Field(default="http://mood-service:8003")
+    mood_service_url: str = Field(default="http://mood-service:8012")
     mood_service_health_path: str = Field(default="/health")
     
     # Chatbot Service
-    chatbot_service_url: str = Field(default="http://chatbot-service:8004")
+    chatbot_service_url: str = Field(default="http://chatbot-service:8013")
     chatbot_service_health_path: str = Field(default="/health")
     
-    # Content Service
-    content_service_url: str = Field(default="http://content-service:8005")
+    # Content Service (Fixed naming - was incorrectly mapped to translation service)
+    content_service_url: str = Field(default="http://content-service:8014")
     content_service_health_path: str = Field(default="/health")
     
     # Community Service
-    community_service_url: str = Field(default="http://community-service:8006")
+    community_service_url: str = Field(default="http://community-service:8015")
     community_service_health_path: str = Field(default="/health")
     
     # Notification Service
-    notification_service_url: str = Field(default="http://notification-service:8007")
+    notification_service_url: str = Field(default="http://notification-service:8016")
     notification_service_health_path: str = Field(default="/health")
     
     # ML Service
-    ml_service_url: str = Field(default="http://ml-service:8008")
+    ml_service_url: str = Field(default="http://ml-service:8017")
     ml_service_health_path: str = Field(default="/health")
     
     # Media Service
-    media_service_url: str = Field(default="http://media-service:8009")
+    media_service_url: str = Field(default="http://media-service:8018")
     media_service_health_path: str = Field(default="/health")
     
-    # Translation Service
-    translation_service_url: str = Field(default="http://translation-service:8010")
+    # Translation Service (Fixed naming - was incorrectly mapped to content service) 
+    translation_service_url: str = Field(default="http://translation-service:8019")
     translation_service_health_path: str = Field(default="/health")
     
     # Voice Service
-    voice_service_url: str = Field(default="http://voice-service:8011")
+    voice_service_url: str = Field(default="http://voice-service:8020")
     voice_service_health_path: str = Field(default="/health")
     
     # Action Orchestrator Service
-    action_orchestrator_url: str = Field(default="http://action-orchestrator:8012")
+    action_orchestrator_url: str = Field(default="http://action-orchestrator:8021")
     action_orchestrator_health_path: str = Field(default="/health")
     
-    # Models Service (NEW - BK-008 Integration)
-    models_service_url: str = Field(default="http://models-service:8080")
+    # Models Service (Fixed port conflict - was 8080, now 8022)
+    models_service_url: str = Field(default="http://models-service:8022")
     models_service_health_path: str = Field(default="/health")
     
     model_config = {

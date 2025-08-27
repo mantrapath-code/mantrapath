@@ -1,20 +1,23 @@
 """Voice Service Main Application
-Enterprise-grade FastAPI voice processing service
+Enterprise-grade FastAPI voice processing service with free/open-source voice cloning
 """
 import logging
 import uuid
 from contextlib import asynccontextmanager
-from typing import Dict, Any, Optional
+from typing import Dict, Any, Optional, Union
+import aiohttp
+import json
 
 from fastapi import FastAPI, HTTPException, Depends, UploadFile, File, Form, BackgroundTasks, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.gzip import GZipMiddleware
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
-from fastapi.responses import JSONResponse, StreamingResponse
+from fastapi.responses import JSONResponse, StreamingResponse, Response
 import uvicorn
 import asyncio
 from datetime import datetime
 import io
+import base64
 
 # Voice Service Imports
 from config.settings import voice_config
@@ -27,6 +30,7 @@ from core.exceptions import (
     AuthenticationError, RateLimitError, AudioValidationError
 )
 from engines.engine_manager import VoiceEngineManager
+from engines.coqui_tts_engine import CoquiTTSEngine
 from services.voice_service import VoiceProcessingService
 from services.command_processor import VoiceCommandProcessor
 from services.profile_service import VoiceProfileService
@@ -38,6 +42,9 @@ import os
 sys.path.append(os.path.join(os.path.dirname(__file__), '..', '..'))
 from shared.events import get_enhanced_event_bus, V3EventChannels
 from shared.feature_flags import get_flag_bool
+
+# Translation service integration
+TRANSLATION_SERVICE_URL = os.getenv("TRANSLATION_SERVICE_URL", "http://localhost:8005")
 
 # Configure logging
 logging.basicConfig(
@@ -568,6 +575,196 @@ async def get_service_stats(
         raise HTTPException(status_code=500, detail="Stats retrieval failed")
 
 # Admin endpoints for service management
+
+# Voice Cloning and Translation Integration Endpoints
+
+@app.post("/api/v1/voice/clone")
+async def clone_voice(
+    audio_sample: UploadFile = File(...),
+    text: str = Form(...),
+    voice_id: Optional[str] = Form(None),
+    language: str = Form("en"),
+    auth_data: Dict[str, Any] = Depends(verify_token)
+):
+    """Clone voice from audio sample and generate TTS using free Coqui TTS."""
+    try:
+        # Validate audio file
+        if not audio_sample.filename.lower().endswith(('.wav', '.mp3', '.m4a', '.flac')):
+            raise HTTPException(status_code=400, detail="Unsupported audio format")
+        
+        # Read audio data
+        audio_content = await audio_sample.read()
+        
+        if len(audio_content) > 50 * 1024 * 1024:  # 50MB limit
+            raise HTTPException(status_code=413, detail="Audio file too large")
+        
+        # Initialize Coqui TTS engine if not available
+        coqui_engine = CoquiTTSEngine(voice_config)
+        
+        # Perform voice cloning
+        cloned_result = await coqui_engine.clone_voice(
+            audio_sample=audio_content,
+            text=text,
+            voice_id=voice_id
+        )
+        
+        # Log activity
+        integration_manager.log_user_activity(
+            user_id=auth_data.get("user_id"),
+            activity_type="voice_cloning",
+            metadata={
+                "voice_id": voice_id or "auto_generated",
+                "text_length": len(text),
+                "language": language,
+                "success": True
+            }
+        )
+        
+        # Return audio data as base64 for JSON response
+        audio_b64 = base64.b64encode(cloned_result.audio_data).decode()
+        
+        return {
+            "success": True,
+            "voice_id": cloned_result.metadata.get("voice_id"),
+            "audio_data": audio_b64,
+            "format": cloned_result.format,
+            "duration": cloned_result.duration,
+            "sample_rate": cloned_result.sample_rate,
+            "metadata": cloned_result.metadata,
+            "message": "Voice cloning successful using free Coqui TTS"
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Voice cloning failed: {e}")
+        raise HTTPException(status_code=500, detail=f"Voice cloning failed: {str(e)}")
+
+@app.post("/api/v1/voice/translate-and-speak")
+async def translate_and_speak(
+    request: Dict[str, Any],
+    auth_data: Dict[str, Any] = Depends(verify_token)
+):
+    """Translate text and generate voice response in target language."""
+    try:
+        text = request.get("text")
+        source_language = request.get("source_language", "auto")
+        target_language = request.get("target_language", "en") 
+        voice_id = request.get("voice_id", "default")
+        engine = request.get("engine", "coqui_tts")
+        
+        if not text:
+            raise HTTPException(status_code=400, detail="Text is required")
+        
+        # Call translation service
+        translated_text = await translate_text(text, source_language, target_language)
+        
+        if not translated_text:
+            raise HTTPException(status_code=500, detail="Translation failed")
+        
+        # Generate TTS for translated text
+        tts_request = TTSRequest(
+            text=translated_text,
+            language=target_language,
+            voice_id=voice_id,
+            engine=engine
+        )
+        
+        audio_data = await voice_processing.process_text_to_speech(
+            request=tts_request,
+            user_id=auth_data.get("user_id")
+        )
+        
+        # Log activity
+        integration_manager.log_user_activity(
+            user_id=auth_data.get("user_id"),
+            activity_type="translate_and_speak",
+            metadata={
+                "source_language": source_language,
+                "target_language": target_language,
+                "text_length": len(text),
+                "translated_length": len(translated_text),
+                "voice_id": voice_id,
+                "engine": engine
+            }
+        )
+        
+        # Return both translation and audio
+        audio_b64 = base64.b64encode(audio_data.data).decode() if hasattr(audio_data, 'data') else None
+        
+        return {
+            "success": True,
+            "original_text": text,
+            "translated_text": translated_text,
+            "source_language": source_language,
+            "target_language": target_language,
+            "audio_data": audio_b64,
+            "audio_format": audio_data.format if hasattr(audio_data, 'format') else "wav",
+            "duration": audio_data.duration if hasattr(audio_data, 'duration') else 0,
+            "metadata": {
+                "engine": engine,
+                "voice_id": voice_id,
+                "translation_service": "integrated"
+            }
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Translate and speak failed: {e}")
+        raise HTTPException(status_code=500, detail=f"Translation integration failed: {str(e)}")
+
+@app.get("/api/v1/voice/voices")
+async def get_available_voices(auth_data: Dict[str, Any] = Depends(verify_token)):
+    """Get list of available voices including cloned voices."""
+    try:
+        # Get voices from Coqui TTS engine
+        coqui_engine = CoquiTTSEngine(voice_config)
+        if not coqui_engine.initialized:
+            await coqui_engine.initialize()
+        
+        voices_data = await coqui_engine.get_available_voices()
+        
+        return {
+            "success": True,
+            "voices": voices_data.get("voices", []),
+            "engine": voices_data.get("engine", "coqui_tts"),
+            "supports_cloning": voices_data.get("supports_cloning", False),
+            "supported_languages": voices_data.get("supported_languages", []),
+            "total_voices": len(voices_data.get("voices", []))
+        }
+        
+    except Exception as e:
+        logger.error(f"Failed to get available voices: {e}")
+        raise HTTPException(status_code=500, detail="Failed to retrieve voices")
+
+async def translate_text(text: str, source_lang: str, target_lang: str) -> Optional[str]:
+    """Integrate with translation service to translate text."""
+    try:
+        async with aiohttp.ClientSession() as session:
+            translation_data = {
+                "text": text,
+                "source_language": source_lang,
+                "target_language": target_lang
+            }
+            
+            async with session.post(
+                f"{TRANSLATION_SERVICE_URL}/api/v1/translate",
+                json=translation_data,
+                timeout=aiohttp.ClientTimeout(total=30)
+            ) as response:
+                if response.status == 200:
+                    result = await response.json()
+                    return result.get("translated_text")
+                else:
+                    logger.error(f"Translation service error: {response.status}")
+                    return None
+                    
+    except Exception as e:
+        logger.error(f"Translation integration failed: {e}")
+        return None
+
+# Admin and utility endpoints
 
 @app.post("/admin/cleanup")
 async def cleanup_services(

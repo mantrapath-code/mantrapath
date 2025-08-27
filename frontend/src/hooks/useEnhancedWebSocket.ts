@@ -27,19 +27,19 @@ import type {
   CrisisData
 } from '../types/backend-events'
 
-// Real Backend WebSocket Endpoints - Sprint 2 Integration (Fixed Docker Ports)
+// Real Backend WebSocket Endpoints - Sprint 2 Integration (Updated for API Gateway Proxy)
 export const BACKEND_WEBSOCKET_ENDPOINTS = {
-  // Primary WebSocket connection (Notification Service Port 8007 - Docker corrected)
-  notifications: (userId: string) => `ws://localhost:8007/ws/${userId}`,
+  // Primary WebSocket connection through API Gateway proxy
+  notifications: (userId: string) => `ws://localhost:5173/api/notifications/ws/${userId}`,
   
-  // API Gateway voice streaming (Port 8000)
-  voiceStream: `ws://localhost:8000/api/v3/voice/stream`,
+  // API Gateway voice streaming (Direct endpoint)
+  voiceStream: `ws://localhost:5173/api/v3/voice/stream`,
   
-  // Individual services (if needed for direct connections)
-  assistance: (userId: string) => `ws://localhost:8018/ws/${userId}`,
-  aiContext: (userId: string) => `ws://localhost:8013/ws/${userId}`,
-  aiEvents: (userId: string) => `ws://localhost:8014/ws/${userId}`,
-  voiceEvents: (userId: string) => `ws://localhost:8015/ws/${userId}`
+  // Other services through API Gateway proxy (when available)
+  assistance: (userId: string) => `ws://localhost:5173/api/assistance/ws/${userId}`,
+  aiContext: (userId: string) => `ws://localhost:5173/api/ai-context/ws/${userId}`,
+  aiEvents: (userId: string) => `ws://localhost:5173/api/ai-events/ws/${userId}`,
+  voiceEvents: (userId: string) => `ws://localhost:5173/api/voice-events/ws/${userId}`
 }
 
 // Sprint 2 Event Types - Based on Real Backend Services

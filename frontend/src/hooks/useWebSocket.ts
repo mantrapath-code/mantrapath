@@ -30,6 +30,11 @@ export function useWebSocket(url?: string): WebSocketHookReturn {
 
   // Memoize the WebSocket URL to prevent unnecessary re-connections
   const wsUrl = useMemo(() => {
+    // If running in development, use the proxy through Vite dev server
+    if (import.meta.env.DEV) {
+      return url || import.meta.env.VITE_WS_URL || `ws://localhost:5173/api/notifications/ws`
+    }
+    // In production, use the actual backend URL
     return url || import.meta.env.VITE_WS_URL || `ws://localhost:8007`
   }, [url])
 
