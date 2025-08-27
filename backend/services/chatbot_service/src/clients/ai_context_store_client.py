@@ -4,6 +4,7 @@ Provides comprehensive user context aggregation and intelligence insights
 """
 import asyncio
 import logging
+import json
 from typing import Dict, Any, Optional, List
 import httpx
 from dataclasses import dataclass
@@ -16,8 +17,11 @@ class UserContext:
     """Comprehensive user context"""
     user_id: str
     mood_history: List[Dict[str, Any]]
+    journal_entries: List[Dict[str, Any]]  # Add missing field
     conversation_patterns: Dict[str, Any]
     preferences: Dict[str, Any]
+    behavioral_patterns: Dict[str, Any]  # Enhanced behavioral patterns
+    context_history: List[Dict[str, Any]]  # Context history
     crisis_indicators: Dict[str, Any]
     intervention_history: List[Dict[str, Any]]
     cultural_context: Dict[str, Any]
@@ -89,31 +93,48 @@ class AIContextStoreClient:
             logger.debug("AI Context Store is disabled, returning empty context")
             return self._create_empty_user_context(user_id)
             
+        logger.info(f"🔄 Requesting user context for user_id={user_id}, refresh_data={refresh_data}")
+        
         try:
             headers = {"Content-Type": "application/json"}
             if jwt_token:
                 headers["Authorization"] = f"Bearer {jwt_token}"
+                logger.debug(f"🔑 Using JWT token: {jwt_token[:50]}...")
+            else:
+                logger.warning("⚠️ No JWT token provided")
             
             params = {}
             if refresh_data:
                 params["refresh_data"] = "true"
             
+            url = f"{self.ai_context_store_url}/api/v1/context/user/{user_id}"
+            logger.info(f"📡 Making request to: {url}")
+            
             async with httpx.AsyncClient(timeout=self.timeout) as client:
-                response = await client.get(
-                    f"{self.ai_context_store_url}/api/v1/context/user/{user_id}",
-                    headers=headers,
-                    params=params
-                )
+                response = await client.get(url, headers=headers, params=params)
+                
+                logger.info(f"📥 Response status: {response.status_code}")
                 
                 if response.status_code == 200:
                     data = response.json()
-                    return self._parse_user_context(user_id, data)
+                    logger.info(f"✅ Successfully retrieved context data: {len(str(data))} characters")
+                    
+                    # Debug: Log the actual data structure received
+                    logger.info(f"🔍 DEBUG - Raw data keys: {list(data.keys()) if isinstance(data, dict) else 'not dict'}")
+                    if isinstance(data, dict) and 'behavioral_patterns' in data:
+                        logger.info(f"🔍 DEBUG - behavioral_patterns found: {data.get('behavioral_patterns', {})}")
+                    if isinstance(data, dict) and 'preferences' in data:
+                        logger.info(f"🔍 DEBUG - preferences found: {data.get('preferences', {})}")
+                    
+                    parsed_context = self._parse_user_context(user_id, data)
+                    logger.info(f"📊 Parsed context - mood_history: {len(parsed_context.mood_history)}, journal_entries: {len(parsed_context.journal_entries)}")
+                    return parsed_context
                 else:
-                    logger.error(f"Get user context failed: {response.status_code} - {response.text}")
+                    logger.error(f"❌ Get user context failed: {response.status_code} - {response.text}")
                     return self._create_empty_user_context(user_id)
                     
         except Exception as e:
-            logger.error(f"Error getting user context: {e}")
+            logger.error(f"💥 Error getting user context: {type(e).__name__}: {e}")
             return self._create_empty_user_context(user_id)
     
     async def get_conversation_context(self, session_id: str, jwt_token: Optional[str] = None) -> Optional[ConversationContext]:
@@ -250,8 +271,11 @@ class AIContextStoreClient:
         return UserContext(
             user_id=user_id,
             mood_history=[],
+            journal_entries=[],  # Add missing field
             conversation_patterns={},
             preferences={},
+            behavioral_patterns={},  # Add behavioral patterns field
+            context_history=[],  # Add context history field
             crisis_indicators={},
             intervention_history=[],
             cultural_context={},
@@ -273,18 +297,63 @@ class AIContextStoreClient:
         )
     
     def _parse_user_context(self, user_id: str, data: Dict[str, Any]) -> UserContext:
-        """Parse user context from API response"""
+        """Parse user context from AI Context Store API response"""
+        
+        # The AI Context Store returns data directly in the format:
+        # {"user_id": "...", "mood_context": {...}, "behavioral_patterns": {...}, "preferences": {...}}
+        
+        # Extract mood information
+        mood_context = data.get("mood_context", {})
+        mood_history = []
+        if mood_context.get("recent_moods"):
+            mood_history = [{"mood": mood, "timestamp": data.get("last_updated")} 
+                          for mood in mood_context.get("recent_moods", [])]
+        
+        # Extract conversation patterns from journal context (if available)
+        journal_context = data.get("content_context", {}) or data.get("journal_context", {})
+        conversation_patterns = {
+            "themes": journal_context.get("recent_themes", []),
+            "sentiment": journal_context.get("sentiment", "neutral"),
+            "frequency": journal_context.get("entry_frequency", "unknown")
+        }
+        
+        # Extract activity information from community context
+        community_context = data.get("community_context", {})
+        recent_activities = [{
+            "type": "community_engagement",
+            "level": community_context.get("engagement_level", "moderate"),
+            "engagement": community_context.get("social_score", 0.5),
+            "interactions": community_context.get("interactions", 0)
+        }]
+        
+        # Extract behavioral patterns and preferences from the response
+        behavioral_patterns = data.get("behavioral_patterns", {})
+        preferences = data.get("preferences", {})
+        context_history = data.get("context_history", [])
+        
+        logger.info(f"📊 Parsed user context: mood_patterns={mood_context.get('mood_trend', 'stable')}, themes={journal_context.get('recent_themes', [])}")
+        logger.info(f"📊 Parsed behavioral patterns: {list(behavioral_patterns.keys()) if behavioral_patterns else 'none'}")
+        logger.info(f"📊 Parsed preferences: {list(preferences.keys()) if preferences else 'none'}")
+        
         return UserContext(
             user_id=user_id,
-            mood_history=data.get("mood_history", []),
-            conversation_patterns=data.get("conversation_patterns", {}),
-            preferences=data.get("preferences", {}),
+            mood_history=mood_history,
+            journal_entries=journal_context.get("recent_entries", []),  
+            conversation_patterns=conversation_patterns,
+            preferences=preferences,  # Use parsed preferences
+            behavioral_patterns=behavioral_patterns,  # Add behavioral patterns
+            context_history=context_history,  # Add context history
             crisis_indicators=data.get("crisis_indicators", {}),
             intervention_history=data.get("intervention_history", []),
             cultural_context=data.get("cultural_context", {}),
             language_preferences=data.get("language_preferences", {"primary": "en"}),
-            recent_activities=data.get("recent_activities", []),
-            ai_insights=data.get("ai_insights", {})
+            recent_activities=recent_activities,
+            ai_insights={
+                "mood_patterns": mood_context.get("patterns", "No patterns identified"),
+                "average_intensity": mood_context.get("average_intensity", 0),
+                "recent_themes": journal_context.get("recent_themes", []),
+                "community_engagement": community_context.get("engagement", "unknown")
+            }
         )
     
     def _parse_conversation_context(self, session_id: str, data: Dict[str, Any]) -> ConversationContext:

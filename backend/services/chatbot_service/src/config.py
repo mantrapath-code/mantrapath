@@ -25,6 +25,9 @@ class ChatbotConfig:
     translation_service: ServiceConfig
     voice_service: ServiceConfig
     action_orchestrator: ServiceConfig
+    memory_service: ServiceConfig
+    proactive_assistance_engine: ServiceConfig
+    ai_event_processor: ServiceConfig
     
     # General settings
     default_language: str
@@ -79,7 +82,7 @@ class ChatbotConfig:
         
         # AI Context Store Configuration
         ai_context_store = ServiceConfig(
-            url=os.getenv("AI_CONTEXT_STORE_URL", "http://ai-context-store:8007"),
+            url=os.getenv("AI_CONTEXT_STORE_URL", "http://ai-context-store:8013"),
             timeout=int(os.getenv("AI_CONTEXT_STORE_TIMEOUT", "30")),
             max_retries=int(os.getenv("AI_CONTEXT_STORE_MAX_RETRIES", "3")),
             enabled=os.getenv("AI_CONTEXT_STORE_ENABLED", "true").lower() == "true",
@@ -88,7 +91,7 @@ class ChatbotConfig:
         
         # Translation Service Configuration
         translation_service = ServiceConfig(
-            url=os.getenv("TRANSLATION_SERVICE_URL", "http://translation-service:8005"),
+            url=os.getenv("TRANSLATION_SERVICE_URL", "http://translation-service:8010"),
             timeout=int(os.getenv("TRANSLATION_SERVICE_TIMEOUT", "30")),
             max_retries=int(os.getenv("TRANSLATION_SERVICE_MAX_RETRIES", "3")),
             enabled=os.getenv("TRANSLATION_SERVICE_ENABLED", "true").lower() == "true",
@@ -97,7 +100,7 @@ class ChatbotConfig:
         
         # Voice Service Configuration
         voice_service = ServiceConfig(
-            url=os.getenv("VOICE_SERVICE_URL", "http://voice-service:8003"),
+            url=os.getenv("VOICE_SERVICE_URL", "http://voice-service:8011"),
             timeout=int(os.getenv("VOICE_SERVICE_TIMEOUT", "60")),
             max_retries=int(os.getenv("VOICE_SERVICE_MAX_RETRIES", "3")),
             enabled=os.getenv("VOICE_SERVICE_ENABLED", "true").lower() == "true",
@@ -106,11 +109,38 @@ class ChatbotConfig:
         
         # Action Orchestrator Configuration
         action_orchestrator = ServiceConfig(
-            url=os.getenv("ACTION_ORCHESTRATOR_URL", "http://action-orchestrator:8009"),
+            url=os.getenv("ACTION_ORCHESTRATOR_URL", "http://action-orchestrator:8012"),
             timeout=int(os.getenv("ACTION_ORCHESTRATOR_TIMEOUT", "60")),
             max_retries=int(os.getenv("ACTION_ORCHESTRATOR_MAX_RETRIES", "3")),
             enabled=os.getenv("ACTION_ORCHESTRATOR_ENABLED", "true").lower() == "true",
             auth_required=os.getenv("ACTION_ORCHESTRATOR_AUTH_REQUIRED", "true").lower() == "true"
+        )
+        
+        # Memory Service Configuration
+        memory_service = ServiceConfig(
+            url=os.getenv("MEMORY_SERVICE_URL", "http://memory-service:8017"),
+            timeout=int(os.getenv("MEMORY_SERVICE_TIMEOUT", "30")),
+            max_retries=int(os.getenv("MEMORY_SERVICE_MAX_RETRIES", "3")),
+            enabled=os.getenv("MEMORY_SERVICE_ENABLED", "true").lower() == "true",
+            auth_required=os.getenv("MEMORY_SERVICE_AUTH_REQUIRED", "true").lower() == "true"
+        )
+        
+        # Proactive Assistance Engine Configuration
+        proactive_assistance_engine = ServiceConfig(
+            url=os.getenv("PROACTIVE_ASSISTANCE_ENGINE_URL", "http://proactive-assistance-engine:8018"),
+            timeout=int(os.getenv("PROACTIVE_ASSISTANCE_ENGINE_TIMEOUT", "30")),
+            max_retries=int(os.getenv("PROACTIVE_ASSISTANCE_ENGINE_MAX_RETRIES", "3")),
+            enabled=os.getenv("PROACTIVE_ASSISTANCE_ENGINE_ENABLED", "true").lower() == "true",
+            auth_required=os.getenv("PROACTIVE_ASSISTANCE_ENGINE_AUTH_REQUIRED", "true").lower() == "true"
+        )
+        
+        # AI Event Processor Configuration
+        ai_event_processor = ServiceConfig(
+            url=os.getenv("AI_EVENT_PROCESSOR_URL", "http://ai-event-processor:8014"),
+            timeout=int(os.getenv("AI_EVENT_PROCESSOR_TIMEOUT", "30")),
+            max_retries=int(os.getenv("AI_EVENT_PROCESSOR_MAX_RETRIES", "3")),
+            enabled=os.getenv("AI_EVENT_PROCESSOR_ENABLED", "true").lower() == "true",
+            auth_required=os.getenv("AI_EVENT_PROCESSOR_AUTH_REQUIRED", "true").lower() == "true"
         )
         
         # Supported languages from MantraPath documentation
@@ -135,6 +165,9 @@ class ChatbotConfig:
             translation_service=translation_service,
             voice_service=voice_service,
             action_orchestrator=action_orchestrator,
+            memory_service=memory_service,
+            proactive_assistance_engine=proactive_assistance_engine,
+            ai_event_processor=ai_event_processor,
             
             # General settings
             default_language=os.getenv("CHATBOT_DEFAULT_LANGUAGE", "hi"),
@@ -174,7 +207,10 @@ class ChatbotConfig:
             "context": self.ai_context_store,
             "translation": self.translation_service,
             "voice": self.voice_service,
-            "orchestrator": self.action_orchestrator
+            "orchestrator": self.action_orchestrator,
+            "memory": self.memory_service,
+            "proactive": self.proactive_assistance_engine,
+            "event_processor": self.ai_event_processor
         }
         return service_map.get(service_name)
     
@@ -191,7 +227,10 @@ class ChatbotConfig:
             "context": self.ai_context_store.url,
             "translation": self.translation_service.url,
             "voice": self.voice_service.url,
-            "orchestrator": self.action_orchestrator.url
+            "orchestrator": self.action_orchestrator.url,
+            "memory": self.memory_service.url,
+            "proactive": self.proactive_assistance_engine.url,
+            "event_processor": self.ai_event_processor.url
         }
     
     def validate_configuration(self) -> List[str]:

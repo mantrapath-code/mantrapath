@@ -16,6 +16,9 @@ from src.clients.ml_service_client import ml_service_client, CrisisAssessment
 from src.clients.translation_service_client import translation_service_client, TranslationResult
 from src.clients.voice_service_client import voice_service_client, TTSResult
 from src.clients.orchestrator_client import action_orchestrator_client, ActionResult
+from src.clients.memory_service_client import memory_service_client, MemoryEntry, ConversationSummary
+from src.clients.proactive_assistance_engine_client import proactive_assistance_engine_client, ProactiveInsight, UserRiskAssessment
+from src.clients.ai_event_processor_client import ai_event_processor_client, ChatEvent
 from src.config import chatbot_config
 
 logger = logging.getLogger(__name__)
@@ -31,7 +34,10 @@ class EnhancedChatbotServiceV2:
             'context': ai_context_store_client,
             'translation': translation_service_client,
             'voice': voice_service_client,
-            'orchestrator': action_orchestrator_client
+            'orchestrator': action_orchestrator_client,
+            'memory': memory_service_client,
+            'proactive': proactive_assistance_engine_client,
+            'event_processor': ai_event_processor_client
         }
         
         # Response generation templates
@@ -200,6 +206,34 @@ class EnhancedChatbotServiceV2:
             if sentiment_analysis or intent_classification:
                 response_data["services_used"].append("models")
             
+            # Step 4: Get User Context for Personalization (BEFORE response generation)
+            user_context = None
+            if self.config.ai_context_store.enabled:
+                response_data["processing_steps"].append("context_retrieval")
+                
+                # Smart refresh based on keywords
+                should_refresh = any(keyword in message.lower() for keyword in [
+                    'mood', 'feeling', 'journal', 'community', 'activity', 'progress', 'track', 'how am i', 'my', 'lately'
+                ])
+                
+                logger.info(f"🎯 CONTEXT RETRIEVAL TRIGGERED - message: '{message}', should_refresh: {should_refresh}, user_id: {user_id}")
+                
+                try:
+                    user_context = await ai_context_store_client.get_user_context(
+                        user_id, 
+                        jwt_token, 
+                        refresh_data=should_refresh
+                    )
+                    
+                    if user_context:
+                        logger.info(f"📊 Retrieved user context (refreshed: {should_refresh}): user_id={user_context.user_id}, mood_history_count={len(user_context.mood_history)}")
+                        response_data["services_used"].append("context")
+                    else:
+                        logger.warning(f"⚠️ No context available for user {user_id}")
+                except Exception as e:
+                    logger.error(f"❌ Failed to retrieve user context: {e}")
+                    user_context = None
+            
             # Step 5: Response Generation
             response_data["processing_steps"].append("response_generation")
             response_text = await self._generate_contextual_response(
@@ -230,24 +264,6 @@ class EnhancedChatbotServiceV2:
                     },
                     jwt_token
                 )
-                
-                # Get user context for personalization with smart refresh
-                should_refresh = any(keyword in message.lower() for keyword in [
-                    'mood', 'feeling', 'journal', 'community', 'activity', 'progress', 'track', 'how am i', 'my'
-                ])
-                
-                user_context = await ai_context_store_client.get_user_context(
-                    user_id, 
-                    jwt_token, 
-                    refresh_data=should_refresh
-                )
-                
-                if user_context:
-                    logger.info(f"📊 Retrieved user context (refreshed: {should_refresh})")
-                else:
-                    logger.warning(f"⚠️ No context available for user {user_id}")
-                    
-                response_data["services_used"].append("context")
             
             # Step 6: Cultural Adaptation
             cultural_adaptations = []
@@ -567,7 +583,7 @@ class EnhancedChatbotServiceV2:
 
 User's message: "{message}"
 
-Please respond as Maya in a natural, conversational way. Make your response feel like you're really listening and care about what they shared. Reference specific details from their message and ask thoughtful questions to continue the conversation."""
+Please respond as Mantra in a natural, conversational way. Make your response feel like you're really listening and care about what they shared. Reference specific details from their message and ask thoughtful questions to continue the conversation."""
             
             # Ollama API endpoint - configurable for Docker vs host environments
             ollama_url = os.getenv("OLLAMA_URL", "http://host.docker.internal:11434")
@@ -616,7 +632,7 @@ Please respond as Maya in a natural, conversational way. Make your response feel
         refined = ai_response.strip()
         
         # Remove role indicators that might have slipped through
-        unwanted_prefixes = ["Maya:", "Assistant:", "AI:", "Bot:", "Response:"]
+        unwanted_prefixes = ["Mantra:", "Assistant:", "AI:", "Bot:", "Response:"]
         for prefix in unwanted_prefixes:
             if refined.startswith(prefix):
                 refined = refined[len(prefix):].strip()
@@ -745,55 +761,109 @@ Guidelines:
         if user_context:
             context_info = []
             
-            # Add mood context
+            # Process mood context data
             if hasattr(user_context, 'mood_context') and user_context.mood_context:
-                mood_ctx = user_context.mood_context
-                if hasattr(mood_ctx, 'recent_average_mood'):
-                    avg_mood = getattr(mood_ctx, 'recent_average_mood', None)
-                    if avg_mood:
+                mood_context = user_context.mood_context
+                
+                # Get recent mood scores from the context
+                if hasattr(mood_context, 'recent_moods') and mood_context.recent_moods:
+                    recent_moods = mood_context.recent_moods
+                    mood_count = len(recent_moods)
+                    
+                    if mood_count > 0:
+                        context_info.append(f"Has {mood_count} recent mood entries")
+                        
+                        # Calculate average mood from recent scores
+                        avg_mood = sum(recent_moods) / len(recent_moods)
                         context_info.append(f"Recent average mood: {avg_mood:.1f}/10")
+                        
+                        # Get latest mood score
+                        latest_mood = recent_moods[0] if recent_moods else None
+                        if latest_mood:
+                            context_info.append(f"Latest mood score: {latest_mood}/10")
+                        
+                        # Determine mood trend
+                        if len(recent_moods) >= 2:
+                            first_mood = recent_moods[-1]  # Oldest in recent list
+                            last_mood = recent_moods[0]    # Most recent
+                            if last_mood > first_mood:
+                                context_info.append("Mood trending up recently")
+                            elif last_mood < first_mood:
+                                context_info.append("Mood has been declining")
+                            else:
+                                context_info.append("Mood has been stable")
                 
-                if hasattr(mood_ctx, 'mood_trend'):
-                    trend = getattr(mood_ctx, 'mood_trend', None)
-                    if trend:
-                        context_info.append(f"Mood trend: {trend}")
-                
-                if hasattr(mood_ctx, 'total_entries'):
-                    entries = getattr(mood_ctx, 'total_entries', 0)
-                    if entries > 0:
-                        context_info.append(f"Has tracked mood {entries} times")
+                # Process mood analytics if available
+                if hasattr(mood_context, 'mood_average') and mood_context.mood_average:
+                    context_info.append(f"Overall mood average: {mood_context.mood_average:.1f}/10")
             
-            # Add community context
-            if hasattr(user_context, 'community_context') and user_context.community_context:
-                comm_ctx = user_context.community_context
-                if hasattr(comm_ctx, 'community_standing'):
-                    standing = getattr(comm_ctx, 'community_standing', None)
-                    if standing:
-                        activity_level = standing.replace('_', ' ')
-                        context_info.append(f"Community activity: {activity_level}")
-                
-                if hasattr(comm_ctx, 'common_topics'):
-                    topics = getattr(comm_ctx, 'common_topics', [])
-                    if topics:
-                        context_info.append(f"Interests: {', '.join(topics[:3])}")
+            # Process enhanced behavioral patterns
+            if hasattr(user_context, 'behavioral_patterns') and user_context.behavioral_patterns:
+                patterns = user_context.behavioral_patterns
+                if isinstance(patterns, dict):
+                    # Mood patterns
+                    if 'mood_patterns' in patterns:
+                        mood_patterns = patterns['mood_patterns']
+                        if 'typical_mood_range' in mood_patterns:
+                            context_info.append(f"Mood range: {mood_patterns['typical_mood_range']}")
+                        if 'mood_volatility' in mood_patterns:
+                            context_info.append(f"Mood stability: {mood_patterns['mood_volatility']}")
+                        if 'preferred_input_methods' in mood_patterns:
+                            methods = mood_patterns['preferred_input_methods']
+                            if methods:
+                                context_info.append(f"Uses: {', '.join(methods)} input")
+                        if 'tracking_frequency' in mood_patterns:
+                            context_info.append(f"Tracks mood: {mood_patterns['tracking_frequency']}")
+                    
+                    # Activity patterns
+                    if 'activity_patterns' in patterns:
+                        activity_patterns = patterns['activity_patterns']
+                        if 'engagement_level' in activity_patterns:
+                            context_info.append(f"Engagement: {activity_patterns['engagement_level']}")
+                        if 'consistency' in activity_patterns:
+                            context_info.append(f"Consistency: {activity_patterns['consistency']}")
+                    
+                    # Communication patterns
+                    if 'communication_patterns' in patterns:
+                        comm_patterns = patterns['communication_patterns']
+                        if 'detail_preference' in comm_patterns:
+                            context_info.append(f"Prefers {comm_patterns['detail_preference']} responses")
             
-            # Add journal context
-            if hasattr(user_context, 'content_context') and user_context.content_context:
-                content_ctx = user_context.content_context
-                if hasattr(content_ctx, 'total_entries'):
-                    entries = getattr(content_ctx, 'total_entries', 0)
-                    if entries > 0:
-                        context_info.append(f"Has written {entries} journal entries")
-                
-                if hasattr(content_ctx, 'common_themes'):
-                    themes = getattr(content_ctx, 'common_themes', [])
-                    if themes:
-                        context_info.append(f"Common themes: {', '.join(themes[:3])}")
+            # Process enhanced preferences
+            if hasattr(user_context, 'preferences') and user_context.preferences:
+                prefs = user_context.preferences
+                if isinstance(prefs, dict):
+                    if 'communication_style' in prefs:
+                        style = prefs['communication_style']
+                        context_info.append(f"Communication style: {style}")
+                    
+                    if 'content_preferences' in prefs:
+                        content_prefs = prefs['content_preferences']
+                        if 'focus_area' in content_prefs:
+                            context_info.append(f"Focus area: {content_prefs['focus_area']}")
+                        if 'stress_support' in content_prefs:
+                            stress_level = content_prefs['stress_support']
+                            if stress_level != 'low':
+                                context_info.append(f"Stress support needed: {stress_level}")
+                    
+                    if 'support_preferences' in prefs:
+                        support_prefs = prefs['support_preferences']
+                        if 'intervention_level' in support_prefs:
+                            context_info.append(f"Support level: {support_prefs['intervention_level']}")
+                        if 'community_engagement' in support_prefs:
+                            engagement = support_prefs['community_engagement']
+                            context_info.append(f"Community: {engagement}")
+            
+            # Process context history
+            if hasattr(user_context, 'context_history') and user_context.context_history:
+                history_count = len(user_context.context_history)
+                if history_count > 0:
+                    context_info.append(f"Platform activity: {history_count} recent actions")
             
             # Add context to prompt if we have any information
             if context_info:
                 base_prompt += f"\n\nUser Context: {' | '.join(context_info)}"
-                base_prompt += "\n\nUse this context to provide more personalized and relevant responses. Reference their progress, acknowledge their efforts, and build on their interests when appropriate."
+                base_prompt += "\n\nIMPORTANT: Use this context to provide highly personalized responses. Reference their specific behavioral patterns, respect their preferences, and acknowledge their unique engagement style. When they ask about patterns or preferences, use the exact data from their context."
             else:
                 base_prompt += "\n\nThis appears to be a new user or someone with limited activity. Be welcoming and help them get started with the platform."
         

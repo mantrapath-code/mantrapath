@@ -70,23 +70,42 @@ def get_current_user_or_service(credentials: HTTPAuthorizationCredentials = Depe
 async def get_user_context(
     user_id: str,
     include_history: bool = Query(False, description="Include context history"),
-    auth_info = Depends(get_current_user_or_service)
+    refresh_data: bool = Query(False, description="Refresh data from all services"),
+    auth_info = Depends(get_current_user_or_service),
+    credentials: HTTPAuthorizationCredentials = Depends(security)
 ):
     """
     Get comprehensive user context
     """
     try:
         # Check authorization (users can only access their own context, services can access any)
-        if auth_info.get("type") != "service" and auth_info.get("id") != user_id:
-            raise HTTPException(status_code=403, detail="Not authorized to access this user's context")
+        if auth_info.get("type") != "service":
+            # For regular users, check if they can access their own data
+            user_id_from_token = auth_info.get("user_id") or auth_info.get("sub")
+            if user_id_from_token != user_id:
+                raise HTTPException(status_code=403, detail="Not authorized to access this user's context")
         
         if not context_aggregator_service:
             raise HTTPException(status_code=500, detail="Context aggregator service not available")
         
-        user_context = await context_aggregator_service.get_user_context(user_id, include_history)
+        # Use comprehensive data collection with JWT token when available
+        jwt_token = credentials.credentials if credentials else None
+        
+        if jwt_token and (refresh_data or auth_info.get("type") == "service"):
+            logger.info(f"🚀 Using comprehensive data collection for user {user_id}")
+            user_context = await context_aggregator_service.collect_comprehensive_user_data(user_id, jwt_token)
+        else:
+            logger.info(f"📋 Using cached context for user {user_id}")
+            user_context = await context_aggregator_service.get_user_context(user_id, include_history)
         
         if not user_context:
             raise HTTPException(status_code=404, detail="User context not found")
+        
+        # Debug: Log what we're about to return
+        logger.info(f"🔍 API DEBUG - Returning UserContext with behavioral_patterns: {bool(user_context.behavioral_patterns)}")
+        logger.info(f"🔍 API DEBUG - Behavioral patterns keys: {list(user_context.behavioral_patterns.keys()) if user_context.behavioral_patterns else 'None'}")
+        logger.info(f"🔍 API DEBUG - Preferences keys: {list(user_context.preferences.keys()) if user_context.preferences else 'None'}")
+        logger.info(f"🔍 API DEBUG - UserContext type: {type(user_context)}")
         
         return user_context
         

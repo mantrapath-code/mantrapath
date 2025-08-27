@@ -45,6 +45,11 @@ class MoodDataCollector:
                 
                 if mood_response.status_code == 200:
                     mood_entries = mood_response.json()
+                    logger.info(f"🔍 Mood service returned {len(mood_entries)} entries for user")
+                    if mood_entries:
+                        logger.info(f"🔍 First mood entry: {mood_entries[0]}")
+                    else:
+                        logger.warning(f"⚠️ Mood service returned empty array for user")
                     
                     # Get analytics
                     analytics_response = await client.get(
@@ -108,7 +113,8 @@ class MoodDataCollector:
             "mood_patterns": {
                 "highest_mood": max(recent_moods) if recent_moods else 0,
                 "lowest_mood": min(recent_moods) if recent_moods else 0,
-                "mood_variance": max(recent_moods) - min(recent_moods) if recent_moods else 0
+                "mood_variance": max(recent_moods) - min(recent_moods) if recent_moods else 0,
+                "recent_scores": recent_moods
             },
             "analytics": analytics,
             "voice_entries": len([e for e in mood_entries if 'voice_input' in e.get('context_tags', [])]),

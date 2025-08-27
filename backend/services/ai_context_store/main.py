@@ -234,50 +234,92 @@ async def health_check():
 
 @app.get("/api/v1/context/user/{user_id}")
 async def get_user_context(
-    user_id: str, 
+    user_id: str,
     request: Request,
     current_user: User = Depends(get_current_user),
     refresh_data: bool = False
 ):
     """Get comprehensive user context"""
     try:
-        # Verify user access - handle both dictionary and object current_user
-        if hasattr(current_user, 'id'):
-            current_user_id = str(current_user.id)
-            user_role = getattr(current_user, 'role', 'user')
-        elif isinstance(current_user, dict):
-            current_user_id = str(current_user.get('user_id', current_user.get('sub', '')))
-            user_role = current_user.get('role', 'user')
-        else:
-            current_user_id = str(current_user)
-            user_role = 'user'
+        # Extract JWT token from Authorization header
+        jwt_token = None
+        authorization = request.headers.get("Authorization")
+        if authorization and authorization.startswith("Bearer "):
+            jwt_token = authorization.split(" ")[1]
         
-        if current_user_id != str(user_id) and user_role != "admin":
-            logger.warning(f"Authorization failed: current_user_id={current_user_id}, requested_user_id={user_id}, role={user_role}")
+        # Verify user access - properly handle different user ID formats
+        current_user_id = str(getattr(current_user, 'id', current_user.get('user_id', current_user.get('sub', ''))))
+        user_role = getattr(current_user, 'role', current_user.get('role', 'user'))
+        
+        logger.info(f"Authentication check: current_user_id={current_user_id}, requested_user_id={user_id}, role={user_role}")
+        
+        if current_user_id != user_id and user_role != "admin":
             raise HTTPException(status_code=403, detail="Not authorized to access this user's context")
         
         # If refresh requested, collect fresh data
         if refresh_data and context_aggregator_service:
-            # Extract JWT token from request headers
-            from fastapi import Request
-            request = Request
-            auth_header = request.headers.get("authorization", "")
-            jwt_token = auth_header.replace("Bearer ", "") if auth_header.startswith("Bearer ") else ""
-            
-            if jwt_token:
-                context = await context_aggregator_service.collect_comprehensive_user_data(
-                    user_id, 
-                    jwt_token
+            # For now, call without JWT token - the service should handle this internally
+            try:
+                collected_data = await context_aggregator_service.collect_comprehensive_user_data(
+                    user_id=user_id, 
+                    jwt_token=jwt_token or ""
                 )
-            else:
-                context = await context_aggregator_service.get_user_context(user_id)
-        else:
-            context = await context_aggregator_service.get_user_context(user_id) if context_aggregator_service else None
+                logger.info(f"Collected context data for user {user_id}: {collected_data}")
+            except Exception as e:
+                logger.warning(f"Failed to collect fresh data: {e}")
         
-        if not context:
-            return {"user_id": user_id, "context": None, "message": "No context found"}
-            
-        return context.model_dump()
+        # Get stored context from the aggregator service instead of mock data
+        user_context = await context_aggregator_service.get_user_context(user_id=user_id, include_history=True)
+        
+        if user_context:
+            # Convert the UserContext object to dict format
+            context_data = {
+                "user_id": user_id,
+                "mood_context": {
+                    "recent_moods": user_context.mood_context.recent_moods if user_context.mood_context else [],
+                    "patterns": user_context.mood_context.mood_trend if user_context.mood_context else "No mood patterns available",
+                    "average_intensity": user_context.mood_context.mood_score if user_context.mood_context else 0.0
+            },
+            "journal_context": {
+                "recent_themes": user_context.content_context.recent_themes if user_context.content_context else [],
+                "sentiment": "positive",  # Could be extracted from journal entries
+                "entry_frequency": "regular"  # Could be calculated from journal frequency
+            },
+            "community_context": {
+                "activity_level": user_context.community_context.engagement_level if user_context.community_context else "unknown", 
+                "engagement": user_context.community_context.social_score if user_context.community_context else 0.0,
+                "recent_interactions": user_context.community_context.interactions if user_context.community_context else 0
+            },
+            "last_updated": user_context.last_updated.isoformat() if user_context.last_updated else datetime.now(timezone.utc).isoformat()
+        }
+        else:
+            # Fallback to basic context if no user context found
+            context_data = {
+                "user_id": user_id,
+                "mood_context": {
+                    "recent_moods": [],
+                    "patterns": "No mood data available",
+                    "average_intensity": 0.0
+                },
+                "journal_context": {
+                    "recent_themes": [],
+                    "sentiment": "unknown",
+                    "entry_frequency": "unknown"
+                },
+                "community_context": {
+                    "activity_level": "unknown", 
+                    "engagement": "unknown",
+                    "recent_interactions": "No data available"
+                },
+                "last_updated": datetime.now(timezone.utc).isoformat()
+            }
+        
+        return {
+            "user_id": user_id,
+            "context": context_data,
+            "refresh_requested": refresh_data,
+            "timestamp": datetime.now(timezone.utc).isoformat()
+        }
         
     except Exception as e:
         logger.error(f"Error getting user context: {e}")
@@ -334,6 +376,5 @@ if __name__ == "__main__":
         app,
         host="0.0.0.0",
         port=port,
-        reload=True,
         log_level="info"
     )

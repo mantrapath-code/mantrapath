@@ -12,7 +12,7 @@ from datetime import datetime
 from typing import List, Optional, Dict, Any, Union
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI, Depends, HTTPException, BackgroundTasks
+from fastapi import FastAPI, Depends, HTTPException, BackgroundTasks, Request
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.orm import Session
 from pydantic import BaseModel, Field
@@ -23,7 +23,7 @@ import redis.asyncio as redis
 sys.path.append('/app')
 sys.path.append('/app/shared')
 
-from shared.database import get_db, engine
+from shared.database import get_db, engine, SessionLocal
 from shared.models import ChatSession, ChatMessage, Base
 from shared.auth import get_current_user
 from shared.events import get_enhanced_event_bus, V3EventChannels
@@ -134,6 +134,7 @@ async def health_check():
 async def enhanced_chat_endpoint(
     request: ChatRequest,
     background_tasks: BackgroundTasks,
+    request_obj: Request,  # Add request object to extract headers
     db: Session = Depends(get_db),
     current_user: dict = Depends(get_current_user)
 ):
@@ -175,11 +176,14 @@ async def enhanced_chat_endpoint(
                 db.commit()
                 db.refresh(new_session)
 
-        # Extract JWT token from request headers or current_user
-        jwt_token = None  # You might need to extract this from headers or current_user
+        # Extract JWT token from request headers
+        jwt_token = None
+        auth_header = request_obj.headers.get("authorization")
+        if auth_header and auth_header.startswith("Bearer "):
+            jwt_token = auth_header.split(" ")[1]
         
         # Process message with Phase 2 enhanced service
-        logger.info(f"Calling enhanced_chatbot_service.process_message for user {user_id}")
+        logger.info(f"🚀 CALLING enhanced_chatbot_service.process_message for user {user_id} with token: {jwt_token is not None}")
         enhanced_response_data = await enhanced_chatbot_service.process_message(
             message=request.message,
             user_id=user_id,
@@ -219,8 +223,7 @@ async def enhanced_chat_endpoint(
             session_id,
             request.message,
             enhanced_response_data,
-            user_id,
-            db
+            user_id
         )
         
         # Publish chat event for real-time updates
@@ -281,45 +284,60 @@ async def save_chat_interaction(
     session_id: str,
     user_message: str,
     enhanced_response_data: Dict[str, Any],
-    user_id: str,
-    db: Session
+    user_id: str
 ):
     """Save chat interaction to database"""
     try:
+        # Create new database session for background task
+        from sqlalchemy.orm import sessionmaker
+        SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
+        db = SessionLocal()
+        
         # Save user message
         user_chat_message = ChatMessage(
             session_id=session_id,
-            user_id=user_id,
-            message_type="user",
+            sender="user",
             content=user_message,
-            timestamp=datetime.utcnow(),
-            metadata={"language_detected": enhanced_response_data.get("language_detected")}
+            message_type="text",
+            message_metadata={"language_detected": enhanced_response_data.get("language_detected")},
+            created_at=datetime.utcnow()
         )
         db.add(user_chat_message)
         
         # Save bot response
         bot_chat_message = ChatMessage(
             session_id=session_id,
-            user_id=user_id,
-            message_type="assistant",
+            sender="mitra",
             content=enhanced_response_data.get("response", ""),
-            timestamp=datetime.utcnow(),
-            metadata={
+            message_type="enhanced_chat",
+            message_metadata={
                 "services_used": enhanced_response_data.get("services_used", []),
                 "processing_time_ms": enhanced_response_data.get("processing_time_ms"),
                 "crisis_level": enhanced_response_data.get("crisis_level", "none"),
                 "cultural_adaptations": enhanced_response_data.get("cultural_adaptations", []),
                 "actions_triggered": enhanced_response_data.get("actions_triggered", [])
-            }
+            },
+            created_at=datetime.utcnow()
         )
         db.add(bot_chat_message)
         
         db.commit()
-        logger.info(f"Saved chat interaction for session {session_id}")
+        logger.info(f"Successfully saved chat interaction for session {session_id}: user_message='{user_message[:50]}...', bot_response='{enhanced_response_data.get('response', '')[:50]}...'")
         
     except Exception as e:
         logger.error(f"Error saving chat interaction: {e}")
-        db.rollback()
+        logger.exception("Full error traceback:")
+        if 'db' in locals():
+            try:
+                db.rollback()
+            except Exception as rollback_error:
+                logger.error(f"Error during rollback: {rollback_error}")
+    finally:
+        if 'db' in locals():
+            try:
+                db.close()
+            except Exception as close_error:
+                logger.error(f"Error closing db: {close_error}")
 
 async def publish_chat_event(
     user_id: str,
@@ -468,17 +486,18 @@ async def get_chat_history(
         
         messages = db.query(ChatMessage)\
             .filter(ChatMessage.session_id == session_id)\
-            .order_by(ChatMessage.timestamp.asc())\
+            .order_by(ChatMessage.created_at.asc())\
             .limit(limit)\
             .all()
         
         return [
             {
                 "id": str(message.id),
+                "sender": message.sender,
                 "message_type": message.message_type,
                 "content": message.content,
-                "timestamp": message.timestamp.isoformat(),
-                "metadata": message.metadata
+                "timestamp": message.created_at.isoformat(),
+                "metadata": message.message_metadata
             }
             for message in messages
         ]

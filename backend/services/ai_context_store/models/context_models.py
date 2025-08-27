@@ -65,6 +65,7 @@ class MoodContext(BaseModel):
     sleep_quality: Optional[float] = None
     journal_sentiment: Optional[float] = None
     mood_trend: Optional[str] = None
+    recent_moods: List[float] = Field(default_factory=list)
     timestamp: datetime
     
     class Config:

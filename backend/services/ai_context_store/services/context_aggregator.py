@@ -163,17 +163,43 @@ class ContextAggregatorService:
             context = await self.get_user_context(user_id) or await self._create_user_context(user_id)
             
             # Update context with collected data
-            if mood_data:
+            if mood_data and isinstance(mood_data, dict):
                 await self.update_user_context(user_id, ContextType.MOOD, mood_data)
                 
-            if journal_data:
+            if journal_data and isinstance(journal_data, dict):
                 await self.update_user_context(user_id, ContextType.CONTENT, journal_data)
                 
-            if community_data:
+            if community_data and isinstance(community_data, dict):
                 await self.update_user_context(user_id, ContextType.COMMUNITY, community_data)
             
-            # Get the updated context
+            # Get the updated context or create if it doesn't exist
             updated_context = await self.get_user_context(user_id)
+            if not updated_context:
+                logger.warning(f"⚠️ No context found after updates, creating new context for user {user_id}")
+                updated_context = await self._create_user_context(user_id)
+                self.context_cache[user_id] = updated_context
+            
+            # Always update behavioral patterns and preferences with collected data
+            all_data = {
+                "mood_data": mood_data if isinstance(mood_data, dict) else {},
+                "journal_data": journal_data if isinstance(journal_data, dict) else {},
+                "community_data": community_data if isinstance(community_data, dict) else {}
+            }
+            
+            logger.info(f"🔄 Generating behavioral patterns and preferences for user {user_id}")
+            updated_context.behavioral_patterns = self._generate_behavioral_patterns(all_data)
+            updated_context.preferences = self._generate_user_preferences(all_data)
+            
+            # Update context history
+            self._update_context_history(updated_context, "comprehensive_data_collection", all_data)
+            
+            # Cache the enhanced context
+            self.context_cache[user_id] = updated_context
+            
+            logger.info(f"🎯 Enhanced user context with behavioral patterns and preferences for user {user_id}")
+            logger.info(f"📊 Behavioral patterns keys: {list(updated_context.behavioral_patterns.keys())}")
+            logger.info(f"📊 Preferences keys: {list(updated_context.preferences.keys())}")
+            logger.info(f"📊 Context history entries: {len(updated_context.context_history)}")
             
             logger.info(f"✅ Comprehensive data collection completed for user {user_id}")
             return updated_context
@@ -341,26 +367,273 @@ class ContextAggregatorService:
                 logger.error(f"❌ Error saving user context to Redis: {e}")
     
     async def _create_user_context(self, user_id: str) -> UserContext:
-        """Create new user context"""
+        """Create new user context with populated fields"""
         return UserContext(
             user_id=user_id,
-            last_updated=datetime.now(timezone.utc)
+            last_updated=datetime.now(timezone.utc),
+            behavioral_patterns=self._generate_behavioral_patterns({}),
+            preferences=self._generate_user_preferences({}),
+            context_history=[],
+            last_activity=datetime.now(timezone.utc),
+            activity_score=0.0,
+            context_completeness=0.0
         )
+    
+    def _generate_behavioral_patterns(self, data: Dict[str, Any]) -> Dict[str, Any]:
+        """Generate behavioral patterns from real user data"""
+        patterns = {}
+        
+        # Extract mood patterns from real mood data
+        mood_data = data.get("mood_data", {})
+        if mood_data:
+            mood_patterns = {}
+            
+            # Real mood statistics
+            if "recent_average_mood" in mood_data:
+                avg_mood = mood_data["recent_average_mood"]
+                if avg_mood >= 7:
+                    mood_patterns["typical_mood_range"] = "positive"
+                elif avg_mood >= 5:
+                    mood_patterns["typical_mood_range"] = "moderate"
+                else:
+                    mood_patterns["typical_mood_range"] = "low"
+            
+            # Real mood volatility from variance
+            if "mood_patterns" in mood_data and "mood_variance" in mood_data["mood_patterns"]:
+                variance = mood_data["mood_patterns"]["mood_variance"]
+                if variance <= 1:
+                    mood_patterns["mood_volatility"] = "stable"
+                elif variance <= 2:
+                    mood_patterns["mood_volatility"] = "moderate"
+                else:
+                    mood_patterns["mood_volatility"] = "high"
+            
+            # Extract mood trend
+            if "mood_trend" in mood_data:
+                mood_patterns["trend"] = mood_data["mood_trend"]
+            
+            # Extract collection methods
+            collection_methods = []
+            if "voice_entries" in mood_data and mood_data["voice_entries"] > 0:
+                collection_methods.append("voice")
+            if "total_entries" in mood_data:
+                manual_entries = mood_data["total_entries"] - mood_data.get("voice_entries", 0)
+                if manual_entries > 0:
+                    collection_methods.append("manual")
+            mood_patterns["preferred_input_methods"] = collection_methods
+            
+            # Extract frequency pattern
+            if "total_entries" in mood_data and "days_tracked" in mood_data:
+                frequency = mood_data["total_entries"] / max(mood_data["days_tracked"], 1)
+                if frequency >= 2:
+                    mood_patterns["tracking_frequency"] = "high"
+                elif frequency >= 1:
+                    mood_patterns["tracking_frequency"] = "daily"
+                else:
+                    mood_patterns["tracking_frequency"] = "irregular"
+            
+            patterns["mood_patterns"] = mood_patterns
+        
+        # Activity patterns from engagement data
+        activity_patterns = {}
+        total_entries = mood_data.get("total_entries", 0)
+        if total_entries > 0:
+            if total_entries >= 10:
+                activity_patterns["engagement_level"] = "high"
+            elif total_entries >= 5:
+                activity_patterns["engagement_level"] = "moderate"
+            else:
+                activity_patterns["engagement_level"] = "low"
+        
+        # Days tracked pattern
+        days_tracked = mood_data.get("days_tracked", 0)
+        if days_tracked >= 7:
+            activity_patterns["consistency"] = "excellent"
+        elif days_tracked >= 3:
+            activity_patterns["consistency"] = "good"
+        elif days_tracked >= 1:
+            activity_patterns["consistency"] = "starting"
+        else:
+            activity_patterns["consistency"] = "new_user"
+        
+        patterns["activity_patterns"] = activity_patterns
+        
+        # Communication patterns based on usage
+        communication_patterns = {}
+        
+        # Preferred interaction style based on data richness
+        latest_entry = mood_data.get("latest_entry", {})
+        if latest_entry.get("notes"):
+            communication_patterns["detail_preference"] = "detailed"
+        else:
+            communication_patterns["detail_preference"] = "concise"
+        
+        # Response to follow-ups
+        if "follow_up_responses" in latest_entry:
+            communication_patterns["engagement_with_suggestions"] = "responsive"
+        else:
+            communication_patterns["engagement_with_suggestions"] = "minimal"
+        
+        patterns["communication_patterns"] = communication_patterns
+        
+        return patterns
+    
+    def _generate_user_preferences(self, data: Dict[str, Any]) -> Dict[str, Any]:
+        """Generate user preferences from real collected data"""
+        preferences = {}
+        
+        mood_data = data.get("mood_data", {})
+        
+        # Language preferences (default to English for now)
+        preferences["language"] = "en"
+        
+        # Communication style based on user behavior
+        communication_style = "empathetic"  # Default
+        latest_entry = mood_data.get("latest_entry", {})
+        if latest_entry.get("notes"):
+            communication_style = "detailed"
+        preferences["communication_style"] = communication_style
+        
+        # Notification settings based on engagement patterns
+        notification_settings = {}
+        total_entries = mood_data.get("total_entries", 0)
+        if total_entries >= 5:
+            notification_settings["mood_reminders"] = True
+            notification_settings["wellness_tips"] = True
+        else:
+            notification_settings["mood_reminders"] = True
+            notification_settings["wellness_tips"] = False
+        notification_settings["crisis_alerts"] = True  # Always enabled for safety
+        preferences["notification_settings"] = notification_settings
+        
+        # Content preferences based on usage patterns
+        content_preferences = {}
+        
+        # Determine preferred interaction methods
+        voice_entries = mood_data.get("voice_entries", 0)
+        total_entries = mood_data.get("total_entries", 0)
+        if voice_entries > 0:
+            content_preferences["voice_support"] = True
+        else:
+            content_preferences["voice_support"] = False
+        
+        # Mood tracking preferences
+        avg_mood = mood_data.get("recent_average_mood", 5.0)
+        if avg_mood >= 7:
+            content_preferences["focus_area"] = "maintenance"
+        elif avg_mood >= 5:
+            content_preferences["focus_area"] = "improvement"
+        else:
+            content_preferences["focus_area"] = "support"
+        
+        # Stress management preferences
+        avg_stress = mood_data.get("recent_average_stress", 5.0)
+        if avg_stress >= 7:
+            content_preferences["stress_support"] = "high_priority"
+        elif avg_stress >= 5:
+            content_preferences["stress_support"] = "moderate"
+        else:
+            content_preferences["stress_support"] = "low"
+        
+        preferences["content_preferences"] = content_preferences
+        
+        # Support preferences based on engagement
+        support_preferences = {}
+        
+        # Intervention level based on consistency
+        days_tracked = mood_data.get("days_tracked", 0)
+        if days_tracked >= 7:
+            support_preferences["intervention_level"] = "proactive"
+        elif days_tracked >= 3:
+            support_preferences["intervention_level"] = "moderate"
+        else:
+            support_preferences["intervention_level"] = "gentle"
+        
+        # Professional referral readiness
+        if avg_mood < 4 or avg_stress > 8:
+            support_preferences["professional_referral"] = "immediate"
+        elif avg_mood < 5 or avg_stress > 6:
+            support_preferences["professional_referral"] = "when_suggested"
+        else:
+            support_preferences["professional_referral"] = "when_needed"
+        
+        # Peer support based on engagement
+        if total_entries >= 10:
+            support_preferences["peer_support"] = True
+            support_preferences["community_engagement"] = "active"
+        elif total_entries >= 5:
+            support_preferences["peer_support"] = True
+            support_preferences["community_engagement"] = "moderate"
+        else:
+            support_preferences["peer_support"] = False
+            support_preferences["community_engagement"] = "observer"
+        
+        preferences["support_preferences"] = support_preferences
+        
+        return preferences
+    
+    def _update_context_history(self, context: UserContext, action: str, data: Dict[str, Any]) -> None:
+        """Update context history with new activity"""
+        history_entry = {
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+            "action": action,
+            "data_summary": {
+                "mood_updated": "mood_data" in data,
+                "community_updated": "community_data" in data,
+                "journal_updated": "journal_data" in data
+            }
+        }
+        
+        # Keep only last 10 history entries
+        if len(context.context_history) >= 10:
+            context.context_history.pop(0)
+        
+        context.context_history.append(history_entry)
     
     def _update_mood_context(self, current: Optional[MoodContext], data: Dict[str, Any]) -> MoodContext:
         """Update mood context with new data"""
+        logger.info(f"🔍 _update_mood_context received data keys: {list(data.keys())}")
+        logger.info(f"🔍 Full data structure: {data}")
+        
+        if "mood_patterns" in data:
+            logger.info(f"🔍 mood_patterns keys: {list(data['mood_patterns'].keys())}")
+            if "recent_scores" in data["mood_patterns"]:
+                logger.info(f"🔍 recent_scores: {data['mood_patterns']['recent_scores']}")
+        
         mood_score = data.get("mood_score", 5.0)
         energy_level = data.get("energy_level", 5.0)
         
-        return MoodContext(
+        # Extract recent moods from analytics data or mood_patterns
+        recent_moods = []
+        logger.info(f"🔍 Checking mood_patterns in data: {'mood_patterns' in data}")
+        logger.info(f"🔍 mood_patterns type: {type(data.get('mood_patterns', 'NOT_FOUND'))}")
+        
+        if "mood_patterns" in data and isinstance(data["mood_patterns"], dict):
+            recent_moods = data["mood_patterns"].get("recent_scores", [])
+            logger.info(f"🔍 Found recent_moods from mood_patterns: {recent_moods}")
+        elif "analytics" in data and isinstance(data["analytics"], dict):
+            mood_patterns = data["analytics"].get("mood_patterns", {})
+            if "recent_scores" in mood_patterns:
+                recent_moods = mood_patterns["recent_scores"]
+                logger.info(f"🔍 Found recent_moods from analytics: {recent_moods}")
+        else:
+            logger.info(f"🔍 No recent_moods found, recent_moods will be empty")
+        
+        logger.info(f"🔍 Final recent_moods before creating MoodContext: {recent_moods}")
+        
+        result = MoodContext(
             mood_score=mood_score,
             energy_level=energy_level,
             stress_level=data.get("stress_level"),
             sleep_quality=data.get("sleep_quality"),
             journal_sentiment=data.get("sentiment_score"),
             mood_trend=self._calculate_mood_trend(current, mood_score),
+            recent_moods=recent_moods,
             timestamp=datetime.now(timezone.utc)
         )
+        
+        logger.info(f"🔍 Created MoodContext with recent_moods: {result.recent_moods}")
+        return result
     
     def _update_community_context(self, current: Optional[CommunityContext], data: Dict[str, Any]) -> CommunityContext:
         """Update community context with new data"""

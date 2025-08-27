@@ -273,6 +273,14 @@ class InsightRequest(BaseModel):
 async def root():
     return {"message": "Memory Service - Running", "version": "1.0.0"}
 
+@app.get("/health")
+async def health_check():
+    return {
+        "status": "healthy",
+        "service": "memory_service",
+        "timestamp": datetime.now(timezone.utc).isoformat()
+    }
+
 @app.get("/health/live")
 async def liveness_check():
     return {
