@@ -9,7 +9,7 @@ from sqlalchemy import and_
 from typing import Optional, Dict, Any, List
 from datetime import datetime, date
 import uuid
-from pydantic import BaseModel, UUID4, Field
+from pydantic import BaseModel, UUID4, Field, validator
 import redis
 
 # Import shared modules
@@ -19,7 +19,7 @@ sys.path.append(os.path.join(os.path.dirname(__file__), '..', '..'))
 
 from shared.database import get_db
 from shared.auth import get_current_user, verify_user_access
-from shared.models import User, UserProfile
+from shared.models import User, UserProfile, UserLanguagePreference
 
 app = FastAPI(
     title="MantraPath Profile Service",
@@ -100,6 +100,46 @@ class UserInfo(BaseModel):
 class ProfileSearchResult(BaseModel):
     user: UserInfo
     profile: ProfileResponse
+
+class LanguagePreferencesResponse(BaseModel):
+    primary_language: str
+    secondary_languages: List[str]
+    auto_detect_language: bool
+    cultural_region: Optional[str]
+    updated_at: datetime
+
+class LanguagePreferencesUpdate(BaseModel):
+    primary_language: Optional[str] = None
+    secondary_languages: Optional[List[str]] = None
+    auto_detect_language: Optional[bool] = None
+    cultural_region: Optional[str] = None
+
+    @validator('primary_language')
+    def validate_primary(cls, v: Optional[str]) -> Optional[str]:
+        if v is None:
+            return v
+        if not is_valid_language_code(v):
+            raise ValueError('Invalid primary_language code')
+        return v
+
+    @validator('secondary_languages')
+    def validate_secondary(cls, v: Optional[List[str]]) -> Optional[List[str]]:
+        if v is None:
+            return v
+        if len(v) > 8:
+            raise ValueError('Maximum 8 secondary languages allowed')
+        for code in v:
+            if not is_valid_language_code(code):
+                raise ValueError(f'Invalid secondary language code: {code}')
+        return v
+
+    @validator('cultural_region')
+    def validate_region(cls, v: Optional[str]) -> Optional[str]:
+        if v is None:
+            return v
+        if not is_valid_region_code(v):
+            raise ValueError('Invalid cultural_region code')
+        return v
 
 # Profile management endpoints
 @app.get("/api/profiles/me", response_model=ProfileResponse)
@@ -484,6 +524,141 @@ async def update_privacy_preferences(
         "message": "Privacy settings updated successfully", 
         "privacy_level": privacy_update.privacy_level
     }
+
+# Language preferences
+SUPPORTED_LANG_CODES = {
+    # Core languages (English + Indian regional + requested international)
+    'en',  # English
+    'hi',  # Hindi
+    'ta',  # Tamil
+    'te',  # Telugu
+    'mr',  # Marathi
+    'bn',  # Bengali
+    'gu',  # Gujarati
+    'kn',  # Kannada
+    'ml',  # Malayalam
+    'pa',  # Punjabi
+    'or',  # Odia (Oriya)
+    'ur',  # Urdu
+    'ar',  # Arabic
+    'es',  # Spanish
+    'fr',  # French
+    # Note: 'ca' (Catalan) removed - Canada uses 'en'/'fr' with region 'CA'
+}
+# Map common user typos/inputs to ISO 639-1
+LANG_NORMALIZATION = {
+    'hindi':'hi','english':'en','maradi':'mr','marathi':'mr','tell':'te','telugu':'te','tamil':'ta',
+    'arabic':'ar','arebic':'ar','uria':'or','odia':'or','udia':'or',
+    'french':'fr','spanish':'es','urdu':'ur','bengali':'bn','gujarati':'gu',
+    'kannada':'kn','malayalam':'ml','punjabi':'pa','telugu':'te'
+}
+SUPPORTED_REGION_CODES = {
+    # Major regions mapped to language communities
+    'IN',  # India (Hindi, Tamil, Telugu, Marathi, Bengali, etc.)
+    'US',  # United States (English, Spanish)
+    'CA',  # Canada (English, French)
+    'GB',  # United Kingdom (English)
+    'AE',  # UAE (Arabic, English)
+    'SA',  # Saudi Arabia (Arabic)
+    'ES',  # Spain (Spanish)
+    'FR',  # France (French)
+    'BD',  # Bangladesh (Bengali)
+    'PK',  # Pakistan (Urdu, English)
+}
+
+def is_valid_language_code(code: str) -> bool:
+    code_norm = code.lower().strip()
+    if code_norm in LANG_NORMALIZATION:
+        code_norm = LANG_NORMALIZATION[code_norm]
+    return code_norm in SUPPORTED_LANG_CODES
+
+def normalize_language_code(code: str) -> str:
+    c = code.lower().strip()
+    return LANG_NORMALIZATION.get(c, c)
+
+def is_valid_region_code(code: str) -> bool:
+    return code.upper() in SUPPORTED_REGION_CODES
+
+@app.get("/api/profile/language-preferences", response_model=LanguagePreferencesResponse)
+async def get_language_preferences(
+    db: Session = Depends(get_db),
+    current_user: Dict[str, Any] = Depends(get_current_user)
+):
+    pref = db.query(UserLanguagePreference).filter(UserLanguagePreference.user_id == current_user["user_id"]).first()
+    if not pref:
+        # Initialize with default row (primary en)
+        pref = UserLanguagePreference(
+            id=str(uuid.uuid4()),
+            user_id=current_user["user_id"],
+            primary_language='en',
+            secondary_languages=[],
+            auto_detect_language=True
+        )
+        db.add(pref)
+        db.commit()
+        db.refresh(pref)
+    secondary = pref.secondary_languages or []
+    return LanguagePreferencesResponse(
+        primary_language=pref.primary_language,
+        secondary_languages=secondary,
+        auto_detect_language=pref.auto_detect_language,
+        cultural_region=pref.cultural_region,
+        updated_at=pref.updated_at
+    )
+
+@app.put("/api/profile/language-preferences", response_model=LanguagePreferencesResponse)
+async def update_language_preferences(
+    update: LanguagePreferencesUpdate,
+    db: Session = Depends(get_db),
+    current_user: Dict[str, Any] = Depends(get_current_user)
+):
+    pref = db.query(UserLanguagePreference).filter(UserLanguagePreference.user_id == current_user["user_id"]).first()
+    created = False
+    if not pref:
+        pref = UserLanguagePreference(
+            id=str(uuid.uuid4()),
+            user_id=current_user["user_id"],
+            primary_language='en',
+            secondary_languages=[],
+            auto_detect_language=True
+        )
+        db.add(pref)
+        created = True
+
+    data = update.dict(exclude_unset=True)
+    if 'primary_language' in data and data['primary_language'] is not None:
+        pref.primary_language = normalize_language_code(data['primary_language'])
+    if 'secondary_languages' in data and data['secondary_languages'] is not None:
+        pref.secondary_languages = [normalize_language_code(c) for c in data['secondary_languages']]
+    if 'auto_detect_language' in data and data['auto_detect_language'] is not None:
+        pref.auto_detect_language = data['auto_detect_language']
+    if 'cultural_region' in data and data['cultural_region'] is not None:
+        pref.cultural_region = data['cultural_region'].upper()
+
+    pref.updated_at = datetime.utcnow()
+    db.commit()
+    db.refresh(pref)
+
+    # Structured log (stdout) - could integrate with real logger
+    print({
+        'event':'language_pref.updated',
+        'user_id': current_user['user_id'],
+        'created': created,
+        'primary_language': pref.primary_language,
+        'secondary_count': len(pref.secondary_languages or []),
+        'auto_detect_language': pref.auto_detect_language,
+        'cultural_region': pref.cultural_region,
+        'timestamp': datetime.utcnow().isoformat()
+    })
+
+    secondary = pref.secondary_languages or []
+    return LanguagePreferencesResponse(
+        primary_language=pref.primary_language,
+        secondary_languages=secondary,
+        auto_detect_language=pref.auto_detect_language,
+        cultural_region=pref.cultural_region,
+        updated_at=pref.updated_at
+    )
 
 # Profile search and discovery
 @app.get("/api/profiles/search", response_model=List[ProfileSearchResult])

@@ -1,0 +1,105 @@
+version: '3.8'
+
+services:
+  # Phi-3 Mini Agent Service with vLLM
+  phi3-agent:
+    image: vllm/vllm-openai:latest
+    container_name: mantrapath_phi3_agent
+    runtime: nvidia
+    environment:
+      - CUDA_VISIBLE_DEVICES=0
+      - HUGGING_FACE_HUB_TOKEN=${HUGGING_FACE_HUB_TOKEN}
+      - VLLM_WORKER_MULTIPROC_METHOD=spawn
+    ports:
+      - "8000:8000"
+    volumes:
+      - ~/.cache/huggingface:/root/.cache/huggingface
+      - ./agent_config:/app/config
+    command: [
+      "--model", "microsoft/Phi-3-mini-4k-instruct",
+      "--served-model-name", "phi3-mini",
+      "--host", "0.0.0.0",
+      "--port", "8000",
+      "--max-model-len", "4096",
+      "--trust-remote-code",
+      "--tensor-parallel-size", "1",
+      "--gpu-memory-utilization", "0.8",
+      "--max-num-seqs", "32",
+      "--disable-log-requests"
+    ]
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+        limits:
+          memory: 8G
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 120s
+    networks:
+      - mantrapath-network
+
+  # Agent Load Balancer (for scaling)
+  agent-nginx:
+    image: nginx:alpine
+    container_name: mantrapath_agent_lb
+    ports:
+      - "8080:80"
+    volumes:
+      - ./nginx_agent.conf:/etc/nginx/nginx.conf
+    depends_on:
+      - phi3-agent
+    restart: unless-stopped
+    networks:
+      - mantrapath-network
+
+  # Redis for Agent Caching and ML Data
+  agent-redis:
+    image: redis:7-alpine
+    container_name: mantrapath_agent_redis
+    ports:
+      - "6380:6379"
+    volumes:
+      - agent_redis_data:/data
+      - ./redis_agent.conf:/usr/local/etc/redis/redis.conf
+    command: redis-server /usr/local/etc/redis/redis.conf
+    restart: unless-stopped
+    networks:
+      - mantrapath-network
+
+  # ML Analytics Service for Agent Learning
+  ml-analytics:
+    build:
+      context: .
+      dockerfile: Dockerfile.ml-analytics
+    container_name: mantrapath_ml_analytics
+    environment:
+      - REDIS_URL=redis://agent-redis:6379
+      - ML_MODEL_PATH=/app/models
+      - PYTHON_ENV=production
+    ports:
+      - "8015:8015"
+    volumes:
+      - ./ml_models:/app/models
+      - agent_ml_data:/app/data
+    depends_on:
+      - agent-redis
+    restart: unless-stopped
+    networks:
+      - mantrapath-network
+
+volumes:
+  agent_redis_data:
+  agent_ml_data:
+
+networks:
+  mantrapath-network:
+    driver: bridge
+    external: true

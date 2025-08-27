@@ -22,7 +22,7 @@ import {
   Sparkle
 } from '@phosphor-icons/react'
 import { motion } from 'framer-motion'
-import { useMoods } from '@/hooks/useMoods'
+import { useWellness } from '@/hooks/useWellness'
 import { apiService } from '@/services/api'
 
 interface Achievement {
@@ -43,7 +43,7 @@ interface AchievementsPageProps {
 }
 
 export function AchievementsPage({ onBack }: AchievementsPageProps) {
-  const { moods } = useMoods()
+  const { moodEntries } = useWellness()
   const [achievements, setAchievements] = useState<Achievement[]>([])
   const [loading, setLoading] = useState(true)
   const [activeTab, setActiveTab] = useState('overview')
@@ -67,10 +67,10 @@ export function AchievementsPage({ onBack }: AchievementsPageProps) {
           description: 'Log your first mood entry',
           category: 'getting-started',
           level: 'bronze',
-          progress: moods.length > 0 ? 1 : 0,
+          progress: moodEntries.length > 0 ? 1 : 0,
           maxProgress: 1,
-          isUnlocked: moods.length > 0,
-          unlockedAt: moods.length > 0 ? new Date(moods[0].timestamp).toISOString() : undefined,
+          isUnlocked: moodEntries.length > 0,
+          unlockedAt: moodEntries.length > 0 ? new Date(moodEntries[0].timestamp).toISOString() : undefined,
           icon: '🎯'
         },
         {
@@ -79,10 +79,10 @@ export function AchievementsPage({ onBack }: AchievementsPageProps) {
           description: 'Log moods for 7 consecutive days',
           category: 'consistency',
           level: 'silver',
-          progress: Math.min(7, moods.length),
+          progress: Math.min(7, moodEntries.length),
           maxProgress: 7,
-          isUnlocked: moods.length >= 7,
-          unlockedAt: moods.length >= 7 ? new Date(moods[6].timestamp).toISOString() : undefined,
+          isUnlocked: moodEntries.length >= 7,
+          unlockedAt: moodEntries.length >= 7 ? new Date(moodEntries[6].timestamp).toISOString() : undefined,
           icon: '🔥'
         },
         {
@@ -91,10 +91,10 @@ export function AchievementsPage({ onBack }: AchievementsPageProps) {
           description: 'Reach 30 total mood entries',
           category: 'milestone',
           level: 'gold',
-          progress: Math.min(30, moods.length),
+          progress: Math.min(30, moodEntries.length),
           maxProgress: 30,
-          isUnlocked: moods.length >= 30,
-          unlockedAt: moods.length >= 30 ? new Date(moods[29].timestamp).toISOString() : undefined,
+          isUnlocked: moodEntries.length >= 30,
+          unlockedAt: moodEntries.length >= 30 ? new Date(moodEntries[29].timestamp).toISOString() : undefined,
           icon: '👑'
         },
         {
@@ -131,57 +131,7 @@ export function AchievementsPage({ onBack }: AchievementsPageProps) {
       setAchievements(dynamicAchievements)
     } catch (error) {
       console.error('Failed to load achievements:', error)
-      
-      // Fallback to mock data if API fails
-      const fallbackAchievements: Achievement[] = [
-        {
-          id: '1',
-          title: 'First Steps',
-          description: 'Log your first mood entry',
-          category: 'getting-started',
-          level: 'bronze',
-          progress: moods.length > 0 ? 1 : 0,
-          maxProgress: 1,
-          isUnlocked: moods.length > 0,
-          unlockedAt: moods.length > 0 ? new Date(moods[0].timestamp).toISOString() : undefined,
-          icon: '🎯'
-        },
-        {
-          id: '2',
-          title: 'Week Warrior',
-          description: 'Log moods for 7 consecutive days',
-          category: 'consistency',
-          level: 'silver',
-          progress: Math.min(7, moods.length),
-          maxProgress: 7,
-          isUnlocked: moods.length >= 7,
-          icon: '🔥'
-        },
-        {
-          id: '3',
-          title: 'Mood Master',
-          description: 'Reach 30 total mood entries',
-          category: 'milestone',
-          level: 'gold',
-          progress: Math.min(30, moods.length),
-          maxProgress: 30,
-          isUnlocked: moods.length >= 30,
-          icon: '👑'
-        },
-        {
-          id: '4',
-          title: 'Positive Vibes',
-          description: 'Log 5 excellent moods in a row',
-          category: 'positivity',
-          level: 'silver',
-          progress: 0,
-          maxProgress: 5,
-          isUnlocked: false,
-          icon: '✨'
-        }
-      ]
-      
-      setAchievements(fallbackAchievements)
+      setAchievements([]) // Set empty array instead of fallback data
     } finally {
       setLoading(false)
     }
@@ -276,7 +226,7 @@ export function AchievementsPage({ onBack }: AchievementsPageProps) {
                   <div className="text-xs text-muted-foreground">Premium</div>
                 </div>
                 <div className="text-center">
-                  <div className="text-2xl font-bold text-green-600">{moods.length}</div>
+                  <div className="text-2xl font-bold text-green-600">{moodEntries.length}</div>
                   <div className="text-xs text-muted-foreground">Total Entries</div>
                 </div>
               </div>

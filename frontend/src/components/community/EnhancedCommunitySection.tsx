@@ -22,15 +22,21 @@ import {
   Share,
   Bookmark,
   DotsThree,
-  Shield
+  Shield,
+  Target,
+  TrendUp,
+  ArrowBendUpLeft,
+  WifiSlash
 } from "@phosphor-icons/react"
 import { motion, AnimatePresence } from "framer-motion"
 import { toast } from "sonner"
 import { communityApi } from "@/services/api"
 import { useCommunityData } from "@/hooks/useCommunityData"
-import { formatRelativeTime as formatTime } from "@/utils/timeFormat"
+import { EnhancedChallengeCard } from "./EnhancedChallengeCard"
+import { EnhancedEventCard } from "./EnhancedEventCard"
+import { formatRelativeTime as formatTime } from "@/utils/timeUtils"
 import { useAuth } from "@/hooks/useAuth"
-import { MoodPatternSharing } from "../mood/MoodPatternSharing"
+import { getUserDisplayName, getUserInitials } from "@/utils/userDisplay"
 import type { CommunityStats } from "@/hooks/useCommunityData"
 
 // Types for community data structures
@@ -95,6 +101,17 @@ interface CommunityEvent {
   is_virtual: boolean
   participant_count: number
   is_participating: boolean
+  created_at: string
+  // Enhanced fields for better interaction
+  comment_count?: number
+  average_rating?: number
+  feedback_count?: number
+  tags?: string[]
+  organizer?: {
+    id: string
+    name: string
+    avatar_url?: string
+  }
 }
 
 interface Challenge {
@@ -107,6 +124,19 @@ interface Challenge {
   start_date: string
   end_date: string
   category: string
+  created_at: string
+  // Enhanced fields for progress tracking
+  progress_percentage?: number
+  current_streak?: number
+  total_completions?: number
+  leaderboard_position?: number
+  comments_count?: number
+  comment_count?: number
+  // Additional fields for creation
+  goal_type?: string
+  visibility?: string
+  challenge_type?: string
+  difficulty_level?: string
 }
 
 export function EnhancedCommunitySection() {
@@ -147,6 +177,17 @@ export function EnhancedCommunitySection() {
     isForumJoined,
     isThreadLiked
   } = useCommunityData()
+
+  // Refresh all statistics
+  const refreshStats = async () => {
+    if (isAuthenticated) {
+      try {
+        await loadUserStats()
+      } catch (error) {
+        console.error('Failed to refresh stats:', error)
+      }
+    }
+  }
 
   // Load initial data
   useEffect(() => {
@@ -202,46 +243,92 @@ export function EnhancedCommunitySection() {
   }
 
   const handleJoinEvent = async (eventId: string) => {
+    if (!isAuthenticated) {
+      toast.error('Please log in to join events')
+      return
+    }
+    
     try {
       await communityApi.joinEvent(eventId)
-      toast.success('Successfully joined event!')
-      await loadEvents() // Refresh events list
+      toast.success('Great! You\'re now registered for this event.')
+      
+      // Update local state immediately for better UX
+      setEvents(prev => prev.map(event => 
+        event.id === eventId 
+          ? { ...event, is_participating: true, participant_count: event.participant_count + 1 }
+          : event
+      ))
+      
+      // Refresh events list and stats
+      await Promise.all([loadEvents(), refreshStats()])
     } catch (error) {
       console.error('Failed to join event:', error)
-      toast.error('Failed to join event')
+      toast.error('Failed to join event. Please try again.')
     }
   }
 
   const handleLeaveEvent = async (eventId: string) => {
     try {
       await communityApi.leaveEvent(eventId)
-      toast.success('Successfully left event')
-      await loadEvents() // Refresh events list
+      toast.success('You have left the event.')
+      
+      // Update local state immediately for better UX
+      setEvents(prev => prev.map(event => 
+        event.id === eventId 
+          ? { ...event, is_participating: false, participant_count: Math.max(0, event.participant_count - 1) }
+          : event
+      ))
+      
+      // Refresh events list and stats
+      await Promise.all([loadEvents(), refreshStats()])
     } catch (error) {
       console.error('Failed to leave event:', error)
-      toast.error('Failed to leave event')
+      toast.error('Failed to leave event. Please try again.')
     }
   }
 
   const handleJoinChallenge = async (challengeId: string) => {
+    if (!isAuthenticated) {
+      toast.error('Please log in to join challenges')
+      return
+    }
+    
     try {
       await communityApi.joinChallenge(challengeId)
-      toast.success('Successfully joined challenge!')
-      await loadChallenges() // Refresh challenges list
+      toast.success('Welcome to the challenge! Let\'s build healthy habits together.')
+      
+      // Update local state immediately for better UX
+      setChallenges(prev => prev.map(challenge => 
+        challenge.id === challengeId 
+          ? { ...challenge, is_participating: true, participant_count: challenge.participant_count + 1 }
+          : challenge
+      ))
+      
+      // Refresh challenges list and stats
+      await Promise.all([loadChallenges(), refreshStats()])
     } catch (error) {
       console.error('Failed to join challenge:', error)
-      toast.error('Failed to join challenge')
+      toast.error('Failed to join challenge. Please try again.')
     }
   }
 
   const handleLeaveChallenge = async (challengeId: string) => {
     try {
       await communityApi.leaveChallenge(challengeId)
-      toast.success('Successfully left challenge')
-      await loadChallenges() // Refresh challenges list
+      toast.success('You have left the challenge.')
+      
+      // Update local state immediately for better UX
+      setChallenges(prev => prev.map(challenge => 
+        challenge.id === challengeId 
+          ? { ...challenge, is_participating: false, participant_count: Math.max(0, challenge.participant_count - 1) }
+          : challenge
+      ))
+      
+      // Refresh challenges list and stats
+      await Promise.all([loadChallenges(), refreshStats()])
     } catch (error) {
       console.error('Failed to leave challenge:', error)
-      toast.error('Failed to leave challenge')
+      toast.error('Failed to leave challenge. Please try again.')
     }
   }
 
@@ -273,7 +360,11 @@ export function EnhancedCommunitySection() {
         category: challengeData.category!,
         duration_days: challengeData.duration_days!,
         start_date: challengeData.start_date!,
-        end_date: challengeData.end_date!
+        end_date: challengeData.end_date!,
+        goal_type: challengeData.goal_type || 'daily',
+        visibility: challengeData.visibility || 'public',
+        challenge_type: challengeData.challenge_type || 'custom',
+        difficulty_level: challengeData.difficulty_level || 'beginner'
       })
       toast.success('Challenge created successfully!')
       await loadChallenges() // Refresh challenges list
@@ -361,6 +452,9 @@ export function EnhancedCommunitySection() {
     }
   }
 
+  // Add a reply trigger to force reload of replies in thread dialog
+  const [replyTrigger, setReplyTrigger] = useState(0)
+
   const handleReplyToThread = async (threadId: string, content: string, parentId?: string) => {
     if (!isAuthenticated) {
       toast.error('Please log in to reply to discussions')
@@ -368,14 +462,18 @@ export function EnhancedCommunitySection() {
     }
     
     try {
-      await replyToThreadAction(threadId, content, parentId)
+      const result = await replyToThreadAction(threadId, content, parentId)
       
-      toast.success('Reply posted!')
-      setShowThreadDialog(false)
-      
-      // Refresh threads to get latest data
-      if (selectedForum) {
-        loadThreads(selectedForum.id)
+      if (result?.success) {
+        toast.success('Reply posted!')
+        
+        // Trigger reply reload in ThreadDetailView
+        setReplyTrigger(prev => prev + 1)
+        
+        // Refresh threads to get latest data
+        if (selectedForum) {
+          loadThreads(selectedForum.id)
+        }
       }
     } catch (error) {
       console.error('Failed to post reply:', error)
@@ -384,6 +482,8 @@ export function EnhancedCommunitySection() {
   }
 
   const getCategoryColor = (category: string) => {
+    if (!category) return 'bg-gray-100 text-gray-800 dark:bg-gray-800 dark:text-gray-200'
+    
     switch (category.toLowerCase()) {
       case 'achievements': return 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200'
       case 'support': return 'bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200'
@@ -391,6 +491,9 @@ export function EnhancedCommunitySection() {
       case 'depression': return 'bg-purple-100 text-purple-800 dark:bg-purple-900 dark:text-purple-200'
       case 'general': return 'bg-gray-100 text-gray-800 dark:bg-gray-800 dark:text-gray-200'
       case 'wellness': return 'bg-pink-100 text-pink-800 dark:bg-pink-900 dark:text-pink-200'
+      case 'mindfulness': return 'bg-indigo-100 text-indigo-800 dark:bg-indigo-900 dark:text-indigo-200'
+      case 'challenges': return 'bg-orange-100 text-orange-800 dark:bg-orange-900 dark:text-orange-200'
+      case 'mental-health': return 'bg-purple-100 text-purple-800 dark:bg-purple-900 dark:text-purple-200'
       default: return 'bg-gray-100 text-gray-800 dark:bg-gray-800 dark:text-gray-200'
     }
   }
@@ -418,16 +521,15 @@ export function EnhancedCommunitySection() {
             </div>
             {user && (
               <div className="text-sm text-muted-foreground">
-                Welcome, {user.username}!
+                Welcome, {getUserDisplayName(user)}!
               </div>
             )}
           </CardTitle>
         </CardHeader>
         <CardContent>
           <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-            <TabsList className="grid grid-cols-5 w-full mb-6">
+            <TabsList className="grid grid-cols-4 w-full mb-6">
               <TabsTrigger value="forums">Forums</TabsTrigger>
-              <TabsTrigger value="mood-sharing">Mood Sharing</TabsTrigger>
               <TabsTrigger value="events">Events</TabsTrigger>
               <TabsTrigger value="challenges">Challenges</TabsTrigger>
               <TabsTrigger value="my-activity">My Activity</TabsTrigger>
@@ -644,20 +746,20 @@ export function EnhancedCommunitySection() {
                             <div className="flex items-start gap-3">
                               <Avatar className="w-10 h-10 bg-primary/10 flex items-center justify-center">
                                 <span className="text-primary font-medium">
-                                  {thread.author.name[0]}
+                                  {getUserInitials({ id: thread.author.id || thread.author.name })}
                                 </span>
                               </Avatar>
                               
                               <div className="flex-1 space-y-2">
                                 <div className="flex items-center gap-2 flex-wrap">
-                                  <span className="font-medium">{thread.author.name}</span>
+                                  <span className="font-medium">{getUserDisplayName({ id: thread.author.id || thread.author.name })}</span>
                                   {thread.author.badges?.map((badge) => (
                                     <Badge key={badge} variant="secondary" className="text-xs">
                                       {getBadgeIcon(badge)} {badge}
                                     </Badge>
                                   ))}
                                   <Badge className={getCategoryColor(thread.category)}>
-                                    {thread.category}
+                                    {thread.category || 'general'}
                                   </Badge>
                                 </div>
                                 
@@ -718,16 +820,6 @@ export function EnhancedCommunitySection() {
               </div>
             </TabsContent>
 
-            <TabsContent value="mood-sharing" className="space-y-4">
-              <div className="mb-6">
-                <h3 className="font-semibold text-lg mb-2">Mood Pattern Sharing</h3>
-                <p className="text-muted-foreground text-sm">
-                  Share your wellness journey anonymously and connect with others who understand your experience.
-                </p>
-              </div>
-              <MoodPatternSharing />
-            </TabsContent>
-
             <TabsContent value="events" className="space-y-4">
               <div className="flex items-center justify-between mb-6">
                 <h3 className="font-semibold text-lg">Community Events</h3>
@@ -752,58 +844,37 @@ export function EnhancedCommunitySection() {
               
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 {events.map((event) => (
-                  <EventCard 
+                  <EnhancedEventCard 
                     key={event.id} 
                     event={event}
                     onJoin={() => handleJoinEvent(event.id)}
                     onLeave={() => handleLeaveEvent(event.id)}
+                    onRefresh={loadEvents}
                   />
                 ))}
               </div>
             </TabsContent>
 
-            <TabsContent value="challenges" className="space-y-4">
-              <div className="flex items-center justify-between mb-6">
-                <h3 className="font-semibold text-lg">Wellness Challenges</h3>
-                <Dialog>
-                  <DialogTrigger asChild>
-                    <Button size="sm" className="flex items-center gap-2">
-                      <Plus size={16} />
-                      Create Challenge
-                    </Button>
-                  </DialogTrigger>
-                  <DialogContent className="max-w-2xl">
-                    <DialogHeader>
-                      <DialogTitle>Create Wellness Challenge</DialogTitle>
-                      <DialogDescription>
-                        Start a new wellness challenge to motivate and engage the community.
-                      </DialogDescription>
-                    </DialogHeader>
-                    <CreateChallengeForm onSubmit={handleCreateChallenge} />
-                  </DialogContent>
-                </Dialog>
-              </div>
-              
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                {challenges.map((challenge) => (
-                  <ChallengeCard 
-                    key={challenge.id} 
-                    challenge={challenge}
-                    onJoin={() => handleJoinChallenge(challenge.id)}
-                    onLeave={() => handleLeaveChallenge(challenge.id)}
-                  />
-                ))}
-              </div>
+            <TabsContent value="challenges" className="space-y-6">
+              <ChallengesSection 
+                challenges={challenges}
+                onJoinChallenge={(challengeId) => handleJoinChallenge(challengeId)}
+                onLeaveChallenge={(challengeId) => handleLeaveChallenge(challengeId)}
+                onCreateChallenge={handleCreateChallenge}
+                onRefresh={loadChallenges}
+              />
             </TabsContent>
 
             <TabsContent value="my-activity" className="space-y-4">
-              <MyActivitySection 
+              <SimplifiedActivitySection 
                 joinedForums={joinedForums}
                 userReputation={userReputation}
                 communityStats={communityStats}
                 enhancedStats={enhancedStats}
                 forums={forums}
                 threads={threads}
+                events={events}
+                challenges={challenges}
               />
             </TabsContent>
           </Tabs>
@@ -818,6 +889,7 @@ export function EnhancedCommunitySection() {
               thread={selectedThread} 
               onReply={(content, parentId) => handleReplyToThread(selectedThread.id, content, parentId)}
               isAuthenticated={isAuthenticated}
+              replyTrigger={replyTrigger}
             />
           )}
         </DialogContent>
@@ -847,6 +919,185 @@ export function EnhancedCommunitySection() {
           </p>
         </CardContent>
       </Card>
+    </div>
+  )
+}
+
+// Challenges Section Component
+function ChallengesSection({ 
+  challenges, 
+  onJoinChallenge, 
+  onLeaveChallenge, 
+  onCreateChallenge, 
+  onRefresh 
+}: {
+  challenges: Challenge[]
+  onJoinChallenge: (challengeId: string) => void
+  onLeaveChallenge: (challengeId: string) => void
+  onCreateChallenge: (data: any) => Promise<any>
+  onRefresh: () => void
+}) {
+  const [searchTerm, setSearchTerm] = useState("")
+  const [selectedCategory, setSelectedCategory] = useState("all")
+  const [challengeTab, setChallengeTab] = useState("browse")
+
+  // Filter challenges based on search and category
+  const filteredChallenges = challenges.filter(challenge => {
+    const matchesSearch = challenge.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                         challenge.description.toLowerCase().includes(searchTerm.toLowerCase())
+    const matchesCategory = selectedCategory === "all" || challenge.category === selectedCategory
+    
+    if (challengeTab === "browse") {
+      return matchesSearch && matchesCategory
+    } else {
+      return matchesSearch && matchesCategory && challenge.is_participating
+    }
+  })
+
+  // Calculate tab counts
+  const allChallengesCount = challenges.length
+  const joinedChallengesCount = challenges.filter(c => c.is_participating).length
+
+  const categories = ["all", ...Array.from(new Set(challenges.map(c => c.category)))]
+
+  return (
+    <div className="space-y-6">
+      {/* Header */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+        <div>
+          <h3 className="font-semibold text-xl text-foreground">Wellness Challenges</h3>
+          <p className="text-sm text-muted-foreground">Join challenges to build healthy habits together</p>
+        </div>
+        <Dialog>
+          <DialogTrigger asChild>
+            <Button className="bg-primary hover:bg-primary/90 text-primary-foreground">
+              <Plus size={16} className="mr-2" />
+              Create Challenge
+            </Button>
+          </DialogTrigger>
+          <DialogContent className="max-w-2xl">
+            <DialogHeader>
+              <DialogTitle>Create Wellness Challenge</DialogTitle>
+              <DialogDescription>
+                Start a new wellness challenge to motivate and engage the community.
+              </DialogDescription>
+            </DialogHeader>
+            <CreateChallengeForm onSubmit={onCreateChallenge} />
+          </DialogContent>
+        </Dialog>
+      </div>
+
+      {/* Tabs for Browse All vs My Challenges */}
+      <div className="border-b border-border">
+        <div className="flex space-x-1 bg-muted/30 p-1 rounded-lg w-fit">
+          <button
+            onClick={() => setChallengeTab("browse")}
+            className={`py-2 px-4 rounded-md font-medium text-sm transition-all duration-200 flex items-center gap-2 ${
+              challengeTab === "browse"
+                ? "bg-background text-primary shadow-sm border border-primary/20"
+                : "text-muted-foreground hover:text-foreground hover:bg-background/50"
+            }`}
+          >
+            Browse All
+            <span className="bg-primary/10 text-primary px-2 py-0.5 rounded-full text-xs font-bold">
+              {allChallengesCount}
+            </span>
+          </button>
+          <button
+            onClick={() => setChallengeTab("joined")}
+            className={`py-2 px-4 rounded-md font-medium text-sm transition-all duration-200 flex items-center gap-2 ${
+              challengeTab === "joined"
+                ? "bg-background text-primary shadow-sm border border-primary/20"
+                : "text-muted-foreground hover:text-foreground hover:bg-background/50"
+            }`}
+          >
+            My Challenges
+            <span className="bg-primary/10 text-primary px-2 py-0.5 rounded-full text-xs font-bold">
+              {joinedChallengesCount}
+            </span>
+          </button>
+        </div>
+      </div>
+
+      {/* Search and Filters */}
+      <div className="flex flex-col sm:flex-row gap-4 p-4 bg-muted/20 rounded-lg border border-border/50">
+        <div className="relative flex-1">
+          <MagnifyingGlass size={20} className="absolute left-3 top-1/2 transform -translate-y-1/2 text-muted-foreground" />
+          <input
+            type="text"
+            placeholder="Search challenges..."
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+            className="w-full pl-10 pr-4 py-3 border border-border rounded-lg bg-background focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all duration-200 shadow-sm"
+          />
+        </div>
+        <select
+          value={selectedCategory}
+          onChange={(e) => setSelectedCategory(e.target.value)}
+          className="px-4 py-3 border border-border rounded-lg bg-background focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all duration-200 shadow-sm min-w-[160px]"
+        >
+          {categories.map(category => (
+            <option key={category} value={category}>
+              {category === "all" ? "All Categories" : category.charAt(0).toUpperCase() + category.slice(1)}
+            </option>
+          ))}
+        </select>
+      </div>
+
+      {/* Challenge Cards Grid */}
+      <div className="">
+        <AnimatePresence>
+          {filteredChallenges.map((challenge) => (
+            <motion.div
+              key={challenge.id}
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -20 }}
+              transition={{ duration: 0.3 }}
+              className="h-full"
+            >
+              <EnhancedChallengeCard 
+                challenge={challenge}
+                onJoin={() => onJoinChallenge(challenge.id)}
+                onLeave={() => onLeaveChallenge(challenge.id)}
+                onRefresh={onRefresh}
+              />
+            </motion.div>
+          ))}
+        </AnimatePresence>
+      </div>
+
+      {/* Empty State */}
+      {filteredChallenges.length === 0 && (
+        <div className="text-center py-12 px-4">
+          <div className="max-w-md mx-auto">
+            <div className="w-16 h-16 mx-auto mb-4 bg-muted/30 rounded-full flex items-center justify-center">
+              <span className="text-2xl">🎯</span>
+            </div>
+            <h4 className="text-lg font-medium text-foreground mb-2">
+              {challengeTab === "joined" ? "No joined challenges yet" : "No challenges found"}
+            </h4>
+            <p className="text-muted-foreground text-sm">
+              {challengeTab === "joined" 
+                ? "Join challenges to start building healthy habits and track your progress"
+                : searchTerm || selectedCategory !== "all"
+                  ? "Try adjusting your search filters or browse all challenges"
+                  : "Be the first to create a wellness challenge for the community"
+              }
+            </p>
+            {challengeTab === "joined" && (
+              <Button 
+                variant="outline" 
+                size="sm" 
+                className="mt-4"
+                onClick={() => setChallengeTab("browse")}
+              >
+                Browse All Challenges
+              </Button>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   )
 }
@@ -1126,66 +1377,101 @@ function ChallengeCard({
 function ThreadDetailView({ 
   thread, 
   onReply,
-  isAuthenticated
+  isAuthenticated,
+  replyTrigger
 }: { 
   thread: Thread
   onReply: (content: string, parentId?: string) => void 
   isAuthenticated: boolean
+  replyTrigger: number
 }) {
   const [replyContent, setReplyContent] = useState("")
   const [replies, setReplies] = useState<Reply[]>([])
   const [loadingReplies, setLoadingReplies] = useState(false)
   const [replyingTo, setReplyingTo] = useState<{id: string, name: string} | null>(null)
 
-  // Load replies when component mounts or thread changes
-  useEffect(() => {
+  // Load replies function
+  const loadReplies = async () => {
     if (!isAuthenticated) {
       return // Don't load replies if not authenticated
     }
     
-    const loadReplies = async () => {
-      try {
-        setLoadingReplies(true)
-        const repliesData = await communityApi.getThreadReplies(thread.id)
-        setReplies(repliesData || [])
-      } catch (error: any) {
-        console.error('Failed to load replies:', error)
-        
-        // Handle authentication errors gracefully
-        if (error.status === 401 || error.status === 403) {
-          console.log('Not authenticated for replies - skipping')
-          return
-        }
-        
-        toast.error('Failed to load replies')
-      } finally {
-        setLoadingReplies(false)
+    try {
+      setLoadingReplies(true)
+      const repliesData = await communityApi.getThreadReplies(thread.id)
+      setReplies(repliesData || [])
+    } catch (error: any) {
+      console.error('Failed to load replies:', error)
+      
+      // Handle authentication errors gracefully
+      if (error.status === 401 || error.status === 403) {
+        console.log('Not authenticated for replies - skipping')
+        return
       }
+      
+      toast.error('Failed to load replies')
+    } finally {
+      setLoadingReplies(false)
     }
+  }
 
+  // Load replies when component mounts, thread changes, or reply trigger changes
+  useEffect(() => {
     loadReplies()
-  }, [thread.id, isAuthenticated])
+  }, [thread.id, isAuthenticated, replyTrigger])
 
   // Handle liking a reply
   const handleLikeReply = async (replyId: string) => {
+    if (!isAuthenticated) {
+      toast.error('Please log in to like replies')
+      return
+    }
+    
     try {
-      const response = await communityApi.likeContent('reply', replyId)
-      
-      // Update the reply in local state
+      // Optimistically update the UI first
       setReplies(prevReplies => 
         prevReplies.map(reply => 
           reply.id === replyId 
             ? { 
                 ...reply, 
-                is_liked: response.liked,
-                like_count: response.like_count
+                is_liked: !reply.is_liked,
+                like_count: reply.is_liked 
+                  ? Math.max((reply.like_count || 0) - 1, 0)
+                  : (reply.like_count || 0) + 1
               }
             : reply
         )
       )
+      
+      const response = await communityApi.likeContent('reply', replyId)
+      
+      // Get the updated like count from backend to ensure accuracy
+      const likeInfo = await communityApi.getContentLikes('reply', replyId)
+      
+      // Update with the actual backend state
+      setReplies(prevReplies => 
+        prevReplies.map(reply => 
+          reply.id === replyId 
+            ? { 
+                ...reply, 
+                is_liked: likeInfo.is_liked,
+                like_count: likeInfo.like_count
+              }
+            : reply
+        )
+      )
+      
+      if (response.liked) {
+        toast.success('Reply liked!')
+      } else {
+        toast.success('Reply unliked!')
+      }
     } catch (error) {
       console.error('Failed to like reply:', error)
       toast.error('Failed to update like')
+      
+      // Revert optimistic update on error
+      loadReplies()
     }
   }
 
@@ -1233,12 +1519,12 @@ function ThreadDetailView({
         <div className="flex gap-2 p-2 hover:bg-muted/20 rounded">
           <div className="w-6 h-6 bg-primary/10 rounded-full flex items-center justify-center flex-shrink-0">
             <span className="text-xs font-medium text-primary">
-              {reply.author.name.charAt(0).toUpperCase()}
+              {getUserInitials({ id: reply.author.id || reply.author.name })}
             </span>
           </div>
           <div className="flex-1 min-w-0">
             <div className="flex items-center gap-2 text-xs text-muted-foreground mb-1">
-              <span className="font-medium text-foreground">{reply.author.name}</span>
+              <span className="font-medium text-foreground">{getUserDisplayName({ id: reply.author.id || reply.author.name })}</span>
               <span>{formatRelativeTime(reply.created_at)}</span>
             </div>
             <p className="text-sm mb-1">{reply.content}</p>
@@ -1255,7 +1541,7 @@ function ThreadDetailView({
               {actualDepth < maxDepth && (
                 <button 
                   className="text-muted-foreground hover:text-primary transition-colors"
-                  onClick={() => handleReplyToReply(reply.id, reply.author.name)}
+                  onClick={() => handleReplyToReply(reply.id, getUserDisplayName({ id: reply.author.id || reply.author.name }))}
                 >
                   Reply
                 </button>
@@ -1362,7 +1648,7 @@ function ThreadDetailView({
       {/* Compact Header */}
       <div className="px-4 py-3 border-b">
         <h3 className="font-semibold text-lg">{thread.title}</h3>
-        <p className="text-sm text-muted-foreground">by {thread.author.name} in {thread.forum_name}</p>
+        <p className="text-sm text-muted-foreground">by {getUserDisplayName({ id: thread.author.id || thread.author.name })} in {thread.forum_name}</p>
       </div>
       
       {/* Thread Content */}
@@ -1447,13 +1733,16 @@ function ThreadDetailView({
   )
 }
 
-function MyActivitySection({ 
+// Enhanced Activity Section with sophisticated badge system and insights
+function SimplifiedActivitySection({ 
   joinedForums, 
   userReputation,
   communityStats,
   enhancedStats,
   forums,
-  threads
+  threads,
+  events,
+  challenges
 }: {
   joinedForums: string[]
   userReputation: number
@@ -1469,253 +1758,87 @@ function MyActivitySection({
   } | null
   forums: Forum[]
   threads: Thread[]
+  events: CommunityEvent[]
+  challenges: Challenge[]
 }) {
-  // Calculate user's shares (threads they've created)
-  const userShares = threads.filter(thread => thread.author.id === 'current_user') // This would be the actual user ID
+  const { user } = useAuth()
+  const [showFullAnalytics, setShowFullAnalytics] = useState(false)
+  const [activeInsightTab, setActiveInsightTab] = useState("overview")
   
-  // Use enhanced stats if available, otherwise calculate locally
-  const stats = enhancedStats || {
-    reputation: userReputation,
-    forums_joined: joinedForums.length,
-    threads_liked: communityStats.threadsLiked,
-    threads_created: userShares.length,
-    replies_posted: communityStats.repliesPosted,
-    likes_received: 0,
-    help_score: Math.min(10, userReputation / 10)
-  }
-  
-  // Calculate enhanced reputation based on activity
-  const enhancedReputation = {
-    base: stats.reputation,
-    fromLikes: stats.threads_liked * 2,
-    fromShares: stats.threads_created * 5,
-    fromReplies: stats.replies_posted * 3,
-    fromReceived: stats.likes_received * 2,
-    total: stats.reputation
+  // Use ONLY backend data - no fallbacks to eliminate duplication
+  const stats = {
+    reputation: enhancedStats?.reputation || 0,
+    forums_joined: enhancedStats?.forums_joined || 0,
+    threads_liked: enhancedStats?.threads_liked || 0,
+    threads_created: enhancedStats?.threads_created || 0,
+    replies_posted: enhancedStats?.replies_posted || 0,
+    likes_received: enhancedStats?.likes_received || 0,
+    help_score: enhancedStats?.help_score || 0
   }
 
-  // Get joined forum details
-  const joinedForumDetails = forums.filter(forum => joinedForums.includes(forum.id))
+  // Simple activity summary - no duplication with Analytics modal
+  const totalActivity = stats.threads_created + stats.replies_posted + stats.threads_liked
+  const hasBackendData = enhancedStats !== null
+  
+  // Mock data for missing variables
+  const joinedEvents = events.filter(e => e.is_participating)
+  const joinedChallenges = challenges.filter(c => c.is_participating)
+  const completedChallenges = joinedChallenges.filter(c => new Date(c.end_date) < new Date())
+  const userBadges: any[] = []
+  const nextBadgeProgress: any[] = []
+  const userShares: any[] = []
 
   return (
     <div className="space-y-6">
-      {/* Enhanced Stats Cards */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-        <Card>
-          <CardContent className="p-4 text-center">
-            <Users size={24} className="mx-auto mb-2 text-primary" />
-            <h4 className="font-medium">Forums Joined</h4>
-            <p className="text-2xl font-bold">{stats.forums_joined}</p>
-            <p className="text-xs text-muted-foreground">
-              {joinedForumDetails.length > 0 ? 'Active member' : 'Join forums to connect'}
-            </p>
-          </CardContent>
-        </Card>
-        
-        <Card>
-          <CardContent className="p-4 text-center">
-            <Heart size={24} className="mx-auto mb-2 text-red-500" />
-            <h4 className="font-medium">Posts Liked</h4>
-            <p className="text-2xl font-bold">{stats.threads_liked}</p>
-            <p className="text-xs text-muted-foreground">
-              +{stats.threads_liked * 2} reputation
-            </p>
-          </CardContent>
-        </Card>
-        
-        <Card>
-          <CardContent className="p-4 text-center">
-            <Share size={24} className="mx-auto mb-2 text-blue-500" />
-            <h4 className="font-medium">My Shares</h4>
-            <p className="text-2xl font-bold">{stats.threads_created}</p>
-            <p className="text-xs text-muted-foreground">
-              {stats.threads_created > 0 ? 'Helping others' : 'Share your journey'}
-            </p>
-          </CardContent>
-        </Card>
-        
-        <Card>
-          <CardContent className="p-4 text-center">
-            <Star size={24} className="mx-auto mb-2 text-yellow-500" />
-            <h4 className="font-medium">Reputation</h4>
-            <p className="text-2xl font-bold">{enhancedReputation.total}</p>
-            <p className="text-xs text-muted-foreground">
-              Community helper
-            </p>
-          </CardContent>
-        </Card>
-      </div>
-
-      {/* My Impact Section */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <Trophy className="text-yellow-500" size={20} />
-              My Impact
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="space-y-3">
-              <div className="flex justify-between items-center">
-                <span className="text-sm">Support Given</span>
-                <Badge variant="secondary">{stats.threads_liked} likes</Badge>
-              </div>
-              <div className="flex justify-between items-center">
-                <span className="text-sm">Stories Shared</span>
-                <Badge variant={stats.threads_created > 0 ? "default" : "secondary"}>
-                  {stats.threads_created} posts
-                </Badge>
-              </div>
-              <div className="flex justify-between items-center">
-                <span className="text-sm">Community Replies</span>
-                <Badge variant={stats.replies_posted > 0 ? "default" : "secondary"}>
-                  {stats.replies_posted} replies
-                </Badge>
-              </div>
-              <div className="flex justify-between items-center">
-                <span className="text-sm">Likes Received</span>
-                <Badge variant={stats.likes_received > 0 ? "default" : "secondary"}>
-                  {stats.likes_received} hearts
-                </Badge>
-              </div>
-              <div className="flex justify-between items-center">
-                <span className="text-sm">Help Score</span>
-                <Badge variant="outline" className="font-bold">
-                  {stats.help_score}/10
-                </Badge>
-              </div>
-            </div>
-            
-            {enhancedReputation.total > 50 && (
-              <div className="bg-gradient-to-r from-yellow-50 to-orange-50 dark:from-yellow-900/20 dark:to-orange-900/20 p-3 rounded-lg border">
-                <div className="flex items-center gap-2">
-                  <Star className="text-yellow-500" size={16} />
-                  <span className="text-sm font-medium">
-                    {stats.help_score >= 7 ? 'Community Champion' : 
-                     stats.help_score >= 5 ? 'Community Helper' : 
-                     'Community Member'}
-                  </span>
+      {hasBackendData ? (
+        <>
+          {/* Simple Activity Summary */}
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+            <Card className="hover:shadow-md transition-shadow">
+              <CardContent className="p-4 text-center">
+                <div className="w-12 h-12 mx-auto mb-2 bg-gradient-to-br from-blue-500 to-purple-600 rounded-full flex items-center justify-center">
+                  <Users size={20} className="text-white" />
                 </div>
-                <p className="text-xs text-muted-foreground mt-1">
-                  You're making a positive impact in the community! 🌟
+                <h4 className="font-medium text-sm">Forums</h4>
+                <p className="text-2xl font-bold">{stats.forums_joined}</p>
+                <p className="text-xs text-muted-foreground">Joined</p>
+              </CardContent>
+            </Card>
+          </div>
+
+          {/* Call-to-Action for Enhanced Analytics */}
+          <Card className="bg-gradient-to-br from-primary/5 to-primary/10 border-primary/20">
+            <CardContent className="p-6 text-center">
+              <div className="mb-4">
+                <div className="w-16 h-16 mx-auto mb-4 bg-primary rounded-full flex items-center justify-center">
+                  <TrendUp size={32} className="text-primary-foreground" />
+                </div>
+                <h3 className="text-xl font-semibold mb-2">Want Deeper Insights?</h3>
+                <p className="text-muted-foreground mb-4">
+                  Get comprehensive analytics, achievement tracking, and detailed community engagement metrics with our enhanced Analytics dashboard.
                 </p>
               </div>
-            )}
+              <p className="text-sm text-muted-foreground">
+                Visit the Community Feed and click "Analytics" for detailed charts and insights.
+              </p>
+            </CardContent>
+          </Card>
+        </>
+      ) : (
+        <Card className="bg-yellow-50 border-yellow-200">
+          <CardContent className="p-6 text-center">
+            <WifiSlash size={48} className="mx-auto text-yellow-500 mb-3" />
+            <h3 className="text-lg font-semibold text-gray-800 mb-2">
+              Activity Data Unavailable
+            </h3>
+            <p className="text-gray-600">
+              Your activity data is currently being processed. Please check back later or try refreshing the page.
+            </p>
           </CardContent>
         </Card>
-
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <ChatCircle className="text-blue-500" size={20} />
-              Joined Forums
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            {joinedForumDetails.length > 0 ? (
-              <div className="space-y-3">
-                {joinedForumDetails.slice(0, 5).map((forum) => (
-                  <div key={forum.id} className="flex items-center justify-between p-3 rounded-lg border">
-                    <div>
-                      <h4 className="font-medium text-sm">{forum.name}</h4>
-                      <p className="text-xs text-muted-foreground">{forum.member_count} members</p>
-                    </div>
-                    <Badge variant="outline" className="text-xs">
-                      {forum.category}
-                    </Badge>
-                  </div>
-                ))}
-                {joinedForumDetails.length > 5 && (
-                  <p className="text-xs text-muted-foreground text-center">
-                    +{joinedForumDetails.length - 5} more forums
-                  </p>
-                )}
-              </div>
-            ) : (
-              <div className="text-center text-muted-foreground py-6">
-                <Users size={32} className="mx-auto mb-3 opacity-50" />
-                <p className="text-sm">Join forums to connect with others</p>
-                <p className="text-xs">Share experiences and get support</p>
-              </div>
-            )}
-          </CardContent>
-        </Card>
-      </div>
-
-      {/* Recent Activity / My Shares */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <Share className="text-green-500" size={20} />
-            My Recent Shares
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
-          {userShares.length > 0 ? (
-            <div className="space-y-4">
-              {userShares.slice(0, 3).map((share) => (
-                <div key={share.id} className="p-4 rounded-lg border">
-                  <div className="flex items-start justify-between mb-2">
-                    <h4 className="font-medium text-sm">{share.title}</h4>
-                    <span className="text-xs text-muted-foreground">{formatRelativeTime(share.created_at)}</span>
-                  </div>
-                  <p className="text-sm text-muted-foreground mb-3 line-clamp-2">{share.content}</p>
-                  <div className="flex items-center gap-4 text-xs">
-                    <span className="flex items-center gap-1">
-                      <Heart size={12} className="text-red-500" />
-                      {share.like_count}
-                    </span>
-                    <span className="flex items-center gap-1">
-                      <ChatCircle size={12} className="text-blue-500" />
-                      {share.reply_count}
-                    </span>
-                    <Badge variant="outline" className="text-xs">{share.category}</Badge>
-                  </div>
-                </div>
-              ))}
-              {userShares.length > 3 && (
-                <p className="text-xs text-muted-foreground text-center">
-                  +{userShares.length - 3} more shares
-                </p>
-              )}
-            </div>
-          ) : (
-            <div className="text-center text-muted-foreground py-8">
-              <Share size={48} className="mx-auto mb-4 opacity-50" />
-              <p className="mb-2">No shared stories yet</p>
-              <p className="text-sm">Share your wellness journey to inspire others</p>
-              <Button variant="outline" size="sm" className="mt-4">
-                <Plus size={16} className="mr-2" />
-                Share Your Story
-              </Button>
-            </div>
-          )}
-        </CardContent>
-      </Card>
+      )}
     </div>
   )
-
-  // Helper function for relative time (should be moved to utils)
-  function formatRelativeTime(dateString: string): string {
-    const now = new Date()
-    const date = new Date(dateString)
-    const diffInMs = now.getTime() - date.getTime()
-    const diffInSeconds = Math.floor(diffInMs / 1000)
-    const diffInMinutes = Math.floor(diffInSeconds / 60)
-    const diffInHours = Math.floor(diffInMinutes / 60)
-    const diffInDays = Math.floor(diffInHours / 24)
-
-    if (diffInSeconds < 60) {
-      return diffInSeconds <= 1 ? 'now' : `${diffInSeconds}s`
-    } else if (diffInMinutes < 60) {
-      return `${diffInMinutes}m`
-    } else if (diffInHours < 24) {
-      return `${diffInHours}h`
-    } else {
-      return `${diffInDays}d`
-    }
-  }
 }
 
 function CreateEventForm({ 
@@ -1999,39 +2122,4 @@ function CreateChallengeForm({
   )
 }
 
-// Mock data for fallback
-const mockForums: Forum[] = [
-  {
-    id: 'forum_1',
-    name: 'General Support',
-    description: 'Share experiences and support each other through daily challenges',
-    category: 'support',
-    member_count: 1247,
-    thread_count: 89,
-    is_member: false,  // Changed from false to ensure consistency
-    created_at: new Date().toISOString(),
-    tags: ['support', 'general', 'community']
-  },
-  {
-    id: 'forum_2',
-    name: 'Anxiety & Stress',
-    description: 'Discussing anxiety management and stress relief techniques',
-    category: 'anxiety',
-    member_count: 823,
-    thread_count: 156,
-    is_member: false,  // Changed from true to false for new users
-    created_at: new Date().toISOString(),
-    tags: ['anxiety', 'stress', 'coping']
-  },
-  {
-    id: 'forum_3',
-    name: 'Achievements & Milestones',
-    description: 'Celebrate your progress and inspire others with your journey',
-    category: 'achievements',
-    member_count: 567,
-    thread_count: 234,
-    is_member: false,
-    created_at: new Date().toISOString(),
-    tags: ['achievements', 'progress', 'celebration']
-  }
-]
+export default EnhancedCommunitySection

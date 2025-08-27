@@ -1,0 +1,1 @@
+{"success":false,"audio_url":null,"duration":null,"sample_rate":null,"model_used":"festival_en","error":"System TTS failed: festival: Unknown option \"--otype\"\nType -h for help on options.\n"}

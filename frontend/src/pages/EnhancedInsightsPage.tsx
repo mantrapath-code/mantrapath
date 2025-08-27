@@ -1,9 +1,5 @@
 /**
- * Enhanced Insights Page - Unified insight experience
- * 
- * This component consolidates all insight sources into a single,
- * comprehensive dashboard that provides actionable intelligence
- * for user wellness optimization.
+ * Enhanced Insights Page - Uses real unified data from all services
  */
 
 import { useState, useEffect } from 'react'
@@ -11,515 +7,373 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Progress } from '@/components/ui/progress'
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import { Skeleton } from '@/components/ui/skeleton'
+import { motion } from 'framer-motion'
 import { 
   Brain,
+  ChartLine,
+  Target,
   TrendUp,
   TrendDown,
-  Target,
-  Star,
-  Clock,
-  CheckCircle,
   ArrowLeft,
+  ArrowClockwise,
   Lightbulb,
-  ChartLine,
-  Calendar,
-  Sparkle,
-  Trophy,
   Heart,
-  Lightning,
-  Users,
-  Gear,
+  Trophy,
+  Calendar,
+  Shield,
   Warning
 } from '@phosphor-icons/react'
-import { motion, AnimatePresence } from 'framer-motion'
-import { toast } from 'sonner'
-import { 
-  unifiedInsightService, 
-  ComprehensiveInsights,
-  RecommendedAction 
-} from '@/services/unifiedInsightService'
+import { enhancedUnifiedInsightsService, UnifiedInsightsData } from '@/services/enhancedUnifiedInsights'
+import { EmotionalWeatherWidget } from '@/components/mood/EmotionalWeatherWidget'
 
 interface EnhancedInsightsPageProps {
   onBack?: () => void
 }
 
 export function EnhancedInsightsPage({ onBack }: EnhancedInsightsPageProps) {
-  const [insights, setInsights] = useState<ComprehensiveInsights | null>(null)
+  const [insights, setInsights] = useState<UnifiedInsightsData | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
-  const [activeTab, setActiveTab] = useState('dashboard')
-  const [actionFeedback, setActionFeedback] = useState<Record<string, { attempted: boolean; rating?: number }>>({})
+  const [refreshing, setRefreshing] = useState(false)
 
-  useEffect(() => {
-    loadInsights()
-  }, [])
-
-  const loadInsights = async () => {
-    setLoading(true)
-    setError(null)
-    
+  const fetchInsights = async () => {
     try {
-      const comprehensiveInsights = await unifiedInsightService.getComprehensiveInsights()
-      setInsights(comprehensiveInsights)
+      setError(null)
+      const data = await enhancedUnifiedInsightsService.getUnifiedInsights()
+      setInsights(data)
     } catch (err) {
-      console.error('Failed to load comprehensive insights:', err)
+      console.error('Failed to fetch unified insights:', err)
       setError('Unable to load insights. Please try again.')
     } finally {
       setLoading(false)
+      setRefreshing(false)
     }
   }
 
-  const handleActionAttempt = async (action: RecommendedAction) => {
-    try {
-      await unifiedInsightService.trackActionAttempt(action.id, true)
-      setActionFeedback(prev => ({
-        ...prev,
-        [action.id]: { attempted: true }
-      }))
-      toast.success('Action tracked! Great job taking initiative.')
-    } catch (error) {
-      console.error('Failed to track action:', error)
-    }
+  useEffect(() => {
+    fetchInsights()
+  }, [])
+
+  const handleRefresh = async () => {
+    setRefreshing(true)
+    enhancedUnifiedInsightsService.clearCache() // Force fresh data
+    await fetchInsights()
   }
 
-  const handleActionRating = async (action: RecommendedAction, rating: number, helpful: boolean) => {
-    try {
-      await unifiedInsightService.rateAction(action.id, rating, helpful)
-      setActionFeedback(prev => ({
-        ...prev,
-        [action.id]: { ...prev[action.id], rating }
-      }))
-      toast.success('Thank you for your feedback!')
-    } catch (error) {
-      console.error('Failed to rate action:', error)
-    }
+  if (loading && !insights) {
+    return (
+      <div className="space-y-6">
+        <div className="flex items-center justify-between">
+          {onBack && (
+            <Button variant="ghost" onClick={onBack}>
+              <ArrowLeft className="mr-2 h-4 w-4" />
+              Back
+            </Button>
+          )}
+          <div className="flex items-center gap-2">
+            <Skeleton className="h-4 w-32" />
+          </div>
+        </div>
+        
+        <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
+          {Array.from({ length: 6 }).map((_, i) => (
+            <Card key={i}>
+              <CardHeader>
+                <Skeleton className="h-6 w-24" />
+              </CardHeader>
+              <CardContent>
+                <Skeleton className="h-4 w-full mb-2" />
+                <Skeleton className="h-4 w-3/4" />
+              </CardContent>
+            </Card>
+          ))}
+        </div>
+      </div>
+    )
+  }
+
+  if (error && !insights) {
+    return (
+      <div className="flex items-center justify-center min-h-[400px]">
+        <div className="text-center space-y-4">
+          <Warning className="h-12 w-12 text-orange-500 mx-auto" />
+          <p className="text-muted-foreground">{error}</p>
+          <Button onClick={handleRefresh} disabled={refreshing}>
+            <ArrowClockwise className={`mr-2 h-4 w-4 ${refreshing ? 'animate-spin' : ''}`} />
+            Try Again
+          </Button>
+        </div>
+      </div>
+    )
   }
 
   const getTrendIcon = (trend: string) => {
     switch (trend) {
-      case 'improving': return <TrendUp className="text-green-500" size={20} />
-      case 'declining': return <TrendDown className="text-red-500" size={20} />
-      default: return <div className="w-5 h-5 bg-yellow-400 rounded-full" />
+      case 'improving': return <TrendUp className="h-4 w-4 text-green-600" />
+      case 'declining': return <TrendDown className="h-4 w-4 text-red-600" />
+      default: return <Target className="h-4 w-4 text-gray-600" />
     }
   }
 
-  const getPriorityColor = (priority: string) => {
-    switch (priority) {
-      case 'high': return 'destructive'
-      case 'medium': return 'default'
-      case 'low': return 'secondary'
-      default: return 'outline'
+  const getDataFreshnessColor = (freshness: string) => {
+    switch (freshness) {
+      case 'fresh': return 'text-green-600'
+      case 'cached': return 'text-blue-600'
+      case 'stale': return 'text-orange-600'
+      default: return 'text-gray-600'
     }
-  }
-
-  const getCategoryIcon = (category: string) => {
-    switch (category) {
-      case 'mood_boost': return <Heart className="text-pink-500" size={16} />
-      case 'energy_management': return <Lightning className="text-yellow-500" size={16} />
-      case 'stress_reduction': return <Sparkle className="text-purple-500" size={16} />
-      case 'pattern_optimization': return <Target className="text-blue-500" size={16} />
-      default: return <Lightbulb className="text-primary" size={16} />
-    }
-  }
-
-  if (loading) {
-    return (
-      <div className="space-y-6">
-        <Card>
-          <CardContent className="p-8 text-center">
-            <motion.div
-              animate={{ rotate: 360 }}
-              transition={{ duration: 2, repeat: Infinity, ease: "linear" }}
-            >
-              <Brain className="mx-auto text-primary mb-4" size={48} />
-            </motion.div>
-            <h3 className="text-lg font-semibold mb-2">Analyzing Your Patterns</h3>
-            <p className="text-muted-foreground">
-              Processing your mood data to generate personalized insights...
-            </p>
-          </CardContent>
-        </Card>
-      </div>
-    )
-  }
-
-  if (error || !insights) {
-    return (
-      <div className="space-y-6">
-        <Card className="border-red-200 bg-red-50">
-          <CardContent className="p-6 text-center">
-            <Warning className="mx-auto text-red-500 mb-4" size={48} />
-            <h3 className="text-lg font-semibold text-red-700 mb-2">Unable to Load Insights</h3>
-            <p className="text-red-600 mb-4">{error}</p>
-            <Button onClick={loadInsights} variant="outline">
-              Try Again
-            </Button>
-          </CardContent>
-        </Card>
-      </div>
-    )
   }
 
   return (
     <div className="space-y-6">
       {/* Header */}
-      <motion.div
-        initial={{ opacity: 0, y: -20 }}
-        animate={{ opacity: 1, y: 0 }}
-        className="flex items-center justify-between"
-      >
-        <div className="flex items-center gap-3">
-          {onBack && (
-            <Button variant="ghost" size="sm" onClick={onBack}>
-              <ArrowLeft size={16} />
-            </Button>
-          )}
-          <div>
-            <h1 className="text-2xl font-bold flex items-center gap-2">
-              <Brain className="text-primary" size={28} />
-              Your Comprehensive Insights
-            </h1>
-            <p className="text-muted-foreground">
-              AI-powered analysis of your wellness patterns with actionable recommendations
-            </p>
-          </div>
-        </div>
+      <div className="flex items-center justify-between">
+        {onBack && (
+          <Button variant="ghost" onClick={onBack}>
+            <ArrowLeft className="mr-2 h-4 w-4" />
+            Back
+          </Button>
+        )}
+        
         <div className="flex items-center gap-2">
-          <Badge variant="outline" className="text-xs">
-            Data Quality: {Math.round(insights.metadata.dataQuality * 100)}%
-          </Badge>
-          <Badge variant="secondary" className="text-xs">
-            {insights.metadata.insightCount} insights
-          </Badge>
+          {insights && (
+            <>
+              <Badge 
+                variant="outline" 
+                className={getDataFreshnessColor(insights.metadata.dataFreshness)}
+              >
+                {insights.metadata.dataFreshness} • {insights.metadata.servicesOnline}/{insights.metadata.totalServices} services
+              </Badge>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={handleRefresh}
+                disabled={refreshing}
+              >
+                <ArrowClockwise className={`h-4 w-4 ${refreshing ? 'animate-spin' : ''}`} />
+              </Button>
+            </>
+          )}
         </div>
-      </motion.div>
+      </div>
 
-      {/* Main Dashboard */}
       <motion.div
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
-        transition={{ delay: 0.1 }}
+        className="space-y-6"
       >
-        <Card className="bg-gradient-to-r from-primary/5 to-purple-500/5 border-2 border-primary/20">
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <Target className="text-primary" size={24} />
-              This Week's Story
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-              {/* Current Status */}
-              <div className="space-y-3">
-                <div className="flex items-center gap-2">
-                  {getTrendIcon(insights.dashboard.weeklySummary.trend)}
-                  <span className="font-medium capitalize">
-                    {insights.dashboard.weeklySummary.trend} Trend
-                  </span>
-                </div>
-                <div className="text-2xl font-bold text-primary">
-                  {insights.dashboard.weeklySummary.currentWeekScore}/10
-                </div>
-                <div className="text-sm text-muted-foreground">
-                  {insights.dashboard.weeklySummary.daysTracked}/7 days tracked
-                </div>
-              </div>
+        <div>
+          <h1 className="text-3xl font-bold">Insights & Analytics</h1>
+          <p className="text-muted-foreground mt-2">
+            Real-time insights from your wellness journey powered by unified data analysis
+            {insights && ` • Confidence: ${Math.round(insights.metadata.confidenceScore)}%`}
+          </p>
+        </div>
 
-              {/* Highlights */}
-              <div className="space-y-2">
-                <h4 className="font-medium text-sm">Best Moments</h4>
-                <div className="text-sm">
-                  <p>🌟 Best day: {insights.dashboard.topHighlights.bestDay}</p>
-                  <p>⚡ Energy peak: {insights.dashboard.topHighlights.energyPeak}</p>
-                  <p>🔥 Mood streak: {insights.dashboard.topHighlights.moodStreak} days</p>
-                </div>
-              </div>
-
-              {/* Current Status */}
-              <div className="space-y-2">
-                <h4 className="font-medium text-sm">Current Status</h4>
-                <div className="space-y-1">
-                  <div className="flex items-center justify-between text-sm">
-                    <span>Mood</span>
-                    <span className="font-medium">{insights.dashboard.currentStatus.moodScore}/10</span>
-                  </div>
-                  <div className="flex items-center justify-between text-sm">
-                    <span>Energy</span>
-                    <span className="font-medium">{insights.dashboard.currentStatus.energyLevel}/10</span>
-                  </div>
-                  <div className="flex items-center justify-between text-sm">
-                    <span>Stress</span>
-                    <span className="font-medium">{insights.dashboard.currentStatus.stressLevel}/10</span>
-                  </div>
-                </div>
-              </div>
-
-              {/* Achievements */}
-              <div className="space-y-2">
-                <h4 className="font-medium text-sm">Achievements</h4>
-                <div className="space-y-1">
-                  {insights.dashboard.weeklySummary.achievements.length > 0 ? (
-                    insights.dashboard.weeklySummary.achievements.map((achievement, index) => (
-                      <div key={index} className="flex items-center gap-2 text-sm">
-                        <Trophy className="text-yellow-500" size={14} />
-                        <span>{achievement}</span>
-                      </div>
-                    ))
-                  ) : (
-                    <p className="text-sm text-muted-foreground">Keep tracking to unlock achievements!</p>
-                  )}
-                </div>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-      </motion.div>
-
-      {/* Top Priority Actions */}
-      {insights.recommendedActions.length > 0 && (
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.2 }}
-        >
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <Target className="text-primary" size={20} />
-                Top Actions for You Right Now
-              </CardTitle>
-              <p className="text-sm text-muted-foreground">
-                Personalized recommendations based on your patterns and current needs
-              </p>
-            </CardHeader>
-            <CardContent>
-              <div className="grid gap-4 md:grid-cols-2">
-                {insights.recommendedActions.slice(0, 4).map((action, index) => (
-                  <motion.div
-                    key={action.id}
-                    initial={{ opacity: 0, scale: 0.95 }}
-                    animate={{ opacity: 1, scale: 1 }}
-                    transition={{ delay: index * 0.1 }}
-                  >
-                    <Card className="p-4 h-full hover:shadow-md transition-shadow">
-                      <div className="space-y-3">
-                        <div className="flex items-start justify-between">
-                          <div className="flex items-center gap-2">
-                            {getCategoryIcon(action.category)}
-                            <h4 className="font-semibold text-sm">{action.title}</h4>
-                          </div>
-                          <Badge variant={getPriorityColor(action.priority)} className="text-xs">
-                            {action.priority}
-                          </Badge>
-                        </div>
-                        
-                        <p className="text-sm text-muted-foreground">{action.description}</p>
-                        
-                        <div className="space-y-2">
-                          <div className="flex items-center justify-between text-xs text-muted-foreground">
-                            <div className="flex items-center gap-1">
-                              <Clock size={12} />
-                              {action.estimatedTime}
-                            </div>
-                            <div className="flex items-center gap-1">
-                              <Star size={12} />
-                              {Math.round(action.confidence * 100)}% confidence
-                            </div>
-                          </div>
-                          <div className="text-xs text-green-600 bg-green-50 p-2 rounded">
-                            💡 Expected: {action.expectedBenefit}
-                          </div>
-                        </div>
-
-                        <div className="flex items-center gap-2">
-                          {!actionFeedback[action.id]?.attempted ? (
-                            <Button 
-                              size="sm" 
-                              className="flex-1"
-                              onClick={() => handleActionAttempt(action)}
-                            >
-                              <CheckCircle size={14} className="mr-1" />
-                              I'll Try This
-                            </Button>
-                          ) : (
-                            <div className="flex items-center gap-2 text-xs text-green-600">
-                              <CheckCircle size={14} />
-                              Tracked!
-                            </div>
-                          )}
-                          
-                          <div className="flex items-center gap-1">
-                            {[1, 2, 3, 4, 5].map(rating => (
-                              <Button
-                                key={rating}
-                                size="sm"
-                                variant={actionFeedback[action.id]?.rating === rating ? "default" : "ghost"}
-                                className="w-6 h-6 p-0"
-                                onClick={() => handleActionRating(action, rating, rating >= 3)}
-                              >
-                                <Star size={12} />
-                              </Button>
-                            ))}
-                          </div>
-                        </div>
-                      </div>
-                    </Card>
-                  </motion.div>
-                ))}
-              </div>
-            </CardContent>
-          </Card>
-        </motion.div>
-      )}
-
-      {/* Detailed Analysis Tabs */}
-      <motion.div
-        initial={{ opacity: 0, y: 20 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ delay: 0.3 }}
-      >
-        <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-          <TabsList className="grid w-full grid-cols-4">
-            <TabsTrigger value="dashboard" className="flex items-center gap-2">
-              <ChartLine size={16} />
-              Overview
-            </TabsTrigger>
-            <TabsTrigger value="patterns" className="flex items-center gap-2">
-              <TrendUp size={16} />
-              Patterns
-            </TabsTrigger>
-            <TabsTrigger value="progress" className="flex items-center gap-2">
-              <Trophy size={16} />
-              Progress
-            </TabsTrigger>
-            <TabsTrigger value="community" className="flex items-center gap-2">
-              <Users size={16} />
-              Community
-            </TabsTrigger>
-          </TabsList>
-
-          <TabsContent value="dashboard" className="space-y-6 mt-6">
-            <div className="grid gap-6 md:grid-cols-2">
-              {/* Trend Analysis */}
+        {insights && (
+          <>
+            {/* Key Metrics Overview */}
+            <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-4">
               <Card>
-                <CardHeader>
-                  <CardTitle className="text-lg">Trend Analysis</CardTitle>
+                <CardHeader className="pb-3">
+                  <CardTitle className="text-base flex items-center gap-2">
+                    <Heart className="text-red-500" size={18} />
+                    Weekly Score
+                  </CardTitle>
                 </CardHeader>
                 <CardContent>
-                  <div className="space-y-4">
-                    {Object.entries(insights.progressTracking.trends).map(([key, trend]) => (
-                      <div key={key} className="flex items-center justify-between">
-                        <span className="capitalize font-medium">{key}</span>
-                        <div className="flex items-center gap-2">
-                          <span className="text-lg font-bold">{trend.current}</span>
-                          <div className={`flex items-center gap-1 text-sm ${
-                            trend.direction === 'up' ? 'text-green-600' :
-                            trend.direction === 'down' ? 'text-red-600' : 'text-yellow-600'
-                          }`}>
-                            {trend.direction === 'up' ? <TrendUp size={14} /> :
-                             trend.direction === 'down' ? <TrendDown size={14} /> :
-                             <div className="w-3 h-3 bg-yellow-400 rounded-full" />}
-                            {trend.change > 0 ? '+' : ''}{trend.change}
-                          </div>
-                        </div>
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <div className="text-2xl font-bold">{insights.mood.currentScore}</div>
+                      <div className="flex items-center gap-1 text-sm text-muted-foreground">
+                        {getTrendIcon(insights.mood.weeklyTrend)}
+                        {insights.mood.weeklyTrend}
                       </div>
-                    ))}
+                    </div>
+                    <div className="text-right">
+                      <div className="text-sm text-muted-foreground">This Week</div>
+                      <Progress value={insights.mood.currentScore} className="h-2 w-16" />
+                    </div>
                   </div>
                 </CardContent>
               </Card>
 
-              {/* Week Comparison */}
               <Card>
-                <CardHeader>
-                  <CardTitle className="text-lg">Week Comparison</CardTitle>
+                <CardHeader className="pb-3">
+                  <CardTitle className="text-base flex items-center gap-2">
+                    <Calendar className="text-blue-500" size={18} />
+                    Days Tracked
+                  </CardTitle>
                 </CardHeader>
                 <CardContent>
-                  <div className="space-y-4">
-                    <div className="grid grid-cols-2 gap-4 text-sm">
-                      <div>
-                        <h4 className="font-medium mb-2">This Week</h4>
-                        <p>Avg Mood: {insights.progressTracking.comparisons.thisWeek.averageMood}</p>
-                        <p>Best: {insights.progressTracking.comparisons.thisWeek.bestDay}</p>
-                        <p>Challenging: {insights.progressTracking.comparisons.thisWeek.challengingDay}</p>
-                      </div>
-                      <div>
-                        <h4 className="font-medium mb-2">Last Week</h4>
-                        <p>Avg Mood: {insights.progressTracking.comparisons.lastWeek.averageMood}</p>
-                        <p>Best: {insights.progressTracking.comparisons.lastWeek.bestDay}</p>
-                        <p>Challenging: {insights.progressTracking.comparisons.lastWeek.challengingDay}</p>
-                      </div>
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <div className="text-2xl font-bold">{insights.mood.totalEntries}</div>
+                      <div className="text-sm text-muted-foreground">Total entries</div>
+                    </div>
+                    <div className="text-right">
+                      <div className="text-sm text-muted-foreground">Streak</div>
+                      <div className="text-lg font-semibold">{insights.mood.moodStreak}</div>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+
+              <Card>
+                <CardHeader className="pb-3">
+                  <CardTitle className="text-base flex items-center gap-2">
+                    <Brain className="text-purple-500" size={18} />
+                    AI Confidence
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <div className="text-2xl font-bold">{Math.round(insights.emotionalWeather.confidence * 100)}%</div>
+                      <div className="text-sm text-muted-foreground">Weather forecast</div>
+                    </div>
+                    <div className="text-2xl">
+                      {insights.emotionalWeather.current}
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+
+              <Card>
+                <CardHeader className="pb-3">
+                  <CardTitle className="text-base flex items-center gap-2">
+                    <Trophy className="text-yellow-500" size={18} />
+                    Engagement
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <div className="text-2xl font-bold">{Math.round(insights.activity.engagementLevel * 100)}%</div>
+                      <div className="text-sm text-muted-foreground">Activity level</div>
+                    </div>
+                    <div className="text-right">
+                      <div className="text-sm text-muted-foreground">Achievements</div>
+                      <div className="text-lg font-semibold">{insights.activity.achievementsUnlocked}</div>
                     </div>
                   </div>
                 </CardContent>
               </Card>
             </div>
-          </TabsContent>
 
-          <TabsContent value="patterns" className="space-y-6 mt-6">
+            {/* Emotional Weather Section */}
+            <div className="grid gap-6 lg:grid-cols-3">
+              <div className="lg:col-span-2">
+                <EmotionalWeatherWidget 
+                  showDetails={true}
+                  autoRefresh={false}
+                  className="h-full"
+                />
+              </div>
+              
+              <Card>
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2">
+                    <Shield className="text-green-500" size={18} />
+                    Protective Factors
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="space-y-2">
+                    {insights.emotionalWeather.protectiveFactors.map((factor, index) => (
+                      <div key={index} className="flex items-center gap-2">
+                        <div className="w-2 h-2 bg-green-500 rounded-full" />
+                        <span className="text-sm">{factor}</span>
+                      </div>
+                    ))}
+                    {insights.emotionalWeather.protectiveFactors.length === 0 && (
+                      <p className="text-sm text-muted-foreground">Continue tracking to identify protective factors</p>
+                    )}
+                  </div>
+                </CardContent>
+              </Card>
+            </div>
+
+            {/* AI Recommendations */}
             <Card>
               <CardHeader>
-                <CardTitle>Pattern Analysis</CardTitle>
-                <p className="text-sm text-muted-foreground">
-                  Deep insights into your mood patterns and correlations
-                </p>
+                <CardTitle className="flex items-center gap-2">
+                  <Lightbulb className="text-amber-500" size={18} />
+                  Personalized Recommendations
+                </CardTitle>
               </CardHeader>
               <CardContent>
-                <div className="text-center py-8 text-muted-foreground">
-                  <Gear className="mx-auto mb-4 opacity-50" size={48} />
-                  <h4 className="font-medium mb-2">Advanced Pattern Analysis</h4>
-                  <p className="text-sm mb-4">
-                    Detailed pattern analysis will be available here, including time-of-day patterns,
-                    activity correlations, and trigger analysis.
-                  </p>
+                <div className="grid gap-4 md:grid-cols-2">
+                  {insights.aiInsights.recommendations.map((rec, index) => (
+                    <motion.div
+                      key={index}
+                      initial={{ opacity: 0, x: -20 }}
+                      animate={{ opacity: 1, x: 0 }}
+                      transition={{ delay: index * 0.1 }}
+                      className="p-4 border rounded-lg"
+                    >
+                      <div className="flex items-start gap-3">
+                        <Badge 
+                          variant={rec.priority === 'high' ? 'destructive' : rec.priority === 'medium' ? 'default' : 'secondary'}
+                          className="text-xs"
+                        >
+                          {rec.priority}
+                        </Badge>
+                        <div className="flex-1">
+                          <h4 className="font-medium">{rec.title}</h4>
+                          <p className="text-sm text-muted-foreground mt-1">{rec.description}</p>
+                        </div>
+                      </div>
+                    </motion.div>
+                  ))}
+                  {insights.aiInsights.recommendations.length === 0 && (
+                    <div className="col-span-full text-center py-8">
+                      <p className="text-muted-foreground">
+                        Continue your wellness journey to receive personalized recommendations
+                      </p>
+                    </div>
+                  )}
                 </div>
               </CardContent>
             </Card>
-          </TabsContent>
 
-          <TabsContent value="progress" className="space-y-6 mt-6">
-            <Card>
-              <CardHeader>
-                <CardTitle>Progress Tracking</CardTitle>
-                <p className="text-sm text-muted-foreground">
-                  Track your wellness journey and celebrate improvements
-                </p>
-              </CardHeader>
-              <CardContent>
-                <div className="text-center py-8 text-muted-foreground">
-                  <Trophy className="mx-auto mb-4 opacity-50" size={48} />
-                  <h4 className="font-medium mb-2">Goal Progress & Achievements</h4>
-                  <p className="text-sm mb-4">
-                    Your wellness goals, progress tracking, and achievement system will be displayed here.
-                  </p>
-                </div>
-              </CardContent>
-            </Card>
-          </TabsContent>
-
-          <TabsContent value="community" className="space-y-6 mt-6">
-            <Card>
-              <CardHeader>
-                <CardTitle>Community Insights</CardTitle>
-                <p className="text-sm text-muted-foreground">
-                  Learn from community patterns and share anonymous insights
-                </p>
-              </CardHeader>
-              <CardContent>
-                <div className="text-center py-8 text-muted-foreground">
-                  <Users className="mx-auto mb-4 opacity-50" size={48} />
-                  <h4 className="font-medium mb-2">Community Wisdom</h4>
-                  <p className="text-sm mb-4">
-                    Community-informed insights and anonymous pattern sharing will be available here.
-                  </p>
-                </div>
-              </CardContent>
-            </Card>
-          </TabsContent>
-        </Tabs>
+            {/* Cultural Adaptations */}
+            {insights.cultural.adaptations.length > 0 && (
+              <Card>
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2">
+                    <ChartLine className="text-indigo-500" size={18} />
+                    Cultural Wellness Insights
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="grid gap-4 md:grid-cols-2">
+                    <div>
+                      <h4 className="font-medium mb-2">Regional Adaptations</h4>
+                      <div className="space-y-2">
+                        {insights.cultural.adaptations.map((adaptation, index) => (
+                          <Badge key={index} variant="outline">
+                            {adaptation.replace('_', ' ')}
+                          </Badge>
+                        ))}
+                      </div>
+                    </div>
+                    <div>
+                      <h4 className="font-medium mb-2">Cultural Recommendations</h4>
+                      <div className="space-y-2">
+                        {insights.cultural.culturalRecommendations.map((rec, index) => (
+                          <p key={index} className="text-sm text-muted-foreground">• {rec}</p>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+            )}
+          </>
+        )}
       </motion.div>
     </div>
   )
 }
-
-export default EnhancedInsightsPage

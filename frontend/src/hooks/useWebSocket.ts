@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, useCallback } from 'react'
+import { useEffect, useRef, useState, useCallback, useMemo } from 'react'
 import { toast } from 'sonner'
 
 export interface WebSocketMessage {
@@ -28,36 +28,36 @@ export function useWebSocket(url?: string): WebSocketHookReturn {
   const reconnectAttempts = useRef(0)
   const maxReconnectAttempts = 5
 
-  const wsUrl = url || import.meta.env.VITE_WS_URL || `ws://localhost:8007`
+  // Memoize the WebSocket URL to prevent unnecessary re-connections
+  const wsUrl = useMemo(() => {
+    return url || import.meta.env.VITE_WS_URL || `ws://localhost:8007`
+  }, [url])
 
   const connect = useCallback(() => {
     try {
       // Get auth token and user data for WebSocket connection
-      const token = localStorage.getItem('mantrapath_token') // Fix: use correct token key
-      const userData = localStorage.getItem('user_data')
+      const token = localStorage.getItem('authToken') || localStorage.getItem('mantrapath_token')
+      const userData = localStorage.getItem('user') || localStorage.getItem('user_data')
       
-      if (!token || !userData) {
-        console.log('🔌 No authentication data available, skipping WebSocket connection')
-        setConnectionError('Authentication required for real-time features')
-        return
-      }
+      // For now, use a demo user ID if not authenticated
+      let userId = 'demo-user'
       
-      let userId = 'anonymous'
-      try {
-        const user = JSON.parse(userData)
-        userId = user.id || 'anonymous'
-      } catch (e) {
-        console.warn('Failed to parse user data for WebSocket connection')
-        setConnectionError('Invalid user data for WebSocket connection')
-        return
+      if (token && userData) {
+        try {
+          const user = JSON.parse(userData)
+          userId = user.id || 'demo-user'
+        } catch (e) {
+          console.warn('Failed to parse user data, using demo user')
+        }
+      } else {
+        console.log('🔌 No authentication data available, using demo user for WebSocket connection')
       }
 
       // Use the correct WebSocket endpoint format: /ws/{user_id}
       const wsUrlWithPath = `${wsUrl}/ws/${userId}`
-      const wsUrlWithAuth = `${wsUrlWithPath}?token=${token}`
 
       console.log('🔌 Connecting to WebSocket:', wsUrlWithPath)
-      wsRef.current = new WebSocket(wsUrlWithAuth)
+      wsRef.current = new WebSocket(wsUrlWithPath)
 
       wsRef.current.onopen = () => {
         console.log('🔗 WebSocket connected')
@@ -135,7 +135,7 @@ export function useWebSocket(url?: string): WebSocketHookReturn {
       console.error('Failed to create WebSocket connection:', error)
       setConnectionError('Failed to create WebSocket connection')
     }
-  }, [wsUrl])
+  }, [wsUrl]) // Keep wsUrl dependency but ensure it's stable
 
   const sendMessage = useCallback((message: any) => {
     if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
@@ -166,7 +166,7 @@ export function useWebSocket(url?: string): WebSocketHookReturn {
     return () => {
       disconnect()
     }
-  }, [connect, disconnect])
+  }, [connect, disconnect]) // Use stable callbacks
 
   // Handle visibility change to reconnect when tab becomes active
   useEffect(() => {
@@ -181,7 +181,7 @@ export function useWebSocket(url?: string): WebSocketHookReturn {
     return () => {
       document.removeEventListener('visibilitychange', handleVisibilityChange)
     }
-  }, [isConnected, connectionError, connect])
+  }, [isConnected, connectionError, connect]) // Include connect dependency
 
   return {
     isConnected,

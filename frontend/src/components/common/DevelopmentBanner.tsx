@@ -37,12 +37,12 @@ export function DevelopmentBanner() {
           <Info className="h-4 w-4" />
           <AlertDescription className="flex items-center justify-between">
             <div className="flex-1">
-              <strong>Development Mode:</strong> Backend not detected. Using mock data.
+              <strong>Backend Unavailable:</strong> Cannot connect to MantraPath services.
               <br />
               <span className="text-sm">
-                To start backend: <code className="bg-amber-100 px-1 rounded">cd backend && python3 simple_start.py</code>
+                Please ensure backend services are running: <code className="bg-amber-100 px-1 rounded">./start.sh</code>
                 <br />
-                Or see <code>start-backend-dev.md</code> for detailed instructions.
+                Check network connection and verify services are accessible.
               </span>
             </div>
             <Button

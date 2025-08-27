@@ -7,7 +7,9 @@ from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
 import os
 
-DATABASE_URL = os.getenv("DATABASE_URL", "sqlite:///./mantrapath.db")
+# Use absolute path for database to ensure all services use the same file
+BACKEND_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+DATABASE_URL = os.getenv("DATABASE_URL", f"sqlite:///{BACKEND_DIR}/mantrapath.db")
 
 # Create engine
 if DATABASE_URL.startswith("sqlite"):

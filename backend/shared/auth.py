@@ -3,7 +3,8 @@ Shared authentication utilities
 """
 from datetime import datetime, timedelta
 from typing import Optional, Dict, Any
-import jwt
+from jose import jwt
+from jose.exceptions import JWTError
 from passlib.context import CryptContext
 import os
 import re
@@ -63,7 +64,7 @@ def send_verification_email(email: str, token: str, username: str) -> bool:
         
         if not smtp_username or not smtp_password:
             # For development/testing - print verification link to console
-            verification_url = f"{app_url}/verify-email?token={token}"
+            verification_url = f"{app_url}/?token={token}"
             print("\n" + "="*80)
             print("🔐 EMAIL VERIFICATION REQUIRED")
             print("="*80)
@@ -77,7 +78,7 @@ def send_verification_email(email: str, token: str, username: str) -> bool:
             return False  # Return False to allow proper verification flow testing
         
         # Create verification URL
-        verification_url = f"{app_url}/verify-email?token={token}"
+        verification_url = f"{app_url}/?token={token}"
         
         # Create email content
         subject = "Welcome to MantraPath - Verify Your Email"
@@ -191,6 +192,54 @@ def create_refresh_token(data: Dict[Any, Any]) -> str:
     encoded_jwt = jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
     return encoded_jwt
 
+def create_service_token(service_name: str, expires_delta: Optional[timedelta] = None) -> str:
+    """
+    Create a service-to-service authentication token
+    
+    Args:
+        service_name: Name of the service requesting the token
+        expires_delta: Token expiration time
+    
+    Returns:
+        JWT token for service authentication
+    """
+    if expires_delta:
+        expire = datetime.utcnow() + expires_delta
+    else:
+        expire = datetime.utcnow() + timedelta(hours=24)  # Long-lived for services
+    
+    to_encode = {
+        "sub": f"service:{service_name}",
+        "service": service_name,
+        "type": "service_token",
+        "exp": expire,
+        "iat": datetime.utcnow(),
+        "is_service": True
+    }
+    
+    return jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
+
+def verify_service_token(token: str) -> Optional[dict]:
+    """
+    Verify a service-to-service authentication token
+    
+    Args:
+        token: JWT token to verify
+    
+    Returns:
+        Token payload if valid, None otherwise
+    """
+    try:
+        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+        
+        # Check if it's a service token
+        if payload.get("type") != "service_token" or not payload.get("is_service"):
+            return None
+            
+        return payload
+    except JWTError:
+        return None
+
 def verify_token(token: str, expected_type: Optional[str] = None) -> Optional[Dict[Any, Any]]:
     """Verify and decode JWT token"""
     try:
@@ -201,7 +250,7 @@ def verify_token(token: str, expected_type: Optional[str] = None) -> Optional[Di
             return None
             
         return payload
-    except jwt.PyJWTError:
+    except JWTError:
         return None
 
 def extract_user_id(token: str) -> Optional[str]:

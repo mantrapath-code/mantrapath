@@ -4,33 +4,39 @@ import { User, Gear, SignOut, Eye } from '@phosphor-icons/react'
 import { ProfileAvatar } from './ProfileAvatar'
 import { cn } from '@/lib/utils'
 import { useProfile } from '@/hooks/useProfile'
+import { getUserDisplayName, getUserInitials } from '@/utils/userDisplay'
 
 interface User {
   id: string
-  username: string
   email: string
-  first_name: string
-  last_name: string
+  username: string
+  first_name?: string
+  last_name?: string
+  is_active: boolean
+  is_verified: boolean
+  role: string
   created_at?: string
+  displayName?: string
+  initials?: string
 }
 
 interface ProfileDropdownProps {
   user: User
-  onProfileView: () => void
-  onProfileEdit: () => void
-  onSettings: () => void
   onLogout: () => void
   className?: string
+  onProfileView?: () => void
+  onProfileEdit?: () => void
+  onSettings?: () => void
 }
 
-export function ProfileDropdown({
-  user,
+const ProfileDropdown: React.FC<ProfileDropdownProps> = ({ 
+  user, 
+  onLogout, 
+  className,
   onProfileView,
   onProfileEdit,
-  onSettings,
-  onLogout,
-  className
-}: ProfileDropdownProps) {
+  onSettings
+}) => {
   const [isOpen, setIsOpen] = useState(false)
   const dropdownRef = useRef<HTMLDivElement>(null)
   const { profile } = useProfile()
@@ -76,31 +82,25 @@ export function ProfileDropdown({
 
   const handleProfileView = () => {
     setIsOpen(false)
-    onProfileView()
+    onProfileView?.()
   }
 
   const handleProfileEdit = () => {
     setIsOpen(false)
-    onProfileEdit()
+    onProfileEdit?.()
   }
 
   const handleSettings = () => {
     setIsOpen(false)
-    onSettings()
+    onSettings?.()
   }
 
   const getDisplayName = () => {
-    if (user.first_name && user.last_name) {
-      return `${user.first_name} ${user.last_name}`
-    }
-    return user.username
+    return getUserDisplayName(user)
   }
 
   const getInitials = () => {
-    if (user.first_name && user.last_name) {
-      return `${user.first_name} ${user.last_name}`
-    }
-    return user.username
+    return getUserInitials(user)
   }
 
   return (
@@ -139,7 +139,7 @@ export function ProfileDropdown({
                     {getDisplayName()}
                   </p>
                   <p className="text-sm text-muted-foreground truncate">
-                    @{user.username}
+                    ID: {getUserDisplayName(user)}
                   </p>
                 </div>
               </div>
@@ -147,21 +147,27 @@ export function ProfileDropdown({
 
             {/* Menu Items */}
             <div className="py-2">
-              <DropdownMenuItem
-                icon={<Eye size={16} />}
-                label="View Profile"
-                onClick={handleProfileView}
-              />
-              <DropdownMenuItem
-                icon={<User size={16} />}
-                label="Edit Profile"
-                onClick={handleProfileEdit}
-              />
-              <DropdownMenuItem
-                icon={<Gear size={16} />}
-                label="Settings"
-                onClick={handleSettings}
-              />
+              {onProfileView && (
+                <DropdownMenuItem
+                  icon={<Eye size={16} />}
+                  label="View Profile"
+                  onClick={handleProfileView}
+                />
+              )}
+              {onProfileEdit && (
+                <DropdownMenuItem
+                  icon={<User size={16} />}
+                  label="Edit Profile"
+                  onClick={handleProfileEdit}
+                />
+              )}
+              {onSettings && (
+                <DropdownMenuItem
+                  icon={<Gear size={16} />}
+                  label="Settings"
+                  onClick={handleSettings}
+                />
+              )}
             </div>
 
             {/* Divider */}
@@ -204,3 +210,5 @@ function DropdownMenuItem({ icon, label, onClick, className }: DropdownMenuItemP
     </button>
   )
 }
+
+export { ProfileDropdown }

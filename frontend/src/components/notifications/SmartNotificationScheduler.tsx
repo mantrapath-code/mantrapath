@@ -8,7 +8,7 @@
  * - Non-intrusive scheduling with user preferences
  */
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Switch } from '@/components/ui/switch'
@@ -33,7 +33,7 @@ import {
 import { motion, AnimatePresence } from 'framer-motion'
 import { moodApi, notificationApi } from '@/services/api'
 import { toast } from 'sonner'
-import { useMoods } from '@/hooks/useMoods'
+import { useWellness } from '@/hooks/useWellness'
 import { useKV } from '@/hooks/useKV'
 
 interface NotificationSchedule {
@@ -89,11 +89,11 @@ export function SmartNotificationScheduler() {
   const [loading, setLoading] = useState(true)
   const [backendConnected, setBackendConnected] = useState(false)
   
-  const { moods } = useMoods()
+  const { moodEntries } = useWellness()
 
   useEffect(() => {
     initializeSmartScheduling()
-  }, [moods])
+  }, []) // Remove problematic dependency that causes infinite loops
 
   const initializeSmartScheduling = async () => {
     setLoading(true)
@@ -113,7 +113,10 @@ export function SmartNotificationScheduler() {
       setAnalytics({ patterns })
 
       // Initialize default schedules if none exist
-      if (schedules.length === 0) {
+      // Use a flag to check if already initialized to avoid reading from state
+      const hasExistingSchedules = localStorage.getItem('notification-schedules')
+      
+      if (!hasExistingSchedules || hasExistingSchedules === '[]') {
         const defaultSchedules = generateSmartDefaultSchedules(optimalTimes)
         setSchedules(defaultSchedules)
       } else {
@@ -124,7 +127,8 @@ export function SmartNotificationScheduler() {
     } catch (error) {
       console.error('Failed to initialize smart scheduling:', error)
       // Fallback to basic scheduling
-      if (schedules.length === 0) {
+      const hasExistingSchedules = localStorage.getItem('notification-schedules')
+      if (!hasExistingSchedules || hasExistingSchedules === '[]') {
         setSchedules(generateBasicDefaultSchedules())
       }
     } finally {
@@ -163,7 +167,7 @@ export function SmartNotificationScheduler() {
     
     // Analyze mood patterns to find optimal intervention windows
     const oneMonthAgo = Date.now() - (30 * 24 * 60 * 60 * 1000)
-    const recentMoods = moods.filter(mood => mood.timestamp >= oneMonthAgo)
+    const recentMoods = moodEntries.filter(mood => mood.timestamp >= oneMonthAgo)
     
     if (recentMoods.length < 10) {
       // Not enough data, return basic optimal times
@@ -221,7 +225,7 @@ export function SmartNotificationScheduler() {
   }
 
   const groupMoodsByDayAndTime = (moods: any[]) => {
-    return moods.reduce((acc, mood) => {
+    return moodEntries.reduce((acc, mood) => {
       const date = new Date(mood.timestamp)
       const day = date.getDay()
       const hour = date.getHours()
@@ -235,7 +239,7 @@ export function SmartNotificationScheduler() {
 
   const calculateAverageMood = (moods: any[]) => {
     const moodValues = { 'very-low': 1, 'low': 2, 'neutral': 3, 'good': 4, 'excellent': 5 }
-    return moods.reduce((sum, mood) => sum + moodValues[mood.mood], 0) / moods.length
+    return moodEntries.reduce((sum, mood) => sum + moodValues[mood.mood], 0) / moodEntries.length
   }
 
   const getContextForTime = (hour: number): string => {
@@ -256,7 +260,7 @@ export function SmartNotificationScheduler() {
   }
 
   const findHighEnergyTimes = (moods: any[]) => {
-    const highEnergyMoods = moods.filter(mood => 
+    const highEnergyMoods = moodEntries.filter(mood => 
       mood.energy === 'high' || ['good', 'excellent'].includes(mood.mood)
     )
     
@@ -414,14 +418,14 @@ export function SmartNotificationScheduler() {
     setSchedules(updatedSchedules)
   }
 
-  const toggleSchedule = (scheduleId: string) => {
+  const toggleSchedule = useCallback((scheduleId: string) => {
     const updatedSchedules = schedules.map(schedule => 
       schedule.id === scheduleId 
         ? { ...schedule, enabled: !schedule.enabled }
         : schedule
     )
     setSchedules(updatedSchedules)
-  }
+  }, [schedules])
 
   const updatePreferences = async (updates: Partial<UserNotificationPreferences>) => {
     const newPreferences = { ...preferences, ...updates }
@@ -595,6 +599,7 @@ export function SmartNotificationScheduler() {
                         </div>
                       </div>
                       <Switch
+                        key={`schedule-switch-${schedule.id}`}
                         checked={schedule.enabled}
                         onCheckedChange={() => toggleSchedule(schedule.id)}
                         className="flex-shrink-0"
@@ -691,6 +696,7 @@ export function SmartNotificationScheduler() {
                     </p>
                   </div>
                   <Switch
+                    key="adaptive-timing-switch"
                     checked={preferences.adaptiveTiming}
                     onCheckedChange={(checked) => updatePreferences({ adaptiveTiming: checked })}
                   />
@@ -759,6 +765,7 @@ export function SmartNotificationScheduler() {
                       <span className="text-sm capitalize">{type.replace('-', ' ')}</span>
                     </div>
                     <Switch
+                      key={`notification-type-${type}`}
                       checked={preferences.enabledTypes.includes(type)}
                       onCheckedChange={(checked) => {
                         const newTypes = checked

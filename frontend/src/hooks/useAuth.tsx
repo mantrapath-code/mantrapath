@@ -1,5 +1,6 @@
 import { createContext, useContext, useEffect, useState } from 'react'
 import { apiService } from '@/services/api'
+import { getUserDisplayName, getUserInitials } from '@/utils/userDisplay'
 
 interface User {
   id: string
@@ -11,6 +12,9 @@ interface User {
   is_verified: boolean
   role: string
   created_at?: string
+  // Display utilities
+  displayName?: string
+  initials?: string
 }
 
 interface AuthContextType {
@@ -43,13 +47,22 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       if (token) {
         try {
           const userData = await apiService.getCurrentUser()
-          setUser(userData)
+          // Enhance user data with display utilities
+          const enhancedUser = {
+            ...userData,
+            displayName: getUserDisplayName(userData),
+            initials: getUserInitials(userData)
+          }
+          setUser(enhancedUser)
+          setLoading(false)
+          return
         } catch (error) {
           // Token is invalid, remove it
           localStorage.removeItem('mantrapath_token')
           localStorage.removeItem('mantrapath_refresh_token')
         }
       }
+
       setLoading(false)
     }
 
@@ -60,7 +73,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     try {
       await apiService.login(emailOrUsername, password)
       const userData = await apiService.getCurrentUser()
-      setUser(userData)
+      // Enhance user data with display utilities
+      const enhancedUser = {
+        ...userData,
+        displayName: getUserDisplayName(userData),
+        initials: getUserInitials(userData)
+      }
+      setUser(enhancedUser)
     } catch (error) {
       throw error
     }
@@ -75,8 +94,19 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }) => {
     try {
       const result = await apiService.register(userData)
-      // Don't set user after registration since email verification is required
-      return result
+      
+      // Check if email verification is required
+      if (result.verification_required) {
+        // Email verification is required - user needs to check email
+        return result
+      } else {
+        // No verification required - user can login immediately
+        // But we still need them to login manually for security
+        return {
+          ...result,
+          message: result.message || 'Registration successful! Please log in with your credentials.'
+        }
+      }
     } catch (error) {
       throw error
     }

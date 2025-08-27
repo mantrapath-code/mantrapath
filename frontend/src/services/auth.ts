@@ -1,5 +1,9 @@
 // Authentication service for managing tokens and user state
 
+import { parseGatewayResponse } from '@/utils/gateway'
+
+const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000'
+
 interface LoginResponse {
   access_token: string
   refresh_token: string
@@ -67,7 +71,7 @@ class AuthService {
 
   // Register a new user
   async register(email: string, username: string, password: string): Promise<LoginResponse> {
-    const response = await fetch('http://localhost:8000/register', {
+    const response = await fetch(`${API_BASE_URL}/register`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -80,7 +84,15 @@ class AuthService {
       throw new Error(error.detail || 'Registration failed')
     }
 
-    const loginResponse: LoginResponse = await response.json()
+    const gatewayResponse = await response.json()
+    
+    // Parse API Gateway response
+    const authData = parseGatewayResponse<any>(gatewayResponse)
+    const loginResponse: LoginResponse = {
+      access_token: authData.access_token,
+      refresh_token: authData.refresh_token,
+      token_type: authData.token_type
+    }
     
     // Store the tokens
     this.setAuthData(loginResponse)
@@ -90,7 +102,7 @@ class AuthService {
 
   // Login with email and password
   async login(email: string, password: string): Promise<LoginResponse> {
-    const response = await fetch('http://localhost:8000/login', {
+    const response = await fetch(`${API_BASE_URL}/login`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -103,7 +115,15 @@ class AuthService {
       throw new Error(error.detail || 'Login failed')
     }
 
-    const loginResponse: LoginResponse = await response.json()
+    const gatewayResponse = await response.json()
+    
+    // Parse API Gateway response
+    const authData = parseGatewayResponse<any>(gatewayResponse)
+    const loginResponse: LoginResponse = {
+      access_token: authData.access_token,
+      refresh_token: authData.refresh_token,
+      token_type: authData.token_type
+    }
     
     // Store the tokens
     this.setAuthData(loginResponse)
@@ -126,7 +146,7 @@ class AuthService {
     if (!refreshToken) return null
 
     try {
-      const response = await fetch('http://localhost:8000/refresh-token', {
+      const response = await fetch(`${API_BASE_URL}/refresh-token`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -140,40 +160,19 @@ class AuthService {
         return null
       }
 
-      const data = await response.json()
-      localStorage.setItem(this.ACCESS_TOKEN_KEY, data.access_token)
-      return data.access_token
+      const gatewayResponse = await response.json()
+      
+      // Parse API Gateway response
+      const authData = parseGatewayResponse<any>(gatewayResponse)
+      
+      localStorage.setItem(this.ACCESS_TOKEN_KEY, authData.access_token)
+      return authData.access_token
     } catch (error) {
       this.clearAuth()
       return null
     }
   }
 
-  // Auto-login for testing (register a test user if not exists)
-  async autoLoginForTesting(): Promise<boolean> {
-    try {
-      // Try to register a test user
-      await this.register(
-        'testuser@mantrapath.com',
-        'testuser',
-        'testpassword123'
-      )
-      return true
-    } catch (error: any) {
-      // If registration fails (user exists), try to login
-      if (error.message.includes('already registered')) {
-        try {
-          await this.login('testuser@mantrapath.com', 'testpassword123')
-          return true
-        } catch (loginError) {
-          console.error('Auto-login failed:', loginError)
-          return false
-        }
-      }
-      console.error('Auto-registration failed:', error)
-      return false
-    }
-  }
 }
 
 // Export a singleton instance

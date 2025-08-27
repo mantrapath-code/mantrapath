@@ -1,318 +1,560 @@
 """
-Chatbot Service - AI-powered conversational support with breathing exercises
+MantraPath Chatbot Service - Cleaned and Consolidated
+Single source of truth for chatbot endpoints with proper Phase 2 integration
 """
-from fastapi import FastAPI, Depends, HTTPException
-from fastapi.middleware.cors import CORSMiddleware
-from sqlalchemy.orm import Session
-from pydantic import BaseModel
-from typing import List, Optional
-from datetime import datetime
+
+import asyncio
+import logging
+import os
 import sys
 import json
+from datetime import datetime
+from typing import List, Optional, Dict, Any, Union
+from contextlib import asynccontextmanager
+
+from fastapi import FastAPI, Depends, HTTPException, BackgroundTasks, Request
+from fastapi.middleware.cors import CORSMiddleware
+from sqlalchemy.orm import Session
+from pydantic import BaseModel, Field
+import httpx
+import redis.asyncio as redis
 
 # Add parent directories to path
 sys.path.append('/app')
 sys.path.append('/app/shared')
 
-from shared.database import get_db, engine
+from shared.database import get_db, engine, SessionLocal
 from shared.models import ChatSession, ChatMessage, Base
 from shared.auth import get_current_user
+from shared.events import get_enhanced_event_bus, V3EventChannels
 
-# Create tables
+# Phase 2 Enhanced Service
+from src.enhanced_chatbot_service_v2 import enhanced_chatbot_service
+
+# Configure logging
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+)
+logger = logging.getLogger(__name__)
+
+# Create database tables
 Base.metadata.create_all(bind=engine)
 
-app = FastAPI(
-    title="MantraPath Chatbot Service",
-    description="AI chatbot with mental health support and breathing exercises",
-    version="1.0.0"
-)
+# Configuration
+AGENT_REDIS_URL = os.getenv("AGENT_REDIS_URL", "redis://agent-redis:6379")
 
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
-
-# Pydantic models
 class ChatRequest(BaseModel):
-    message: str
+    message: str = Field(..., min_length=1, max_length=1000)
     session_id: Optional[str] = None
+    user_context_refresh: Optional[bool] = False
+    language: Optional[str] = None
 
 class ChatResponse(BaseModel):
     response: str
     session_id: str
     message_type: str = "text"
-    breathing_exercise: Optional[dict] = None
+    tone: str = "supportive"
+    intervention_type: str = "general_support"
+    crisis_detected: bool = False
+    confidence_score: float = 0.8
+    source: str = "enhanced_v2"
+    timestamp: Optional[str] = None
+    confidence: Optional[float] = None
+    metadata: Optional[Dict[str, Any]] = None
+    audio_response: Optional[str] = None
+    cultural_adaptations: Optional[List[Dict[str, Any]]] = None
+    actions_triggered: Optional[List[Dict[str, Any]]] = None
 
-class MessageResponse(BaseModel):
-    id: str
-    sender: str
-    content: str
-    message_type: str
-    created_at: datetime
-
-class SessionResponse(BaseModel):
-    id: str
-    title: str
-    session_type: str
-    is_active: bool
-    created_at: datetime
-
-# Breathing exercises data
-BREATHING_EXERCISES = {
-    "4-7-8": {
-        "name": "4-7-8 Breathing",
-        "description": "Inhale for 4, hold for 7, exhale for 8",
-        "steps": [
-            {"action": "inhale", "duration": 4, "instruction": "Breathe in slowly through your nose"},
-            {"action": "hold", "duration": 7, "instruction": "Hold your breath"},
-            {"action": "exhale", "duration": 8, "instruction": "Exhale slowly through your mouth"}
-        ],
-        "cycles": 4
-    },
-    "box": {
-        "name": "Box Breathing",
-        "description": "Equal timing for inhale, hold, exhale, hold",
-        "steps": [
-            {"action": "inhale", "duration": 4, "instruction": "Breathe in slowly"},
-            {"action": "hold", "duration": 4, "instruction": "Hold your breath"},
-            {"action": "exhale", "duration": 4, "instruction": "Breathe out slowly"},
-            {"action": "hold", "duration": 4, "instruction": "Hold empty lungs"}
-        ],
-        "cycles": 5
-    },
-    "calm": {
-        "name": "Calming Breath",
-        "description": "Simple rhythm for immediate calm",
-        "steps": [
-            {"action": "inhale", "duration": 3, "instruction": "Breathe in gently"},
-            {"action": "exhale", "duration": 6, "instruction": "Breathe out slowly, releasing tension"}
-        ],
-        "cycles": 6
-    }
-}
-
-# Simple AI response logic
-def generate_ai_response(message: str, conversation_history: List[dict]) -> dict:
-    """Generate AI response based on message content"""
+class ChatbotServiceManager:
+    """Simplified chatbot service manager"""
     
-    message_lower = message.lower()
-    
-    # Check for stress/anxiety keywords
-    stress_keywords = ["stress", "stressed", "anxious", "anxiety", "worried", "panic", "overwhelmed"]
-    sadness_keywords = ["sad", "depressed", "down", "lonely", "hopeless"]
-    breathing_keywords = ["breathe", "breathing", "calm", "relax", "exercise"]
-    
-    # Determine response type and content
-    if any(keyword in message_lower for keyword in breathing_keywords):
-        return {
-            "response": "I'd love to guide you through a breathing exercise. Let's try the 4-7-8 technique - it's very effective for calming the mind and body.",
-            "message_type": "breathing_exercise",
-            "breathing_exercise": BREATHING_EXERCISES["4-7-8"]
-        }
-    
-    elif any(keyword in message_lower for keyword in stress_keywords):
-        return {
-            "response": "I can hear that you're feeling stressed or anxious. That's completely understandable. Would you like to try a quick breathing exercise to help you feel more centered? I can guide you through one right now.",
-            "message_type": "supportive",
-            "breathing_exercise": BREATHING_EXERCISES["box"]
-        }
-    
-    elif any(keyword in message_lower for keyword in sadness_keywords):
-        return {
-            "response": "I'm sorry you're feeling this way. Your feelings are valid, and it's okay to not be okay sometimes. Remember that you're not alone. Would a gentle breathing exercise help you feel a bit more grounded?",
-            "message_type": "supportive",
-            "breathing_exercise": BREATHING_EXERCISES["calm"]
-        }
-    
-    elif "help" in message_lower:
-        return {
-            "response": "I'm here to support you! I can help with:\n• Breathing exercises for stress and anxiety\n• Listening to your concerns\n• Providing coping strategies\n• Guiding you through difficult moments\n\nWhat would be most helpful for you right now?",
-            "message_type": "supportive"
-        }
-    
-    elif any(word in message_lower for word in ["thanks", "thank you", "better", "good"]):
-        return {
-            "response": "I'm so glad to hear that! Remember, taking care of your mental health is an ongoing journey. I'm always here when you need support. Keep up the great work! 💜",
-            "message_type": "encouraging"
-        }
-    
-    else:
-        # General supportive response
-        responses = [
-            "I hear you. Can you tell me more about what you're experiencing?",
-            "That sounds challenging. How are you feeling about that?",
-            "Thank you for sharing that with me. What's been on your mind lately?",
-            "I'm here to listen. Would you like to explore that feeling a bit more?",
-            "It takes courage to reach out. How can I best support you right now?"
-        ]
+    def __init__(self):
+        self.redis_client = None
+        self.event_bus = None
         
-        # Simple selection based on message length
-        response_index = len(message) % len(responses)
-        
-        return {
-            "response": responses[response_index],
-            "message_type": "supportive"
-        }
+    async def initialize(self):
+        """Initialize chatbot service"""
+        try:
+            # Initialize Redis for caching
+            self.redis_client = redis.from_url(AGENT_REDIS_URL, decode_responses=True)
+            await self.redis_client.ping()
+            logger.info("Agent Redis connected successfully")
+        except Exception as e:
+            logger.warning(f"Agent Redis not available: {e}")
+            
+        # Initialize Event Bus for BK-004
+        try:
+            self.event_bus = await get_enhanced_event_bus()
+            logger.info("Enhanced Event Bus connected")
+        except Exception as e:
+            logger.warning(f"Event Bus not available: {e}")
+            
+        logger.info("Chatbot Service Manager initialized successfully")
 
-# Chat endpoints
-@app.post("/api/chatbot/chat", response_model=ChatResponse)
-async def chat_with_bot(
-    chat_request: ChatRequest,
-    current_user: dict = Depends(get_current_user),
-    db: Session = Depends(get_db)
+# Global service manager
+service_manager = ChatbotServiceManager()
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """Application lifespan handler"""
+    # Startup
+    await service_manager.initialize()
+    yield
+    # Shutdown
+    if service_manager.redis_client:
+        await service_manager.redis_client.close()
+
+# Create FastAPI app
+app = FastAPI(
+    title="MantraPath Chatbot Service",
+    description="Enhanced AI Chatbot with Phase 2 Integration",
+    version="2.0.0",
+    lifespan=lifespan
+)
+
+# Configure CORS
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],  # Configure as needed
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+# Health Check Endpoint
+@app.get("/health")
+async def health_check():
+    """Comprehensive health check"""
+    return await enhanced_chatbot_service.health_check()
+
+# Main Chat Endpoint - Single source of truth
+@app.post("/api/chatbot/chat/enhanced", response_model=ChatResponse)
+@app.post("/api/chatbot/enhanced/chat", response_model=ChatResponse)  # Frontend compatibility
+async def enhanced_chat_endpoint(
+    request: ChatRequest,
+    background_tasks: BackgroundTasks,
+    request_obj: Request,  # Add request object to extract headers
+    db: Session = Depends(get_db),
+    current_user: dict = Depends(get_current_user)
 ):
-    """Chat with the AI bot"""
-    
-    # Get or create session
-    if chat_request.session_id:
-        session = db.query(ChatSession).filter(
-            ChatSession.id == chat_request.session_id,
-            ChatSession.user_id == current_user["user_id"]
-        ).first()
-    else:
-        session = None
-    
-    if not session:
-        session = ChatSession(
-            user_id=current_user["user_id"],
-            title="Chat Session",
-            session_type="general"
-        )
-        db.add(session)
-        db.commit()
-        db.refresh(session)
-    
-    # Save user message
-    user_message = ChatMessage(
-        session_id=session.id,
-        sender="user",
-        content=chat_request.message,
-        message_type="text"
-    )
-    db.add(user_message)
-    
-    # Get conversation history
-    history = db.query(ChatMessage).filter(
-        ChatMessage.session_id == session.id
-    ).order_by(ChatMessage.created_at).all()
-    
-    conversation_history = [
-        {"sender": msg.sender, "content": msg.content}
-        for msg in history
-    ]
-    
-    # Generate AI response
-    ai_response = generate_ai_response(chat_request.message, conversation_history)
-    
-    # Save AI message
-    ai_message = ChatMessage(
-        session_id=session.id,
-        sender="assistant",
-        content=ai_response["response"],
-        message_type=ai_response["message_type"],
-        metadata={"breathing_exercise": ai_response.get("breathing_exercise")}
-    )
-    db.add(ai_message)
-    db.commit()
-    
-    return ChatResponse(
-        response=ai_response["response"],
-        session_id=str(session.id),
-        message_type=ai_response["message_type"],
-        breathing_exercise=ai_response.get("breathing_exercise")
-    )
+    """
+    Enhanced chat endpoint - Single consolidated endpoint for all chat interactions
+    Uses Phase 2 enhanced service with all integrations
+    """
+    try:
+        user_id = current_user["user_id"]
+        logger.info(f"Processing enhanced chat request for user {user_id}")
+        
+        # Get or create session
+        session_id = request.session_id
+        if not session_id:
+            new_session = ChatSession(
+                user_id=user_id,
+                title=f"Enhanced Chat - {datetime.utcnow().strftime('%Y-%m-%d %H:%M')}",
+                session_type="enhanced_ai_support",
+                is_active=True,
+                created_at=datetime.utcnow()
+            )
+            db.add(new_session)
+            db.commit()
+            db.refresh(new_session)
+            session_id = str(new_session.id)
+        else:
+            # Ensure session exists
+            existing_session = db.query(ChatSession).filter(ChatSession.id == session_id).first()
+            if not existing_session:
+                new_session = ChatSession(
+                    id=session_id,
+                    user_id=user_id,
+                    title=f"Enhanced Chat - {datetime.utcnow().strftime('%Y-%m-%d %H:%M')}",
+                    session_type="enhanced_ai_support",
+                    is_active=True,
+                    created_at=datetime.utcnow()
+                )
+                db.add(new_session)
+                db.commit()
+                db.refresh(new_session)
 
-@app.get("/api/chatbot/chat/sessions", response_model=List[SessionResponse])
+        # Extract JWT token from request headers
+        jwt_token = None
+        auth_header = request_obj.headers.get("authorization")
+        if auth_header and auth_header.startswith("Bearer "):
+            jwt_token = auth_header.split(" ")[1]
+        
+        # Process message with Phase 2 enhanced service
+        logger.info(f"🚀 CALLING enhanced_chatbot_service.process_message for user {user_id} with token: {jwt_token is not None}")
+        enhanced_response_data = await enhanced_chatbot_service.process_message(
+            message=request.message,
+            user_id=user_id,
+            session_id=session_id,
+            user_language=request.language,
+            jwt_token=jwt_token
+        )
+        
+        logger.info(f"Enhanced service response: {enhanced_response_data.get('status', 'unknown')}")
+        
+        # Convert enhanced response to standard ChatResponse format
+        response = ChatResponse(
+            response=enhanced_response_data.get("response", "I'm here to help. How can I support you today?"),
+            session_id=session_id,
+            message_type="enhanced_chat",
+            tone="supportive",
+            intervention_type="enhanced_support",
+            crisis_detected=enhanced_response_data.get("crisis_level", "none") != "none",
+            confidence_score=0.9,
+            source="enhanced_v2",
+            timestamp=enhanced_response_data.get("timestamp"),
+            metadata={
+                "services_used": enhanced_response_data.get("services_used", []),
+                "processing_time_ms": enhanced_response_data.get("processing_time_ms"),
+                "processing_steps": enhanced_response_data.get("processing_steps", []),
+                "language_detected": enhanced_response_data.get("language_detected"),
+                "crisis_level": enhanced_response_data.get("crisis_level", "none")
+            },
+            audio_response=enhanced_response_data.get("audio_response"),
+            cultural_adaptations=enhanced_response_data.get("cultural_adaptations", []),
+            actions_triggered=enhanced_response_data.get("actions_triggered", [])
+        )
+        
+        # Save interaction to database and publish events
+        background_tasks.add_task(
+            save_chat_interaction,
+            session_id,
+            request.message,
+            enhanced_response_data,
+            user_id
+        )
+        
+        # Publish chat event for real-time updates
+        background_tasks.add_task(
+            publish_chat_event,
+            user_id,
+            session_id,
+            request.message,
+            response.response,
+            enhanced_response_data
+        )
+        
+        return response
+        
+    except Exception as e:
+        logger.error(f"Enhanced chat error: {e}", exc_info=True)
+        
+        # Return fallback response
+        fallback_response = ChatResponse(
+            response=f"I apologize, but I'm experiencing some technical difficulties. Please try again in a moment.",
+            session_id=session_id or "error-session",
+            message_type="error_fallback",
+            source="fallback",
+            confidence_score=0.0,
+            metadata={"error": str(e)}
+        )
+        
+        return fallback_response
+
+async def get_chat_history(session_id: str, limit: int = 10, db: Session = None) -> List[Dict[str, Any]]:
+    """Get recent chat history for context"""
+    try:
+        if not db:
+            return []
+            
+        messages = db.query(ChatMessage)\
+            .filter(ChatMessage.session_id == session_id)\
+            .order_by(ChatMessage.timestamp.desc())\
+            .limit(limit)\
+            .all()
+        
+        history = []
+        for msg in reversed(messages):  # Reverse to get chronological order
+            history.append({
+                "role": "user" if msg.message_type == "user" else "assistant",
+                "content": msg.content,
+                "timestamp": msg.timestamp.isoformat() if msg.timestamp else None,
+                "metadata": msg.metadata or {}
+            })
+        
+        return history
+        
+    except Exception as e:
+        logger.error(f"Error getting chat history: {e}")
+        return []
+
+async def save_chat_interaction(
+    session_id: str,
+    user_message: str,
+    enhanced_response_data: Dict[str, Any],
+    user_id: str
+):
+    """Save chat interaction to database"""
+    try:
+        # Create new database session for background task
+        from sqlalchemy.orm import sessionmaker
+        SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
+        db = SessionLocal()
+        
+        # Save user message
+        user_chat_message = ChatMessage(
+            session_id=session_id,
+            sender="user",
+            content=user_message,
+            message_type="text",
+            message_metadata={"language_detected": enhanced_response_data.get("language_detected")},
+            created_at=datetime.utcnow()
+        )
+        db.add(user_chat_message)
+        
+        # Save bot response
+        bot_chat_message = ChatMessage(
+            session_id=session_id,
+            sender="mitra",
+            content=enhanced_response_data.get("response", ""),
+            message_type="enhanced_chat",
+            message_metadata={
+                "services_used": enhanced_response_data.get("services_used", []),
+                "processing_time_ms": enhanced_response_data.get("processing_time_ms"),
+                "crisis_level": enhanced_response_data.get("crisis_level", "none"),
+                "cultural_adaptations": enhanced_response_data.get("cultural_adaptations", []),
+                "actions_triggered": enhanced_response_data.get("actions_triggered", [])
+            },
+            created_at=datetime.utcnow()
+        )
+        db.add(bot_chat_message)
+        
+        db.commit()
+        logger.info(f"Successfully saved chat interaction for session {session_id}: user_message='{user_message[:50]}...', bot_response='{enhanced_response_data.get('response', '')[:50]}...'")
+        
+    except Exception as e:
+        logger.error(f"Error saving chat interaction: {e}")
+        logger.exception("Full error traceback:")
+        if 'db' in locals():
+            try:
+                db.rollback()
+            except Exception as rollback_error:
+                logger.error(f"Error during rollback: {rollback_error}")
+    finally:
+        if 'db' in locals():
+            try:
+                db.close()
+            except Exception as close_error:
+                logger.error(f"Error closing db: {close_error}")
+
+async def publish_chat_event(
+    user_id: str,
+    session_id: str,
+    user_message: str,
+    bot_response: str,
+    enhanced_response_data: Dict[str, Any]
+):
+    """Publish chat events for real-time updates"""
+    try:
+        if service_manager.event_bus:
+            # Publish user message event
+            await service_manager.event_bus.publish(
+                V3EventChannels.CHAT_MESSAGE,
+                {
+                    "event_type": "user_message",
+                    "user_id": user_id,
+                    "session_id": session_id,
+                    "message": user_message,
+                    "timestamp": datetime.utcnow().isoformat(),
+                    "language": enhanced_response_data.get("language_detected", "en")
+                }
+            )
+            
+            # Publish bot response event
+            await service_manager.event_bus.publish(
+                V3EventChannels.CHAT_RESPONSE,
+                {
+                    "event_type": "bot_response",
+                    "user_id": user_id,
+                    "session_id": session_id,
+                    "response": bot_response,
+                    "timestamp": datetime.utcnow().isoformat(),
+                    "metadata": {
+                        "services_used": enhanced_response_data.get("services_used", []),
+                        "processing_time_ms": enhanced_response_data.get("processing_time_ms"),
+                        "crisis_level": enhanced_response_data.get("crisis_level", "none"),
+                        "language_detected": enhanced_response_data.get("language_detected", "en"),
+                        "audio_response": enhanced_response_data.get("audio_response") is not None
+                    }
+                }
+            )
+            
+            # Publish crisis event if detected
+            if enhanced_response_data.get("crisis_level", "none") != "none":
+                await service_manager.event_bus.publish(
+                    V3EventChannels.CRISIS_ALERT,
+                    {
+                        "event_type": "crisis_detected",
+                        "user_id": user_id,
+                        "session_id": session_id,
+                        "crisis_level": enhanced_response_data.get("crisis_level"),
+                        "message": user_message,
+                        "timestamp": datetime.utcnow().isoformat()
+                    }
+                )
+            
+            logger.info(f"Published chat events for session {session_id}")
+    except Exception as e:
+        logger.error(f"Error publishing chat events: {e}")
+
+# Session Management Endpoints
+@app.post("/api/chatbot/chat/session")
+async def create_chat_session(
+    db: Session = Depends(get_db),
+    current_user: dict = Depends(get_current_user)
+):
+    """Create new chat session"""
+    try:
+        user_id = current_user["user_id"]
+        
+        new_session = ChatSession(
+            user_id=user_id,
+            title=f"Enhanced Chat - {datetime.utcnow().strftime('%Y-%m-%d %H:%M')}",
+            session_type="enhanced_ai_support",
+            is_active=True,
+            created_at=datetime.utcnow()
+        )
+        db.add(new_session)
+        db.commit()
+        db.refresh(new_session)
+        
+        return {
+            "id": new_session.id,
+            "title": new_session.title,
+            "session_type": new_session.session_type,
+            "is_active": new_session.is_active,
+            "created_at": new_session.created_at.isoformat()
+        }
+        
+    except Exception as e:
+        logger.error(f"Error creating chat session: {e}")
+        db.rollback()
+        raise HTTPException(status_code=500, detail="Failed to create chat session")
+
+@app.get("/api/chatbot/chat/sessions")
 async def get_chat_sessions(
-    current_user: dict = Depends(get_current_user),
-    db: Session = Depends(get_db)
+    limit: int = 10,
+    db: Session = Depends(get_db),
+    current_user: dict = Depends(get_current_user)
 ):
     """Get user's chat sessions"""
-    
-    sessions = db.query(ChatSession).filter(
-        ChatSession.user_id == current_user["user_id"]
-    ).order_by(ChatSession.created_at.desc()).limit(10).all()
-    
-    return [
-        SessionResponse(
-            id=str(session.id),
-            title=session.title,
-            session_type=session.session_type,
-            is_active=session.is_active,
-            created_at=session.created_at
-        )
-        for session in sessions
-    ]
+    try:
+        user_id = current_user["user_id"]
+        
+        sessions = db.query(ChatSession)\
+            .filter(ChatSession.user_id == user_id)\
+            .order_by(ChatSession.created_at.desc())\
+            .limit(limit)\
+            .all()
+        
+        return [
+            {
+                "id": str(session.id),
+                "title": session.title,
+                "session_type": session.session_type,
+                "is_active": session.is_active,
+                "created_at": session.created_at.isoformat(),
+                "updated_at": session.updated_at.isoformat() if session.updated_at else None
+            }
+            for session in sessions
+        ]
+        
+    except Exception as e:
+        logger.error(f"Error fetching chat sessions: {e}")
+        raise HTTPException(status_code=500, detail="Failed to fetch chat sessions")
 
 @app.get("/api/chatbot/chat/history")
 async def get_chat_history(
     session_id: str,
-    current_user: dict = Depends(get_current_user),
-    db: Session = Depends(get_db)
+    limit: int = 50,
+    db: Session = Depends(get_db),
+    current_user: dict = Depends(get_current_user)
 ):
     """Get chat history for a session"""
-    
-    # Verify session belongs to user
-    session = db.query(ChatSession).filter(
-        ChatSession.id == session_id,
-        ChatSession.user_id == current_user["user_id"]
-    ).first()
-    
-    if not session:
-        raise HTTPException(status_code=404, detail="Session not found")
-    
-    messages = db.query(ChatMessage).filter(
-        ChatMessage.session_id == session_id
-    ).order_by(ChatMessage.created_at).all()
-    
-    return [
-        MessageResponse(
-            id=str(message.id),
-            sender=message.sender,
-            content=message.content,
-            message_type=message.message_type,
-            created_at=message.created_at
-        )
-        for message in messages
-    ]
+    try:
+        user_id = current_user["user_id"]
+        
+        # Verify session belongs to user
+        session = db.query(ChatSession)\
+            .filter(ChatSession.id == session_id, ChatSession.user_id == user_id)\
+            .first()
+        
+        if not session:
+            raise HTTPException(status_code=404, detail="Session not found")
+        
+        messages = db.query(ChatMessage)\
+            .filter(ChatMessage.session_id == session_id)\
+            .order_by(ChatMessage.created_at.asc())\
+            .limit(limit)\
+            .all()
+        
+        return [
+            {
+                "id": str(message.id),
+                "sender": message.sender,
+                "message_type": message.message_type,
+                "content": message.content,
+                "timestamp": message.created_at.isoformat(),
+                "metadata": message.message_metadata
+            }
+            for message in messages
+        ]
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error fetching chat history: {e}")
+        raise HTTPException(status_code=500, detail="Failed to fetch chat history")
 
-@app.get("/api/chatbot/breathing-exercises")
-async def get_breathing_exercises():
-    """Get available breathing exercises"""
-    return {"exercises": BREATHING_EXERCISES}
+# Status and Monitoring
+@app.get("/api/chatbot/status")
+async def chatbot_status():
+    """Get chatbot service status"""
+    return {
+        "service": "chatbot",
+        "version": "2.0.0-clean",
+        "status": "healthy",
+        "enhanced_service": "active",
+        "timestamp": datetime.utcnow().isoformat()
+    }
 
-@app.post("/api/chatbot/chat/session")
-async def create_chat_session(
-    current_user: dict = Depends(get_current_user),
-    db: Session = Depends(get_db)
-):
-    """Create new chat session"""
-    
-    session = ChatSession(
-        user_id=current_user["user_id"],
-        title="New Chat",
-        session_type="general"
-    )
-    
-    db.add(session)
-    db.commit()
-    db.refresh(session)
-    
-    return SessionResponse(
-        id=str(session.id),
-        title=session.title,
-        session_type=session.session_type,
-        is_active=session.is_active,
-        created_at=session.created_at
-    )
+# Test Endpoint
+@app.get("/api/chatbot/test")
+async def test_chatbot():
+    """Test endpoint for service verification"""
+    try:
+        health_status = await enhanced_chatbot_service.health_check()
+        return {
+            "status": "success",
+            "message": "Enhanced Chatbot Service V2 is operational",
+            "health": health_status,
+            "timestamp": datetime.utcnow().isoformat()
+        }
+    except Exception as e:
+        logger.error(f"Test endpoint error: {e}")
+        return {
+            "status": "error",
+            "error": str(e),
+            "timestamp": datetime.utcnow().isoformat()
+        }
 
-@app.get("/health")
-async def health_check():
-    """Health check endpoint"""
-    return {"status": "healthy", "service": "chatbot-service"}
+# Root endpoint
+@app.get("/")
+async def root():
+    """Root endpoint"""
+    return {
+        "service": "MantraPath Chatbot Service",
+        "version": "2.0.0-clean",
+        "description": "Enhanced AI Chatbot with Phase 2 Integration",
+        "status": "operational",
+        "endpoints": {
+            "chat": "/api/chatbot/chat/enhanced",
+            "health": "/health",
+            "docs": "/docs"
+        }
+    }
 
 if __name__ == "__main__":
     import uvicorn

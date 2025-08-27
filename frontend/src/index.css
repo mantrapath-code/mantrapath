@@ -1,5 +1,4 @@
-@import 'tailwindcss';
-@import "tw-animate-css";
+/* Base component styles - imported by main.css */
 
 @layer base {
   * {
@@ -79,4 +78,14 @@
 @keyframes breathe {
   0%, 100% { transform: scale(1); }
   50% { transform: scale(1.05); }
+}
+
+/* Hide scrollbar for horizontal scroll */
+.scrollbar-hide {
+  -ms-overflow-style: none; /* IE and Edge */
+  scrollbar-width: none; /* Firefox */
+}
+
+.scrollbar-hide::-webkit-scrollbar {
+  display: none; /* Chrome, Safari and Opera */
 }

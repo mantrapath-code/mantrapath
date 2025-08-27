@@ -7,9 +7,10 @@ import { ErrorFallback } from './ErrorFallback.tsx'
 import "./main.css"
 import "./styles/theme.css"
 import "./index.css"
-
-createRoot(document.getElementById('root')!).render(
+// Enhanced Error Boundary with UI feedback
+const rootElement = document.getElementById('root') as HTMLElement;
+createRoot(rootElement).render(
   <ErrorBoundary FallbackComponent={ErrorFallback}>
     <App />
-   </ErrorBoundary>
-)
+  </ErrorBoundary>
+);

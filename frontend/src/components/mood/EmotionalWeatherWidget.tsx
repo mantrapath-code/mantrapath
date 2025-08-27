@@ -1,24 +1,28 @@
-import { useState, useEffect } from "react"
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import { Button } from "@/components/ui/button"
-import { Badge } from "@/components/ui/badge"
+import { useState, useEffect, useCallback } from 'react'
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { Badge } from '@/components/ui/badge'
+import { Button } from '@/components/ui/button'
+import { Skeleton } from '@/components/ui/skeleton'
+import { Alert, AlertDescription } from '@/components/ui/alert'
 import { 
-  Cloud,
-  CloudRain,
-  Sun,
-  CloudSnow,
-  Lightning,
-  Eye,
+  Cloud, 
+  Sun, 
+  CloudRain, 
+  CloudSnow, 
+  Lightning, 
+  ArrowClockwise,
   TrendUp,
-  Shield,
+  TrendDown,
+  Minus,
   Warning,
-  Calendar,
-  ArrowClockwise
-} from "@phosphor-icons/react"
-import { motion, AnimatePresence } from "framer-motion"
-import { apiService } from "@/services/api"
+  Shield,
+  Lightbulb
+} from '@phosphor-icons/react'
+import { motion, AnimatePresence } from 'framer-motion'
+import { toast } from 'sonner'
+import { apiService } from '@/services/api'
 
-interface EmotionalWeather {
+interface EmotionalWeatherData {
   forecast_date: string
   predicted_mood_range: {
     min: number
@@ -30,449 +34,359 @@ interface EmotionalWeather {
   protective_factors: string[]
   recommendations: Array<{
     type: string
-    title?: string
-    description?: string
-    // Legacy format support
-    id?: string
-    text?: string
-    priority?: string
-  }>
-  confidence_score: number
-}
-
-interface WeeklyOutlook {
-  user_id: string
-  week_outlook: Array<{
-    date: string
-    day: string
-    emoji: string
+    title: string
     description: string
   }>
   confidence_score: number
-  generated_at: string
 }
 
-export function EmotionalWeatherWidget({ compact = false }: { compact?: boolean }) {
-  const [todaysForecast, setTodaysForecast] = useState<EmotionalWeather | null>(null)
-  const [weeklyOutlook, setWeeklyOutlook] = useState<WeeklyOutlook | null>(null)
-  const [loading, setLoading] = useState(true)
-  const [showWeekly, setShowWeekly] = useState(false)
+interface EmotionalWeatherWidgetProps {
+  className?: string
+  size?: string
+  showDetails?: boolean
+  autoRefresh?: boolean
+  onWeatherUpdate?: (data: EmotionalWeatherData) => void
+  culturalContext?: {
+    region?: string
+    language?: string
+    weatherMetaphors?: Record<string, string>
+  }
+}
+
+const weatherIcons: Record<string, React.ComponentType<any>> = {
+  '☀️': Sun,
+  '⛅': Cloud,
+  '🌧️': CloudRain,
+  '⛈️': Lightning,
+  '❄️': CloudSnow,
+  'default': Cloud
+}
+
+export function EmotionalWeatherWidget({ 
+  className = "", 
+  size = "default", 
+  showDetails = true, 
+  autoRefresh = false, // Disabled by default to prevent flickering
+  onWeatherUpdate,
+  culturalContext 
+}: EmotionalWeatherWidgetProps) {
+  const [weatherData, setWeatherData] = useState<EmotionalWeatherData | null>(null)
+  const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null)
+  const [isRefreshing, setIsRefreshing] = useState(false)
+
+  const fetchWeatherData = useCallback(async () => {
+    try {
+      setIsLoading(true)
+      setError(null)
+      
+      const response = await apiService.getEmotionalWeather()
+      
+      // Handle different response formats (API Gateway vs direct service)
+      let data = response
+      if (response && typeof response === 'object' && 'body' in response) {
+        // API Gateway format - parse the body
+        data = typeof response.body === 'string' ? JSON.parse(response.body) : response.body
+      }
+      
+      if (data) {
+        // Transform data to match expected format
+        const transformedData: EmotionalWeatherData = {
+          forecast_date: data.forecast_date,
+          predicted_mood_range: data.predicted_mood_range,
+          weather_emoji: data.weather_emoji,
+          weather_description: data.weather_description,
+          risk_factors: data.risk_factors || [],
+          protective_factors: data.protective_factors || [],
+          recommendations: (data.recommendations || []).map((rec: any) => ({
+            type: rec.type || 'general',
+            title: rec.title || rec.text || 'Recommendation',
+            description: rec.description || rec.text || ''
+          })),
+          confidence_score: data.confidence_score
+        }
+        
+        setWeatherData(transformedData)
+        const now = new Date()
+        setLastUpdated(now)
+        onWeatherUpdate?.(transformedData)
+        
+        // Only show toast for manual refreshes, not initial loads
+        if (lastUpdated && (now.getTime() - lastUpdated.getTime()) > 5000) {
+          toast.success('Emotional weather updated', {
+            description: `${data.weather_emoji} ${data.weather_description}`
+          })
+        }
+      } else {
+        setError('No weather data available. Please ensure you are logged in.')
+        setWeatherData(null)
+      }
+    } catch (err: any) {
+      console.error('Failed to fetch emotional weather:', err)
+      
+      if (err.status === 401) {
+        setError('Please log in to view your emotional weather forecast.')
+      } else if (err.status === 403) {
+        setError('Please verify your email to access weather forecasts.')
+      } else {
+        setError('Unable to load emotional weather. Please try again.')
+      }
+      
+      setWeatherData(null)
+      
+      toast.error('Emotional weather temporarily unavailable', {
+        description: 'Using sample data. Please check your connection.'
+      })
+    } finally {
+      setIsLoading(false)
+    }
+  }, [onWeatherUpdate]) // Removed lastUpdated from dependencies to prevent infinite loop
 
   useEffect(() => {
-    loadEmotionalWeather()
-  }, [])
-
-  const loadEmotionalWeather = async () => {
-    try {
-      setLoading(true)
-      setError(null)
-
-      // Load today's forecast
-      const forecast = await apiService.getEmotionalWeather()
-      setTodaysForecast(forecast)
-
-      // Load weekly outlook
-      const weekly = await apiService.getWeeklyWeather()
-      setWeeklyOutlook(weekly)
-
-      setLastUpdated(new Date())
-      
-    } catch (err) {
-      console.error('Failed to load emotional weather:', err)
-      setError("Unable to load weather forecast. Please try again later.")
-    } finally {
-      setLoading(false)
+    fetchWeatherData()
+    
+    // Auto-refresh every 30 minutes if enabled
+    let interval: NodeJS.Timeout | null = null
+    if (autoRefresh) {
+      interval = setInterval(fetchWeatherData, 30 * 60 * 1000)
     }
-  }
+    
+    return () => {
+      if (interval) {
+        clearInterval(interval)
+      }
+      // Clean up state to prevent memory leaks
+      setWeatherData(null)
+      setError(null)
+    }
+  }, [fetchWeatherData, autoRefresh])
 
   const getWeatherIcon = (emoji: string) => {
-    switch (emoji) {
-      case "☀️": return <Sun size={32} className="text-yellow-500" />
-      case "🌤️": return <Cloud size={32} className="text-blue-400" />
-      case "⛅": return <CloudRain size={32} className="text-gray-500" />
-      case "🌧️": return <CloudRain size={32} className="text-blue-600" />
-      case "⛈️": return <Lightning size={32} className="text-purple-600" />
-      default: return <Cloud size={32} className="text-gray-400" />
-    }
+    const IconComponent = weatherIcons[emoji] || weatherIcons.default
+    return IconComponent
   }
 
-  const formatMoodRange = (range: { min: number, max: number }) => {
-    const formatScore = (score: number) => {
-      if (score >= 8) return "High"
-      if (score >= 6) return "Good"
-      if (score >= 4) return "Moderate"
-      if (score >= 2) return "Low"
-      return "Very Low"
-    }
+  const getMoodTrend = () => {
+    if (!weatherData?.predicted_mood_range) return null
     
-    if (Math.abs(range.max - range.min) <= 1) {
-      return formatScore((range.min + range.max) / 2)
-    }
+    const { min, max } = weatherData.predicted_mood_range
+    const average = (min + max) / 2
     
-    return `${formatScore(range.min)} to ${formatScore(range.max)}`
+    if (average >= 7) return { icon: TrendUp, color: 'text-green-600', label: 'Rising' }
+    if (average >= 5) return { icon: Minus, color: 'text-yellow-600', label: 'Stable' }
+    return { icon: TrendDown, color: 'text-red-600', label: 'Declining' }
   }
 
-  const getPriorityColor = (priority: string) => {
-    switch (priority) {
-      case 'high': return 'bg-destructive/10 text-destructive border-destructive/20'
-      case 'urgent': return 'bg-destructive/20 text-destructive border-destructive/30'
-      case 'normal': return 'bg-primary/10 text-primary border-primary/20'
-      case 'low': return 'bg-muted text-muted-foreground border-border'
-      default: return 'bg-primary/10 text-primary border-primary/20'
-    }
+  const formatRelativeTime = (date: Date) => {
+    const now = new Date()
+    const diffInMinutes = Math.floor((now.getTime() - date.getTime()) / (1000 * 60))
+    
+    if (diffInMinutes < 1) return 'Just now'
+    if (diffInMinutes < 60) return `${diffInMinutes}m ago`
+    if (diffInMinutes < 1440) return `${Math.floor(diffInMinutes / 60)}h ago`
+    return date.toLocaleDateString()
   }
 
-  const getConfidenceDescription = (score: number) => {
-    if (score >= 0.8) return "High confidence"
-    if (score >= 0.6) return "Good confidence"
-    if (score >= 0.4) return "Moderate confidence"
-    return "Building confidence"
+  const getLocalizedWeatherDescription = (description: string) => {
+    if (!culturalContext?.weatherMetaphors) return description
+    return culturalContext.weatherMetaphors[description] || description
   }
 
-  if (loading) {
+  if (error && !weatherData) {
     return (
-      <Card className="h-full">
-        <CardHeader className={compact ? "pb-2" : ""}>
-          <CardTitle className={`flex items-center gap-2 ${compact ? "text-base" : ""}`}>
-            <ArrowClockwise size={compact ? 20 : 24} className="animate-spin text-primary" />
-            {compact ? "Loading Weather..." : "Loading Weather Forecast..."}
-          </CardTitle>
-        </CardHeader>
-        <CardContent className={compact ? "pt-0" : ""}>
-          <div className="space-y-3">
-            <div className="h-4 bg-muted rounded animate-pulse"></div>
-            <div className="h-4 bg-muted rounded animate-pulse w-3/4"></div>
-            <div className="h-4 bg-muted rounded animate-pulse w-1/2"></div>
-          </div>
-        </CardContent>
-      </Card>
-    )
-  }
-
-  if (error) {
-    return (
-      <Card className={`h-full border-destructive/20 ${compact ? "" : "border-dashed"}`}>
-        <CardHeader className={compact ? "pb-2" : ""}>
-          <CardTitle className={`flex items-center gap-2 text-destructive ${compact ? "text-base" : ""}`}>
-            <Warning size={compact ? 20 : 24} />
-            {compact ? "Weather Error" : "Weather Unavailable"}
-          </CardTitle>
-        </CardHeader>
-        <CardContent className={compact ? "pt-0" : ""}>
-          <p className="text-sm text-muted-foreground mb-3">{error}</p>
-          <Button onClick={loadEmotionalWeather} size="sm" variant="outline" className="w-full">
-            <ArrowClockwise size={16} className="mr-2" />
-            Try Again
-          </Button>
-        </CardContent>
-      </Card>
-    )
-  }
-
-  if (!todaysForecast) {
-    return (
-      <Card className={compact ? "h-full" : "emotional-weather-card border-dashed"}>
-        <CardHeader className={compact ? "pb-2" : ""}>
-          <CardTitle className={`flex items-center gap-2 ${compact ? "text-base" : ""}`}>
-            <Cloud size={compact ? 20 : 24} className="text-gray-400" />
-            {compact ? "Weather" : "Building Your Weather Profile"}
-          </CardTitle>
-        </CardHeader>
-        <CardContent className={compact ? "pt-0" : ""}>
-          <p className="text-sm text-muted-foreground">
-            {compact 
-              ? "Track more moods for forecasts" 
-              : "Keep tracking your mood for a few more days to get personalized weather forecasts!"
-            }
-          </p>
-        </CardContent>
-      </Card>
-    )
-  }
-
-  if (compact) {
-    return (
-      <Card className="h-full bg-gradient-to-br from-background to-muted/50 border-border shadow-sm">
-        <CardHeader className="pb-2">
-          <div className="flex items-center justify-between">
-            <CardTitle className="flex items-center gap-2 text-base">
-              {getWeatherIcon(todaysForecast.weather_emoji)}
-              Emotional Weather
-            </CardTitle>
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={loadEmotionalWeather}
-              disabled={loading}
-              className="h-7 w-7 p-0"
-            >
-              <ArrowClockwise size={14} className={loading ? "animate-spin" : ""} />
-            </Button>
-          </div>
-        </CardHeader>
-
-        <CardContent className="pt-0 space-y-3">
-          {/* Compact Today's Forecast */}
-          <div className="bg-card/70 backdrop-blur-sm rounded-lg p-3 border border-border/50">
-            <p className="text-sm font-medium text-center mb-1">
-              {todaysForecast.weather_description}
-            </p>
-            <p className="text-xs text-center text-muted-foreground">
-              Expected: {formatMoodRange(todaysForecast.predicted_mood_range)}
-            </p>
-            <div className="flex items-center justify-center mt-2">
-              <Badge variant="outline" className="text-xs">
-                {Math.round(todaysForecast.confidence_score * 100)}% confidence
-              </Badge>
-            </div>
-          </div>
-
-          {/* Quick Risk/Protective Summary */}
-          <div className="grid grid-cols-2 gap-2 text-xs">
-            {todaysForecast.risk_factors.length > 0 && (
-              <div className="bg-destructive/10 text-destructive-foreground p-2 rounded border border-destructive/20">
-                <div className="flex items-center gap-1 font-medium text-destructive mb-1">
-                  <Warning size={12} />
-                  Watch
-                </div>
-                <div className="text-destructive">
-                  {todaysForecast.risk_factors.length} factor{todaysForecast.risk_factors.length !== 1 ? 's' : ''}
-                </div>
-              </div>
-            )}
-            
-            {todaysForecast.protective_factors.length > 0 && (
-              <div className="bg-green-500/10 text-green-900 dark:text-green-100 p-2 rounded border border-green-500/20">
-                <div className="flex items-center gap-1 font-medium text-green-700 dark:text-green-400 mb-1">
-                  <Shield size={12} />
-                  Strengths
-                </div>
-                <div className="text-green-600 dark:text-green-300">
-                  {todaysForecast.protective_factors.length} strength{todaysForecast.protective_factors.length !== 1 ? 's' : ''}
-                </div>
-              </div>
-            )}
-          </div>
-
-          {/* Quick Recommendation */}
-          {todaysForecast.recommendations.length > 0 && (
-            <div className="bg-primary/10 text-primary-foreground p-2 rounded border border-primary/20">
-              <div className="text-xs font-medium text-primary mb-1">
-                💡 Quick Tip
-              </div>
-              <div className="text-xs text-primary/80">
-                {(() => {
-                  const rec = todaysForecast.recommendations[0]
-                  const text = rec.description || rec.text || 'Check your personalized recommendations'
-                  return text.slice(0, 80) + (text.length > 80 ? '...' : '')
-                })()}
-              </div>
-            </div>
-          )}
-
-          {/* View More Link */}
-          <Button 
-            variant="outline" 
-            size="sm" 
-            className="w-full h-7 text-xs"
-            onClick={() => setShowWeekly(!showWeekly)}
-          >
-            {showWeekly ? "Show Today" : "View Weekly"}
-          </Button>
+      <Card className="w-full">
+        <CardContent className="p-6">
+          <Alert>
+            <Warning className="h-4 w-4" />
+            <AlertDescription>
+              {error}
+              <Button 
+                variant="outline" 
+                size="sm" 
+                onClick={fetchWeatherData}
+                className="ml-2"
+              >
+                <ArrowClockwise size={14} />
+                Retry
+              </Button>
+            </AlertDescription>
+          </Alert>
         </CardContent>
       </Card>
     )
   }
 
   return (
-    <motion.div
-      initial={{ opacity: 0, y: 20 }}
-      animate={{ opacity: 1, y: 0 }}
-      className="space-y-4"
-    >
-      <Card className="bg-gradient-to-br from-background to-muted/50 border-border shadow-sm">
-        <CardHeader>
-          <div className="flex items-center justify-between">
-            <CardTitle className="flex items-center gap-2">
-              {getWeatherIcon(todaysForecast.weather_emoji)}
-              Emotional Weather
-            </CardTitle>
+    <Card className="w-full">
+      <CardHeader>
+        <CardTitle className="flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            {weatherData && (
+              <>
+                <span className="text-2xl">{weatherData.weather_emoji}</span>
+                <span>Emotional Weather</span>
+              </>
+            )}
+            {isLoading && (
+              <>
+                <Cloud className="animate-pulse" size={20} />
+                <span>Emotional Weather</span>
+              </>
+            )}
+          </div>
+          <div className="flex items-center gap-2">
+            {lastUpdated && (
+              <Badge variant="outline" className="text-xs">
+                {formatRelativeTime(lastUpdated)}
+              </Badge>
+            )}
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={async () => {
+                setIsRefreshing(true)
+                await fetchWeatherData()
+                setIsRefreshing(false)
+              }}
+              disabled={isLoading || isRefreshing}
+            >
+              <ArrowClockwise size={14} className={isLoading || isRefreshing ? 'animate-spin' : ''} />
+            </Button>
+          </div>
+        </CardTitle>
+      </CardHeader>
+
+      <CardContent className="space-y-4">
+        {isLoading ? (
+          <div className="space-y-3">
+            <Skeleton className="h-4 w-3/4" />
+            <Skeleton className="h-4 w-1/2" />
             <div className="flex gap-2">
-              <Button
-                variant={showWeekly ? "default" : "outline"}
-                size="sm"
-                onClick={() => setShowWeekly(!showWeekly)}
-              >
-                <Calendar size={16} className="mr-1" />
-                {showWeekly ? "Today" : "Week"}
-              </Button>
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={loadEmotionalWeather}
-                disabled={loading}
-              >
-                <ArrowClockwise size={16} className={loading ? "animate-spin" : ""} />
-              </Button>
+              <Skeleton className="h-6 w-20" />
+              <Skeleton className="h-6 w-24" />
             </div>
           </div>
-          
-          {lastUpdated && (
-            <p className="text-xs text-muted-foreground">
-              Updated {lastUpdated.toLocaleTimeString([], { 
-                hour: '2-digit', 
-                minute: '2-digit' 
-              })}
-            </p>
-          )}
-        </CardHeader>
-
-        <CardContent>
+        ) : weatherData ? (
           <AnimatePresence mode="wait">
-            {!showWeekly ? (
-              <motion.div
-                key="today"
-                initial={{ opacity: 0, x: -20 }}
-                animate={{ opacity: 1, x: 0 }}
-                exit={{ opacity: 0, x: 20 }}
-                className="space-y-6"
-              >
-                {/* Today's Forecast */}
-                <div className="today-forecast space-y-3">
-                  <div className="flex items-center justify-between">
-                    <h3 className="text-lg font-semibold">Tomorrow's Outlook</h3>
-                    <Badge variant="outline" className="text-xs">
-                      {getConfidenceDescription(todaysForecast.confidence_score)}
+            <motion.div
+              key={weatherData.forecast_date}
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -20 }}
+              transition={{ duration: 0.3 }}
+              className="space-y-4"
+            >
+              {/* Main Weather Description */}
+              <div className="text-center p-4 bg-gradient-to-r from-blue-50 to-purple-50 rounded-lg">
+                <p className="text-lg font-medium text-gray-800">
+                  {getLocalizedWeatherDescription(weatherData.weather_description)}
+                </p>
+                <div className="flex items-center justify-center gap-2 mt-2">
+                  <span className="text-sm text-gray-600">Mood Range:</span>
+                  <Badge variant="outline">
+                    {weatherData.predicted_mood_range?.min || 1} - {weatherData.predicted_mood_range?.max || 10}
+                  </Badge>
+                  {(() => {
+                    const trend = getMoodTrend()
+                    if (trend) {
+                      const TrendIcon = trend.icon
+                      return (
+                        <Badge variant="outline" className={trend.color}>
+                          <TrendIcon size={12} className="mr-1" />
+                          {trend.label}
+                        </Badge>
+                      )
+                    }
+                    return null
+                  })()}
+                </div>
+              </div>
+
+              {showDetails && (
+                <>
+                  {/* Risk Factors */}
+                  {weatherData.risk_factors && weatherData.risk_factors.length > 0 && (
+                    <div>
+                      <h4 className="flex items-center gap-2 text-sm font-medium text-gray-700 mb-2">
+                        <Warning size={16} className="text-amber-500" />
+                        Watch Out For
+                      </h4>
+                      <div className="flex flex-wrap gap-2">
+                        {weatherData.risk_factors.map((factor, index) => (
+                          <Badge 
+                            key={index} 
+                            variant="outline"
+                            className="bg-amber-50 text-amber-700 border-amber-200"
+                          >
+                            {factor}
+                          </Badge>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Protective Factors */}
+                  {weatherData.protective_factors && weatherData.protective_factors.length > 0 && (
+                    <div>
+                      <h4 className="flex items-center gap-2 text-sm font-medium text-gray-700 mb-2">
+                        <Shield size={16} className="text-green-500" />
+                        Your Strengths
+                      </h4>
+                      <div className="flex flex-wrap gap-2">
+                        {weatherData.protective_factors.map((factor, index) => (
+                          <Badge 
+                            key={index} 
+                            variant="outline"
+                            className="bg-green-50 text-green-700 border-green-200"
+                          >
+                            {factor}
+                          </Badge>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Recommendations */}
+                  {weatherData.recommendations && weatherData.recommendations.length > 0 && (
+                    <div>
+                      <h4 className="flex items-center gap-2 text-sm font-medium text-gray-700 mb-2">
+                        <Lightbulb size={16} className="text-blue-500" />
+                        Recommendations
+                      </h4>
+                      <div className="space-y-2">
+                        {weatherData.recommendations.map((rec, index) => (
+                          <div 
+                            key={index}
+                            className={`p-3 rounded-lg border text-sm ${
+                              rec.type === 'activity' ? 'bg-green-50 border-green-200 text-green-800' :
+                              rec.type === 'self_care' ? 'bg-blue-50 border-blue-200 text-blue-800' :
+                              rec.type === 'social' ? 'bg-purple-50 border-purple-200 text-purple-800' :
+                              rec.type === 'support' ? 'bg-yellow-50 border-yellow-200 text-yellow-800' :
+                              'bg-gray-50 border-gray-200 text-gray-800'
+                            }`}
+                          >
+                            <div className="font-medium mb-1">{rec.title}</div>
+                            <div className="text-xs opacity-80">{rec.description}</div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Confidence Score */}
+                  <div className="flex items-center justify-between text-xs text-gray-500 pt-2 border-t">
+                    <span>Forecast Confidence</span>
+                    <Badge variant="outline">
+                      {Math.round(weatherData.confidence_score * 100)}%
                     </Badge>
                   </div>
-                  
-                  <div className="bg-card/70 backdrop-blur-sm rounded-lg p-4 space-y-2 border border-border/50">
-                    <p className="text-lg font-medium text-center">
-                      {todaysForecast.weather_description}
-                    </p>
-                    <p className="text-center text-muted-foreground">
-                      Expected mood: <span className="font-medium">
-                        {formatMoodRange(todaysForecast.predicted_mood_range)}
-                      </span>
-                    </p>
-                  </div>
-                </div>
-
-                {/* Risk Factors */}
-                {todaysForecast.risk_factors.length > 0 && (
-                  <div className="risk-factors space-y-2">
-                    <h4 className="flex items-center gap-2 text-sm font-medium text-destructive">
-                      <Warning size={16} />
-                      Watch out for:
-                    </h4>
-                    <ul className="space-y-1">
-                      {todaysForecast.risk_factors.map((factor, index) => (
-                        <li key={index} className="text-sm text-destructive bg-destructive/10 p-2 rounded border border-destructive/20">
-                          {factor}
-                        </li>
-                      ))}
-                    </ul>
-                  </div>
-                )}
-
-                {/* Protective Factors */}
-                {todaysForecast.protective_factors.length > 0 && (
-                  <div className="protective-factors space-y-2">
-                    <h4 className="flex items-center gap-2 text-sm font-medium text-green-700 dark:text-green-400">
-                      <Shield size={16} />
-                      Your strengths:
-                    </h4>
-                    <ul className="space-y-1">
-                      {todaysForecast.protective_factors.map((factor, index) => (
-                        <li key={index} className="text-sm text-green-600 dark:text-green-300 bg-green-500/10 p-2 rounded border border-green-500/20">
-                          {factor}
-                        </li>
-                      ))}
-                    </ul>
-                  </div>
-                )}
-
-                {/* Recommendations */}
-                {todaysForecast.recommendations.length > 0 && (
-                  <div className="recommendations space-y-2">
-                    <h4 className="flex items-center gap-2 text-sm font-medium text-primary">
-                      <TrendUp size={16} />
-                      Recommendations:
-                    </h4>
-                    <div className="space-y-2">
-                      {todaysForecast.recommendations.map((rec, index) => (
-                        <div 
-                          key={rec.id || index} 
-                          className={`text-sm p-3 rounded-lg border ${getPriorityColor(rec.priority || 'medium')}`}
-                        >
-                          <div className="flex items-start justify-between gap-2">
-                            <span>{rec.description || rec.text || 'Recommendation'}</span>
-                            {(rec.priority === 'high' || rec.priority === 'urgent') ? (
-                              <Badge variant="destructive" className="text-xs">
-                                {rec.priority}
-                              </Badge>
-                            ) : null}
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                )}
-              </motion.div>
-            ) : (
-              <motion.div
-                key="weekly"
-                initial={{ opacity: 0, x: 20 }}
-                animate={{ opacity: 1, x: 0 }}
-                exit={{ opacity: 0, x: -20 }}
-                className="space-y-4"
-              >
-                <h3 className="text-lg font-semibold">7-Day Outlook</h3>
-                
-                {weeklyOutlook ? (
-                  <div className="space-y-3">
-                    {weeklyOutlook.week_outlook.map((day, index) => (
-                      <div 
-                        key={day.date}
-                        className="flex items-center justify-between p-3 bg-card/70 backdrop-blur-sm rounded-lg border border-border/50"
-                      >
-                        <div className="flex items-center gap-3">
-                          <span className="text-2xl">{day.emoji}</span>
-                          <div>
-                            <div className="font-medium">{day.day}</div>
-                            <div className="text-xs text-muted-foreground">
-                              {new Date(day.date).toLocaleDateString([], { 
-                                month: 'short', 
-                                day: 'numeric' 
-                              })}
-                            </div>
-                          </div>
-                        </div>
-                        <div className="text-right">
-                          <div className="text-sm">{day.description}</div>
-                        </div>
-                      </div>
-                    ))}
-                    
-                    <div className="text-center">
-                      <Badge variant="outline" className="text-xs">
-                        {getConfidenceDescription(weeklyOutlook.confidence_score)} prediction
-                      </Badge>
-                    </div>
-                  </div>
-                ) : (
-                  <div className="text-center text-muted-foreground">
-                    <p>Weekly outlook not available yet.</p>
-                    <p className="text-xs">Keep tracking to unlock weekly predictions!</p>
-                  </div>
-                )}
-              </motion.div>
-            )}
+                </>
+              )}
+            </motion.div>
           </AnimatePresence>
-        </CardContent>
-      </Card>
-    </motion.div>
+        ) : null}
+      </CardContent>
+    </Card>
   )
 }

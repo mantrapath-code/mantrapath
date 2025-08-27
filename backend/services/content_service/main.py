@@ -13,6 +13,7 @@ from pydantic import BaseModel, UUID4, Field
 import json
 import redis
 import random
+import logging
 
 # Import shared modules
 import sys
@@ -22,6 +23,9 @@ sys.path.append(os.path.join(os.path.dirname(__file__), '..', '..'))
 from shared.database import get_db
 from shared.auth import get_current_user, get_optional_user
 from shared.models import Content, Affirmation, Like, User
+# Enhanced Event Bus V3 Integration
+from shared.events import get_enhanced_event_bus, V3EventChannels
+from shared.feature_flags import get_flag_bool
 
 app = FastAPI(
     title="MantraPath Content Service",
@@ -130,6 +134,7 @@ async def get_personalized_feed(
         query = query.filter(Content.difficulty_level == difficulty)
     
     # For authenticated users, personalize based on their preferences
+    bookmarked_categories = None
     if current_user:
         # Get user's bookmarked content categories for personalization
         bookmarked_categories = db.query(Content.category).join(Like).filter(
@@ -178,8 +183,79 @@ async def get_personalized_feed(
     # Cache public feeds for 10 minutes
     if not current_user:
         redis_client.setex(cache_key, 600, json.dumps([item.dict() for item in result], default=str))
+    else:
+        # 📤 E4: Publish content recommendation event for real-time pipeline
+        if get_flag_bool('USE_EVENT_BUS'):
+            try:
+                bus = get_enhanced_event_bus()
+                await bus.publish(
+                    V3EventChannels.CONTENT_RECOMMENDATION_CREATED,
+                    {
+                        "user_id": current_user["user_id"],
+                        "recommended_content_count": len(result),
+                        "categories": list(set(item.category for item in result)),
+                        "content_types": list(set(item.content_type for item in result)),
+                        "personalization_applied": bool(bookmarked_categories),
+                        "recommendation_context": {
+                            "category_filter": category,
+                            "content_type_filter": content_type,
+                            "difficulty_filter": difficulty,
+                            "skip": skip,
+                            "limit": limit
+                        },
+                        "timestamp": datetime.utcnow().isoformat()
+                    },
+                    user_id=current_user["user_id"]
+                )
+                logging.info(f"Published content recommendation event for user {current_user['user_id']}")
+            except Exception as e:
+                logging.error(f"Failed to publish content recommendation event: {e}")
     
     return result
+
+@app.get("/content/wellness")
+async def get_wellness_content(
+    skip: int = Query(0, ge=0),
+    limit: int = Query(20, ge=1, le=50),
+    content_type: Optional[str] = Query(None, pattern="^(article|video|audio|exercise)$"),
+    difficulty: Optional[str] = Query(None, pattern="^(beginner|intermediate|advanced)$"),
+    db: Session = Depends(get_db)
+):
+    """Get wellness and mental health related content"""
+    
+    # Define wellness categories
+    wellness_categories = ["wellness", "mental-health", "mindfulness", "meditation", "self-care", "stress-relief"]
+    
+    query = db.query(Content).filter(
+        and_(
+            Content.category.in_(wellness_categories),
+            Content.is_published == True
+        )
+    )
+    
+    if content_type:
+        query = query.filter(Content.content_type == content_type)
+    
+    if difficulty:
+        query = query.filter(Content.difficulty_level == difficulty)
+    
+    content_items = query.order_by(desc(Content.view_count), desc(Content.created_at)).offset(skip).limit(limit).all()
+    
+    return [
+        ContentSummary(
+            id=item.id,
+            title=item.title,
+            content_type=item.content_type,
+            category=item.category,
+            author=item.author,
+            duration_minutes=item.duration_minutes,
+            difficulty_level=item.difficulty_level,
+            view_count=item.view_count,
+            like_count=item.like_count,
+            created_at=item.created_at
+        )
+        for item in content_items
+    ]
 
 @app.get("/content/{content_id}", response_model=ContentResponse)
 async def get_content(

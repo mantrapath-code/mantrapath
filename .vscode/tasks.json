@@ -1,0 +1,122 @@
+{
+	"version": "2.0.0",
+	"tasks": [
+		{
+			"label": "Start API Gateway Development",
+			"type": "shell",
+			"command": "./scripts/start-dev.sh",
+			"group": "build",
+			"isBackground": true,
+			"options": {
+				"cwd": "${workspaceFolder}/backend/services/api_gateway"
+			},
+			"problemMatcher": [],
+			"presentation": {
+				"echo": true,
+				"reveal": "always",
+				"focus": false,
+				"panel": "shared",
+				"showReuseMessage": true,
+				"clear": false
+			}
+		},
+		{
+			"label": "Start Translation Service Development",
+			"type": "shell",
+			"command": "python main.py",
+			"group": "build",
+			"isBackground": true,
+			"options": {
+				"cwd": "${workspaceFolder}/backend/services/translation_service",
+				"env": {
+					"PYTHONPATH": "${workspaceFolder}/backend",
+					"TRANSLATION_DEBUG": "true",
+					"TRANSLATION_PORT": "8005",
+					"REDIS_URL": "redis://localhost:6379/2"
+				}
+			},
+			"problemMatcher": [],
+			"presentation": {
+				"echo": true,
+				"reveal": "always",
+				"focus": false,
+				"panel": "shared",
+				"showReuseMessage": true,
+				"clear": false
+			}
+		},
+		{
+			"label": "Test Translation Service",
+			"type": "shell",
+			"command": "python -m pytest tests/ -v --cov=. --cov-report=term-missing",
+			"group": "test",
+			"options": {
+				"cwd": "${workspaceFolder}/backend/services/translation_service",
+				"env": {
+					"PYTHONPATH": "${workspaceFolder}/backend"
+				}
+			},
+			"problemMatcher": [],
+			"presentation": {
+				"echo": true,
+				"reveal": "always",
+				"focus": true,
+				"panel": "shared"
+			}
+		},
+		{
+			"label": "Install Translation Service Dependencies",
+			"type": "shell",
+			"command": "pip install -r requirements.txt",
+			"group": "build",
+			"options": {
+				"cwd": "${workspaceFolder}/backend/services/translation_service"
+			},
+			"problemMatcher": [],
+			"presentation": {
+				"echo": true,
+				"reveal": "always",
+				"focus": true,
+				"panel": "shared"
+			}
+		},
+		{
+			"label": "Test AI Event Processor",
+			"type": "shell",
+			"command": "python -m pytest tests/ -v --cov=. --cov-report=term-missing",
+			"group": "test",
+			"options": {
+				"cwd": "${workspaceFolder}/backend/services/ai_event_processor",
+				"env": {
+					"PYTHONPATH": "${workspaceFolder}/backend"
+				}
+			},
+			"problemMatcher": [],
+			"presentation": {
+				"echo": true,
+				"reveal": "always",
+				"focus": true,
+				"panel": "shared"
+			}
+		},
+		{
+			"label": "Test AI Context Store",
+			"type": "shell",
+			"command": "python -m pytest tests/ -v --cov=. --cov-report=term-missing",
+			"group": "test",
+			"options": {
+				"cwd": "${workspaceFolder}/backend/services/ai_context_store",
+				"env": {
+					"PYTHONPATH": "${workspaceFolder}/backend"
+				}
+			},
+			"problemMatcher": [],
+			"presentation": {
+				"echo": true,
+				"reveal": "always",
+				"focus": true,
+				"panel": "shared"
+			}
+		}
+	]
+}

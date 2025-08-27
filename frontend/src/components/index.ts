@@ -1,8 +1,5 @@
 // Centralized component exports - organized by service/feature
 
-// Mood Service Components
-export * from './mood'
-
 // Authentication Components
 export * from './auth'
 

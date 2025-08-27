@@ -1,0 +1,56 @@
+# Voice Service Dependencies
+
+# FastAPI and Server
+fastapi==0.104.1
+uvicorn[standard]==0.24.0
+python-multipart==0.0.6
+
+# Authentication and Security
+httpx==0.25.2
+pydantic[email]==2.5.0
+pydantic-settings==2.1.0
+python-jose[cryptography]==3.3.0
+passlib[bcrypt]==1.7.4
+
+# Audio Processing
+librosa==0.10.1
+soundfile==0.12.1
+pydub==0.25.1
+numpy==1.24.3
+scipy==1.11.4
+
+# Speech Processing APIs
+openai==1.3.7
+elevenlabs==0.2.26
+google-cloud-speech==2.21.0
+azure-cognitiveservices-speech==1.34.0
+
+# Data and Caching
+redis==5.0.1
+pymongo==4.6.0
+motor==3.3.2
+
+# Testing
+pytest==7.4.3
+pytest-asyncio==0.21.1
+pytest-cov==4.1.0
+pytest-mock==3.12.0
+httpx==0.25.2
+faker==20.1.0
+
+# Development and Monitoring
+python-dotenv==1.0.0
+structlog==23.2.0
+prometheus-client==0.19.0
+
+# Audio format support
+wave==0.0.2
+pyaudio==0.2.11
+
+# Language processing
+nltk==3.8.1
+textstat==0.7.3
+
+# Utilities
+python-dateutil==2.8.2
+typing-extensions==4.8.0

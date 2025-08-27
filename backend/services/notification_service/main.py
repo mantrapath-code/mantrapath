@@ -24,6 +24,9 @@ from shared.database import get_db
 from shared.auth import get_current_user
 # from shared.auth import require_admin  # TODO: implement require_admin function
 from shared.models import Notification, User, UserProfile
+# Enhanced Event Bus V3 Integration
+from shared.events import get_enhanced_event_bus, V3EventChannels
+from shared.feature_flags import get_flag_bool
 
 app = FastAPI(
     title="MantraPath Notification Service",
@@ -80,6 +83,124 @@ class ConnectionManager:
             await self.send_personal_message(message, user_id)
 
 manager = ConnectionManager()
+
+# E4: WebSocket Insight Delta Handler
+# Temporarily commented out due to import issues
+# class InsightDeltaHandler:
+#     """Handles real-time insight delta messages via WebSocket"""
+#     
+#     def __init__(self, connection_manager: ConnectionManager):
+#         self.manager = connection_manager
+#         logging.info("🔄 InsightDeltaHandler initialized")
+#     
+#     async def process_insight_delta_event(self, event: Event):
+#         """Process insight delta event and send to user via WebSocket"""
+#         try:
+#             user_id = event.user_id
+#             delta_data = event.data
+#             
+#             if not user_id:
+#                 return
+#             
+#             # Create WebSocket message for insight delta
+#             message = {
+#                 "type": "insight_delta",
+#                 "timestamp": event.timestamp.isoformat() if event.timestamp else datetime.now().isoformat(),
+#                 "data": delta_data
+#             }
+#             
+#             # Send to user via WebSocket
+#             await self.manager.send_personal_message(message, user_id)
+#             logging.info(f"📊 Sent insight delta to user {user_id} via WebSocket")
+#             
+#         except Exception as e:
+#             logging.error(f"❌ Error processing insight delta event: {e}")
+
+# Initialize insight delta handler
+# insight_delta_handler = InsightDeltaHandler(manager)
+
+# E4: Setup event subscriptions
+@app.on_event("startup")
+async def startup_event():
+    """Setup real-time event subscriptions"""
+    if get_flag_bool('USE_EVENT_BUS'):
+        await setup_event_subscriptions()
+
+async def setup_event_subscriptions():
+    """Setup event subscriptions for various service events"""
+    try:
+        bus = get_enhanced_event_bus()
+        
+        # Subscribe to insight delta events
+        await bus.subscribe(
+            V3EventChannels.INSIGHT_DELTA,
+            process_insight_delta_event
+        )
+        
+        # Subscribe to mood/journal events for context-aware notifications
+        await bus.subscribe(
+            V3EventChannels.MOOD_ENTRY_CREATED,
+            process_mood_event
+        )
+        
+        await bus.subscribe(
+            V3EventChannels.COMMUNITY_POST_CREATED,
+            process_community_event
+        )
+        
+        logging.info("🔔 Event subscriptions established in notification service")
+        
+    except Exception as e:
+        logging.error(f"❌ Failed to setup event subscriptions: {e}")
+
+@app.on_event("shutdown")
+async def shutdown_event():
+    """Cleanup on shutdown"""
+    try:
+        # Enhanced event bus cleanup handled automatically
+        logging.info("🛑 Event subscriptions cleaned up in notification service")
+    except Exception as e:
+        logging.error(f"❌ Error during shutdown cleanup: {e}")
+
+# Event handlers for subscribed events
+async def process_insight_delta_event(event):
+    """Process insight delta events for context-aware notifications"""
+    try:
+        user_id = event.user_id
+        insight_data = event.data
+        
+        # Create insight notification
+        if insight_data.get('insights'):
+            await create_insight_notification(user_id, insight_data)
+            
+    except Exception as e:
+        logging.error(f"Failed to process insight delta event: {e}")
+
+async def process_mood_event(event):
+    """Process mood events for wellness check notifications"""
+    try:
+        user_id = event.user_id
+        mood_data = event.data
+        
+        # Send encouraging notification for mood entries
+        mood_score = mood_data.get('mood_score', 5)
+        if mood_score <= 3:
+            await create_wellness_check_notification(user_id, mood_score)
+            
+    except Exception as e:
+        logging.error(f"Failed to process mood event: {e}")
+
+async def process_community_event(event):
+    """Process community events for engagement notifications"""
+    try:
+        user_id = event.user_id
+        post_data = event.data
+        
+        # Notify about community engagement
+        await create_community_engagement_notification(user_id, post_data)
+        
+    except Exception as e:
+        logging.error(f"Failed to process community event: {e}")
 
 # Pydantic models
 class NotificationCreate(BaseModel):
@@ -303,6 +424,47 @@ async def broadcast_notification(
     return {
         "message": f"Broadcast notification queued for {len(notification_ids)} users"
     }
+
+@app.get("/notifications", response_model=List[NotificationResponse])
+async def get_notifications(
+    skip: int = 0,
+    limit: int = 20,
+    unread_only: bool = False,
+    notification_type: Optional[str] = None,
+    db: Session = Depends(get_db),
+    current_user: Dict[str, Any] = Depends(get_current_user)
+):
+    """Get user's notifications (alias for /notify/recent)"""
+    
+    query = db.query(Notification).filter(
+        Notification.user_id == current_user["user_id"]
+    )
+    
+    if unread_only:
+        query = query.filter(Notification.is_read == False)
+    
+    if notification_type:
+        query = query.filter(Notification.notification_type == notification_type)
+    
+    notifications = query.order_by(
+        desc(Notification.created_at)
+    ).offset(skip).limit(limit).all()
+    
+    return [
+        NotificationResponse(
+            id=notification.id,
+            title=notification.title,
+            message=notification.message,
+            notification_type=notification.notification_type,
+            action_url=notification.action_url,
+            priority=notification.priority,
+            is_read=notification.is_read,
+            is_sent=notification.is_sent,
+            sent_at=notification.sent_at,
+            created_at=notification.created_at
+        )
+        for notification in notifications
+    ]
 
 @app.get("/notify/recent", response_model=List[NotificationResponse])
 async def get_recent_notifications(
@@ -556,8 +718,39 @@ async def process_notification_immediately(notification_id: str, db: Session, us
         notification.sent_at = datetime.utcnow()
         db.commit()
         
+        # Update notification status
+        notification.is_sent = True
+        notification.sent_at = datetime.utcnow()
+        db.commit()
+        
+        # Track delivery channels for event publishing
+        delivery_channels = ["database"]
+        
+        # 📤 E4: Publish notification sent event for real-time pipeline
+        if get_flag_bool('USE_EVENT_BUS'):
+            try:
+                bus = get_enhanced_event_bus()
+                await bus.publish(
+                    V3EventChannels.NOTIFICATION_SENT,
+                    {
+                        "notification_id": str(notification.id),
+                        "user_id": str(notification.user_id),
+                        "title": notification.title,
+                        "message": notification.message,
+                        "notification_type": notification.notification_type,
+                        "priority": notification.priority,
+                        "sent_at": notification.sent_at.isoformat(),
+                        "delivery_channels": delivery_channels
+                    },
+                    user_id=str(notification.user_id)
+                )
+                logging.info(f"Published notification sent event for user {notification.user_id}")
+            except Exception as e:
+                logging.error(f"Failed to publish notification sent event: {e}")
+        
         # Send real-time notification via WebSocket
         if user_id:
+            delivery_channels.append("websocket")
             websocket_message = WebSocketMessage(
                 type="notification",
                 data={
@@ -571,6 +764,24 @@ async def process_notification_immediately(notification_id: str, db: Session, us
                 }
             )
             await manager.send_personal_message(websocket_message.dict(), user_id)
+            
+            # 📤 E4: Publish notification delivered event for real-time pipeline
+            if get_flag_bool('USE_EVENT_BUS'):
+                try:
+                    bus = get_enhanced_event_bus()
+                    await bus.publish(
+                        V3EventChannels.NOTIFICATION_DELIVERED,
+                        {
+                            "notification_id": str(notification.id),
+                            "user_id": str(notification.user_id),
+                            "delivery_method": "websocket",
+                            "delivered_at": datetime.utcnow().isoformat()
+                        },
+                        user_id=str(notification.user_id)
+                    )
+                    logging.info(f"Published notification delivered event for user {notification.user_id}")
+                except Exception as e:
+                    logging.error(f"Failed to publish notification delivered event: {e}")
 
 async def queue_notification_for_processing(notification_id: str, user_id: str = None):
     """Queue notification for batch processing"""
