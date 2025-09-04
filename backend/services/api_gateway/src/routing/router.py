@@ -194,6 +194,17 @@ class RequestRouter:
                 auth_required=True
             ),
             
+            # Voice-enabled Chatbot Routes (must come before general voice routes)
+            RouteRule(
+                path_pattern=r"^/voice/chatbot/.*",
+                methods=[HTTPMethod.GET, HTTPMethod.POST],
+                service_name="chatbot",
+                strip_prefix=True,  # Strip /voice prefix, forward /chatbot/* to chatbot service
+                timeout=60,  # Longer timeout for AI processing
+                retries=1,
+                auth_required=True
+            ),
+            
             # Content Service Routes
             RouteRule(
                 path_pattern=r"^/content/.*",

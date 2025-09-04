@@ -1,0 +1,124 @@
+# Enhanced Chatbot Service Docker Configuration
+
+# Add to docker-compose.yml after line 100:
+
+  # Enhanced Chatbot Service (V3 with Voice Integration)
+  chatbot-service-enhanced:
+    build:
+      context: .
+      dockerfile: services/chatbot_service/Dockerfile
+    ports:
+      - "8104:8004"  # Use different port to avoid conflicts
+    environment:
+      - SERVICE_NAME=chatbot_service_enhanced
+      - SERVICE_VERSION=3.0.0
+      - LOG_LEVEL=INFO
+      - POSTGRES_URL=postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
+      - REDIS_URL=redis://redis:6379/1
+      - NATS_URL=nats://nats:4222
+      
+      # Voice Integration
+      - VOICE_SERVICE_URL=http://voice-service:8011
+      - VOICE_EVENT_PROCESSOR_URL=http://voice-event-processor-enhanced:8115
+      - VOICE_INTEGRATION_ENABLED=true
+      - VOICE_RESPONSE_DEFAULT=true
+      
+      # Multi-language Support
+      - TRANSLATION_SERVICE_URL=http://translation-service:8010
+      - SUPPORTED_LANGUAGES=en,hi,es,fr,de,it,pt,ru,ja,zh,ko,ar,bn,ta,te,gu,mr,pa,ur,ml,kn,as
+      - AUTO_LANGUAGE_DETECTION=true
+      - CULTURAL_ADAPTATION_ENABLED=true
+      
+      # Platform Context Integration
+      - MOOD_SERVICE_URL=http://mood-service:8003
+      - PROFILE_SERVICE_URL=http://profile-service:8002
+      - CONTENT_SERVICE_URL=http://content-service:8005
+      - COMMUNITY_SERVICE_URL=http://community-service:8006
+      - MEMORY_SERVICE_URL=http://memory-service:8017
+      - ACTION_ORCHESTRATOR_URL=http://action-orchestrator:8012
+      - AI_CONTEXT_STORE_URL=http://ai-context-store:8013
+      - AI_EVENT_PROCESSOR_URL=http://ai-event-processor:8014
+      
+      # Enhanced Features
+      - PLATFORM_CONTEXT_ENABLED=true
+      - CONVERSATION_MEMORY_ENABLED=true
+      - CRISIS_DETECTION_ENABLED=true
+      - EMOTIONAL_INTELLIGENCE_ENABLED=true
+      - CONTEXT_CACHE_TTL=600
+      
+    volumes:
+      - ./services/chatbot_service/main_enhanced_voice.py:/app/main.py
+      - ./shared:/app/shared
+      - ./logs:/app/logs
+    networks:
+      - mantrapath-network
+    depends_on:
+      - postgres
+      - redis
+      - nats
+      - voice-service
+      - translation-service
+      - mood-service
+      - profile-service
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8004/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+  # Enhanced Voice Event Processor (V2 with Multi-language Support)
+  voice-event-processor-enhanced:
+    build:
+      context: .
+      dockerfile: services/voice_event_processor/Dockerfile
+    ports:
+      - "8115:8015"  # Use different port to avoid conflicts
+    environment:
+      - SERVICE_NAME=voice_event_processor_enhanced
+      - SERVICE_VERSION=2.0.0
+      - LOG_LEVEL=INFO
+      - REDIS_URL=redis://redis:6379/3
+      - NATS_URL=nats://nats:4222
+      
+      # Voice Processing
+      - VOICE_SERVICE_URL=http://voice-service:8011
+      - MODELS_SERVICE_URL=http://models-service:8080
+      - VOICE_STREAM_ENABLED=true
+      - VOICE_CHUNK_SIZE=1024
+      - VOICE_TIMEOUT=30
+      
+      # Language Support
+      - TRANSLATION_SERVICE_URL=http://translation-service:8010
+      - MULTI_LANGUAGE_ENABLED=true
+      - LANGUAGE_AUTO_DETECTION=true
+      
+      # AI Integration
+      - AI_EVENT_PROCESSOR_URL=http://ai-event-processor:8014
+      - EMOTION_ANALYSIS_ENABLED=true
+      - CULTURAL_ANALYSIS_ENABLED=true
+      
+      # Enhanced Chatbot Integration
+      - CHATBOT_SERVICE_URL=http://chatbot-service-enhanced:8004
+      - MEMORY_SERVICE_URL=http://memory-service:8017
+      
+    volumes:
+      - ./services/voice_event_processor/main_enhanced.py:/app/main.py
+      - ./shared:/app/shared
+      - ./logs:/app/logs
+    networks:
+      - mantrapath-network
+    depends_on:
+      - nats
+      - redis
+      - voice-service
+      - translation-service
+      - ai-event-processor
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8015/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s

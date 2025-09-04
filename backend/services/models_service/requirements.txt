@@ -18,19 +18,34 @@ pydub==0.25.1
 torch>=2.0.0
 torchaudio>=2.0.0
 numpy>=1.24.0
+
+# Transformers and Language Models
+transformers>=4.35.0
+accelerate>=0.24.0
+tokenizers>=0.15.0
+sentencepiece>=0.1.99
+
+# For Phi-3 model support
+einops>=0.7.0
+# flash-attn>=2.3.0  # Optional, for faster attention - disabled for build compatibility
 scipy>=1.11.0
 
-# Speech-to-Text Models
+# Speech-to-Text Models - Focus on core voice service needs
 openai-whisper==20231117
 vosk==0.3.44
 
-# TTS Models - Simple and reliable
+# TTS Models - Enhanced for voice service
+TTS==0.22.0  # Coqui TTS for high-quality voice synthesis
 gTTS==2.4.0
 pyttsx3==2.90
 
-# NLP Libraries
+# NLP Libraries - Voice service essentials
 transformers==4.36.0
 sentence-transformers==2.2.2
+datasets==2.14.0  # Hugging Face datasets for model training
+accelerate==0.24.0  # For faster model loading
+spacy==3.7.0  # For NLP processing (without Japanese)
+textblob==0.17.1  # For sentiment analysis
 
 # Utilities
 python-multipart==0.0.6
@@ -48,6 +63,4 @@ faker==20.1.0
 
 # System utilities
 psutil==5.9.6
-
-# Logging
 loguru==0.7.2

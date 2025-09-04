@@ -1,35 +1,41 @@
 """
-MantraPath Chatbot Service - Cleaned and Consolidated
-Single source of truth for chatbot endpoints with proper Phase 2 integration
+Enhanced Chatbot Service with Voice Integration and Multi-Language Support
+
+This service provides comprehensive voice-enabled chatbot functionality with:
+- Multi-language voice support with auto-detection
+- Platform-aware context (mood, journal, community data)
+- Cultural and sentiment analysis
+- Action orchestrator integration
+- Advanced conversation memory
+- Real-time voice processing
+
+Author: MantraPath Development Team
+Version: 3.0.0 (Voice Enhanced)
 """
 
 import asyncio
 import logging
 import os
 import sys
-import json
-from datetime import datetime
-from typing import List, Optional, Dict, Any, Union
+from datetime import datetime, timedelta
+from typing import List, Optional, Dict, Any
 from contextlib import asynccontextmanager
+import httpx
+import json
 
-from fastapi import FastAPI, Depends, HTTPException, BackgroundTasks, Request
+from fastapi import FastAPI, Depends, HTTPException, BackgroundTasks, UploadFile, File, Form
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 from pydantic import BaseModel, Field
-import httpx
-import redis.asyncio as redis
 
-# Add parent directories to path
+# Add parent directories to path for shared imports
 sys.path.append('/app')
 sys.path.append('/app/shared')
 
-from shared.database import get_db, engine, SessionLocal
+from shared.database import get_db, engine
 from shared.models import ChatSession, ChatMessage, Base
 from shared.auth import get_current_user
-from shared.events import get_enhanced_event_bus, V3EventChannels
-
-# Phase 2 Enhanced Service
-from src.enhanced_chatbot_service_v2 import enhanced_chatbot_service
 
 # Configure logging
 logging.basicConfig(
@@ -41,384 +47,376 @@ logger = logging.getLogger(__name__)
 # Create database tables
 Base.metadata.create_all(bind=engine)
 
-# Configuration
-AGENT_REDIS_URL = os.getenv("AGENT_REDIS_URL", "redis://agent-redis:6379")
+# Service URLs configuration for translation integration via Models Service
+SERVICE_URLS = {
+    'models_service': os.getenv('MODELS_SERVICE_URL', 'http://models-service:8080'),
+    'voice_service': os.getenv('VOICE_SERVICE_URL', 'http://localhost:8011'),
+}
 
-class ChatRequest(BaseModel):
-    message: str = Field(..., min_length=1, max_length=1000)
-    session_id: Optional[str] = None
-    user_context_refresh: Optional[bool] = False
-    language: Optional[str] = None
+import asyncio
+import logging
+import os
+import sys
+from datetime import datetime
+from typing import List, Optional
+from contextlib import asynccontextmanager
 
-class ChatResponse(BaseModel):
-    response: str
-    session_id: str
-    message_type: str = "text"
-    tone: str = "supportive"
-    intervention_type: str = "general_support"
-    crisis_detected: bool = False
-    confidence_score: float = 0.8
-    source: str = "enhanced_v2"
-    timestamp: Optional[str] = None
-    confidence: Optional[float] = None
-    metadata: Optional[Dict[str, Any]] = None
-    audio_response: Optional[str] = None
-    cultural_adaptations: Optional[List[Dict[str, Any]]] = None
-    actions_triggered: Optional[List[Dict[str, Any]]] = None
+from fastapi import FastAPI, Depends, HTTPException, BackgroundTasks
+from fastapi.middleware.cors import CORSMiddleware
+from sqlalchemy.orm import Session
+from pydantic import BaseModel, Field
 
-class ChatbotServiceManager:
-    """Simplified chatbot service manager"""
-    
-    def __init__(self):
-        self.redis_client = None
-        self.event_bus = None
-        
-    async def initialize(self):
-        """Initialize chatbot service"""
-        try:
-            # Initialize Redis for caching
-            self.redis_client = redis.from_url(AGENT_REDIS_URL, decode_responses=True)
-            await self.redis_client.ping()
-            logger.info("Agent Redis connected successfully")
-        except Exception as e:
-            logger.warning(f"Agent Redis not available: {e}")
-            
-        # Initialize Event Bus for BK-004
-        try:
-            self.event_bus = await get_enhanced_event_bus()
-            logger.info("Enhanced Event Bus connected")
-        except Exception as e:
-            logger.warning(f"Event Bus not available: {e}")
-            
-        logger.info("Chatbot Service Manager initialized successfully")
+# Add parent directories to path for shared imports
+sys.path.append('/app')
+sys.path.append('/app/shared')
 
-# Global service manager
-service_manager = ChatbotServiceManager()
+from shared.database import get_db, engine
+from shared.models import ChatSession, ChatMessage, Base
+from shared.auth import get_current_user
+
+# Import our intelligent engine components
+from src.intelligent_engine import (
+    MoodAwareResponder, 
+    ServiceIntegrator, 
+    ContextAnalyzer, 
+    ResponseGenerator
+)
+
+# Configure logging
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+)
+logger = logging.getLogger(__name__)
+
+# Create database tables
+Base.metadata.create_all(bind=engine)
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    """Application lifespan handler"""
-    # Startup
-    await service_manager.initialize()
+    """
+    Application lifespan manager for startup and shutdown tasks
+    """
+    # Startup tasks
+    logger.info("Starting MantraPath Intelligent Chatbot Service v2.0.0 with Translation Support")
+    
+    # Initialize HTTP client for service communication
+    app.state.http_client = httpx.AsyncClient(timeout=30.0)
+    
+    # Initialize intelligent engine components
+    app.state.response_generator = ResponseGenerator()
+    logger.info("Intelligent engine with translation support initialized successfully")
+    
+    # Startup health check
+    engine_status = app.state.response_generator.get_engine_status()
+    logger.info(f"Engine status: {engine_status}")
+    
     yield
-    # Shutdown
-    if service_manager.redis_client:
-        await service_manager.redis_client.close()
+    
+    # Shutdown tasks
+    await app.state.http_client.aclose()
+    logger.info("Shutting down MantraPath Intelligent Chatbot Service")
 
-# Create FastAPI app
+# Initialize FastAPI application with intelligent capabilities
 app = FastAPI(
-    title="MantraPath Chatbot Service",
-    description="Enhanced AI Chatbot with Phase 2 Integration",
+    title="MantraPath Intelligent Chatbot Service",
+    description="AI-powered, mood-aware chatbot with comprehensive mental health support",
     version="2.0.0",
     lifespan=lifespan
 )
 
-# Configure CORS
+# Configure CORS for frontend integration
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # Configure as needed
+    allow_origins=[
+        os.getenv("FRONTEND_URL", "http://localhost:5173"),
+        os.getenv("API_GATEWAY_URL", "http://localhost:8000")
+    ],  # Frontend URLs
     allow_credentials=True,
-    allow_methods=["*"],
+    allow_methods=["GET", "POST", "PUT", "DELETE"],
     allow_headers=["*"],
 )
 
-# Health Check Endpoint
-@app.get("/health")
-async def health_check():
-    """Comprehensive health check"""
-    return await enhanced_chatbot_service.health_check()
+# --- Pydantic Models for API ---
 
-# Main Chat Endpoint - Single source of truth
-@app.post("/api/chatbot/chat/enhanced", response_model=ChatResponse)
-@app.post("/api/chatbot/enhanced/chat", response_model=ChatResponse)  # Frontend compatibility
-async def enhanced_chat_endpoint(
-    request: ChatRequest,
-    background_tasks: BackgroundTasks,
-    request_obj: Request,  # Add request object to extract headers
-    db: Session = Depends(get_db),
-    current_user: dict = Depends(get_current_user)
-):
+class IntelligentChatRequest(BaseModel):
     """
-    Enhanced chat endpoint - Single consolidated endpoint for all chat interactions
-    Uses Phase 2 enhanced service with all integrations
+    Request model for intelligent chat interactions with multi-language support
+    
+    Attributes:
+        message (str): User's message text
+        session_id (Optional[str]): Existing session ID or None for new session
+        user_context_refresh (bool): Force refresh of user context from services
+        language (Optional[str]): Input language (auto-detect if not provided)
+        preferred_response_language (Optional[str]): Preferred response language
+    """
+    message: str = Field(..., description="User's message text", min_length=1, max_length=1000)
+    session_id: Optional[str] = Field(None, description="Existing chat session ID")
+    user_context_refresh: bool = Field(False, description="Force refresh user context")
+    language: Optional[str] = Field("auto", description="Input language or 'auto' for detection")
+    preferred_response_language: Optional[str] = Field(None, description="Preferred response language")
+
+class IntelligentChatResponse(BaseModel):
+    """
+    Response model for intelligent chat interactions with multi-language support
+    
+    Attributes:
+        response (str): AI-generated response text
+        session_id (str): Chat session identifier
+        message_type (str): Type of response (text, breathing_exercise, crisis, etc.)
+        tone (str): Response tone and style
+        intervention_type (str): Type of intervention provided
+        breathing_exercise (Optional[dict]): Breathing exercise data if applicable
+        follow_up_suggestions (List[str]): Suggested follow-up actions
+        crisis_detected (bool): Whether crisis situation was detected
+        confidence_score (float): AI confidence in response appropriateness
+        context_summary (dict): Summary of context used for response generation
+        detected_language (str): Detected language of user input
+        response_language (str): Language of the response
+        translation_used (bool): Whether translation was used
+    """
+    response: str
+    session_id: str
+    message_type: str = "intelligent_text"
+    tone: str
+    intervention_type: str
+    breathing_exercise: Optional[dict] = None
+    follow_up_suggestions: List[str] = []
+    crisis_detected: bool = False
+    confidence_score: float
+    context_summary: dict
+    detected_language: str = "en"
+    response_language: str = "en"
+    translation_used: bool = False
+
+class ChatAnalyticsResponse(BaseModel):
+    """Response model for chat analytics"""
+    total_messages: int
+    session_count: int
+    average_response_confidence: float
+    crisis_interactions: int
+    most_common_intervention: str
+    user_engagement_score: float
+
+class EngineStatusResponse(BaseModel):
+    """Response model for engine status"""
+    status: str
+    version: str
+    components: dict
+    uptime_seconds: float
+    total_responses_generated: int
+
+# --- Helper Functions ---
+
+async def get_conversation_history(
+    session_id: str, 
+    db: Session, 
+    limit: int = 10
+) -> List[dict]:
+    """
+    Retrieve conversation history for context
+    
+    Args:
+        session_id (str): Chat session ID
+        db (Session): Database session
+        limit (int): Maximum number of messages to retrieve
+        
+    Returns:
+        List[dict]: Conversation history
     """
     try:
-        user_id = current_user["user_id"]
-        logger.info(f"Processing enhanced chat request for user {user_id}")
-        
-        # Get or create session
-        session_id = request.session_id
-        if not session_id:
-            new_session = ChatSession(
-                user_id=user_id,
-                title=f"Enhanced Chat - {datetime.utcnow().strftime('%Y-%m-%d %H:%M')}",
-                session_type="enhanced_ai_support",
-                is_active=True,
-                created_at=datetime.utcnow()
-            )
-            db.add(new_session)
-            db.commit()
-            db.refresh(new_session)
-            session_id = str(new_session.id)
-        else:
-            # Ensure session exists
-            existing_session = db.query(ChatSession).filter(ChatSession.id == session_id).first()
-            if not existing_session:
-                new_session = ChatSession(
-                    id=session_id,
-                    user_id=user_id,
-                    title=f"Enhanced Chat - {datetime.utcnow().strftime('%Y-%m-%d %H:%M')}",
-                    session_type="enhanced_ai_support",
-                    is_active=True,
-                    created_at=datetime.utcnow()
-                )
-                db.add(new_session)
-                db.commit()
-                db.refresh(new_session)
-
-        # Extract JWT token from request headers
-        jwt_token = None
-        auth_header = request_obj.headers.get("authorization")
-        if auth_header and auth_header.startswith("Bearer "):
-            jwt_token = auth_header.split(" ")[1]
-        
-        # Process message with Phase 2 enhanced service
-        logger.info(f"🚀 CALLING enhanced_chatbot_service.process_message for user {user_id} with token: {jwt_token is not None}")
-        enhanced_response_data = await enhanced_chatbot_service.process_message(
-            message=request.message,
-            user_id=user_id,
-            session_id=session_id,
-            user_language=request.language,
-            jwt_token=jwt_token
-        )
-        
-        logger.info(f"Enhanced service response: {enhanced_response_data.get('status', 'unknown')}")
-        
-        # Convert enhanced response to standard ChatResponse format
-        response = ChatResponse(
-            response=enhanced_response_data.get("response", "I'm here to help. How can I support you today?"),
-            session_id=session_id,
-            message_type="enhanced_chat",
-            tone="supportive",
-            intervention_type="enhanced_support",
-            crisis_detected=enhanced_response_data.get("crisis_level", "none") != "none",
-            confidence_score=0.9,
-            source="enhanced_v2",
-            timestamp=enhanced_response_data.get("timestamp"),
-            metadata={
-                "services_used": enhanced_response_data.get("services_used", []),
-                "processing_time_ms": enhanced_response_data.get("processing_time_ms"),
-                "processing_steps": enhanced_response_data.get("processing_steps", []),
-                "language_detected": enhanced_response_data.get("language_detected"),
-                "crisis_level": enhanced_response_data.get("crisis_level", "none")
-            },
-            audio_response=enhanced_response_data.get("audio_response"),
-            cultural_adaptations=enhanced_response_data.get("cultural_adaptations", []),
-            actions_triggered=enhanced_response_data.get("actions_triggered", [])
-        )
-        
-        # Save interaction to database and publish events
-        background_tasks.add_task(
-            save_chat_interaction,
-            session_id,
-            request.message,
-            enhanced_response_data,
-            user_id
-        )
-        
-        # Publish chat event for real-time updates
-        background_tasks.add_task(
-            publish_chat_event,
-            user_id,
-            session_id,
-            request.message,
-            response.response,
-            enhanced_response_data
-        )
-        
-        return response
-        
-    except Exception as e:
-        logger.error(f"Enhanced chat error: {e}", exc_info=True)
-        
-        # Return fallback response
-        fallback_response = ChatResponse(
-            response=f"I apologize, but I'm experiencing some technical difficulties. Please try again in a moment.",
-            session_id=session_id or "error-session",
-            message_type="error_fallback",
-            source="fallback",
-            confidence_score=0.0,
-            metadata={"error": str(e)}
-        )
-        
-        return fallback_response
-
-async def get_chat_history(session_id: str, limit: int = 10, db: Session = None) -> List[Dict[str, Any]]:
-    """Get recent chat history for context"""
-    try:
-        if not db:
-            return []
-            
-        messages = db.query(ChatMessage)\
-            .filter(ChatMessage.session_id == session_id)\
-            .order_by(ChatMessage.timestamp.desc())\
-            .limit(limit)\
+        messages = (
+            db.query(ChatMessage)
+            .filter(ChatMessage.session_id == session_id)
+            .order_by(ChatMessage.created_at.desc())
+            .limit(limit)
             .all()
+        )
         
-        history = []
-        for msg in reversed(messages):  # Reverse to get chronological order
-            history.append({
-                "role": "user" if msg.message_type == "user" else "assistant",
+        return [
+            {
+                "sender": msg.sender,
                 "content": msg.content,
-                "timestamp": msg.timestamp.isoformat() if msg.timestamp else None,
-                "metadata": msg.metadata or {}
-            })
-        
-        return history
-        
+                "timestamp": msg.created_at.isoformat(),
+                "message_type": msg.message_type
+            }
+            for msg in reversed(messages)  # Return in chronological order
+        ]
     except Exception as e:
-        logger.error(f"Error getting chat history: {e}")
+        logger.error(f"Error retrieving conversation history: {str(e)}")
         return []
+
+# --- Translation Service Integration ---
+
+async def detect_language(text: str, http_client: httpx.AsyncClient) -> Dict[str, Any]:
+    """
+    Detect language using models service with Phi-3
+    
+    Args:
+        text (str): Text to analyze for language detection
+        http_client: HTTP client for making requests
+        
+    Returns:
+        Dict containing detected language and confidence
+    """
+    try:
+        response = await http_client.post(
+            f"{SERVICE_URLS['models_service']}/api/v1/translation/detect-language",
+            json={"text": text},
+            timeout=10.0
+        )
+        
+        if response.status_code == 200:
+            data = response.json()
+            return {
+                "language": data.get("language", "en"),
+                "confidence": data.get("confidence", 0.0)
+            }
+        else:
+            logger.warning(f"Language detection failed with status {response.status_code}")
+            return {"language": "en", "confidence": 0.0}
+            
+    except Exception as e:
+        logger.warning(f"Language detection failed: {e}")
+        return {"language": "en", "confidence": 0.0}
+
+async def translate_text(
+    text: str,
+    source_language: str,
+    target_language: str,
+    http_client: httpx.AsyncClient
+) -> str:
+    """
+    Translate text using translation service
+    
+    Args:
+        text: Text to translate
+        source_language: Source language code
+        target_language: Target language code
+        http_client: HTTP client for making requests
+        
+    Returns:
+        Translated text
+    """
+    try:
+        response = await http_client.post(
+            f"{SERVICE_URLS['models_service']}/api/v1/translation/translate",
+            json={
+                "text": text,
+                "source_language": source_language,
+                "target_language": target_language
+            },
+            timeout=15.0
+        )
+        
+        if response.status_code == 200:
+            data = response.json()
+            if data.get("success", False):
+                return data.get("translated_text", text)
+            else:
+                logger.warning(f"Translation failed: {data.get('error', 'Unknown error')}")
+                return text
+        else:
+            logger.warning(f"Translation failed with status {response.status_code}")
+            return text
+            
+    except Exception as e:
+        logger.warning(f"Translation failed: {e}")
+        return text
 
 async def save_chat_interaction(
     session_id: str,
     user_message: str,
-    enhanced_response_data: Dict[str, Any],
-    user_id: str
+    ai_response: str,
+    user_id: str,
+    response_metadata: dict,
+    db: Session
 ):
-    """Save chat interaction to database"""
+    """
+    Save chat interaction to database for history and analytics
+    
+    Args:
+        session_id (str): Chat session ID
+        user_message (str): User's message
+        ai_response (str): AI-generated response
+        user_id (str): User identifier
+        response_metadata (dict): Response generation metadata
+        db (Session): Database session
+    """
     try:
-        # Create new database session for background task
-        from sqlalchemy.orm import sessionmaker
-        SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
-        db = SessionLocal()
-        
         # Save user message
-        user_chat_message = ChatMessage(
+        user_msg = ChatMessage(
             session_id=session_id,
             sender="user",
             content=user_message,
             message_type="text",
-            message_metadata={"language_detected": enhanced_response_data.get("language_detected")},
             created_at=datetime.utcnow()
         )
-        db.add(user_chat_message)
+        db.add(user_msg)
         
-        # Save bot response
-        bot_chat_message = ChatMessage(
+        # Save AI response
+        ai_msg = ChatMessage(
             session_id=session_id,
-            sender="mitra",
-            content=enhanced_response_data.get("response", ""),
-            message_type="enhanced_chat",
-            message_metadata={
-                "services_used": enhanced_response_data.get("services_used", []),
-                "processing_time_ms": enhanced_response_data.get("processing_time_ms"),
-                "crisis_level": enhanced_response_data.get("crisis_level", "none"),
-                "cultural_adaptations": enhanced_response_data.get("cultural_adaptations", []),
-                "actions_triggered": enhanced_response_data.get("actions_triggered", [])
-            },
+            sender="ai",
+            content=ai_response,
+            message_type=response_metadata.get("intervention_type", "intelligent_text"),
+            metadata=response_metadata,
             created_at=datetime.utcnow()
         )
-        db.add(bot_chat_message)
+        db.add(ai_msg)
         
         db.commit()
-        logger.info(f"Successfully saved chat interaction for session {session_id}: user_message='{user_message[:50]}...', bot_response='{enhanced_response_data.get('response', '')[:50]}...'")
+        logger.debug(f"Saved chat interaction for session {session_id}")
         
     except Exception as e:
-        logger.error(f"Error saving chat interaction: {e}")
-        logger.exception("Full error traceback:")
-        if 'db' in locals():
-            try:
-                db.rollback()
-            except Exception as rollback_error:
-                logger.error(f"Error during rollback: {rollback_error}")
-    finally:
-        if 'db' in locals():
-            try:
-                db.close()
-            except Exception as close_error:
-                logger.error(f"Error closing db: {close_error}")
+        logger.error(f"Error saving chat interaction: {str(e)}")
+        db.rollback()
 
-async def publish_chat_event(
-    user_id: str,
-    session_id: str,
-    user_message: str,
-    bot_response: str,
-    enhanced_response_data: Dict[str, Any]
+# --- API Endpoints ---
+
+# Session Management Endpoints (Frontend Compatibility)
+@app.post("/api/chatbot/chat/session", response_model=dict)
+async def create_chatbot_session_frontend(
+    db: Session = Depends(get_db),
+    current_user: dict = Depends(get_current_user)
 ):
-    """Publish chat events for real-time updates"""
-    try:
-        if service_manager.event_bus:
-            # Publish user message event
-            await service_manager.event_bus.publish(
-                V3EventChannels.CHAT_MESSAGE,
-                {
-                    "event_type": "user_message",
-                    "user_id": user_id,
-                    "session_id": session_id,
-                    "message": user_message,
-                    "timestamp": datetime.utcnow().isoformat(),
-                    "language": enhanced_response_data.get("language_detected", "en")
-                }
-            )
-            
-            # Publish bot response event
-            await service_manager.event_bus.publish(
-                V3EventChannels.CHAT_RESPONSE,
-                {
-                    "event_type": "bot_response",
-                    "user_id": user_id,
-                    "session_id": session_id,
-                    "response": bot_response,
-                    "timestamp": datetime.utcnow().isoformat(),
-                    "metadata": {
-                        "services_used": enhanced_response_data.get("services_used", []),
-                        "processing_time_ms": enhanced_response_data.get("processing_time_ms"),
-                        "crisis_level": enhanced_response_data.get("crisis_level", "none"),
-                        "language_detected": enhanced_response_data.get("language_detected", "en"),
-                        "audio_response": enhanced_response_data.get("audio_response") is not None
-                    }
-                }
-            )
-            
-            # Publish crisis event if detected
-            if enhanced_response_data.get("crisis_level", "none") != "none":
-                await service_manager.event_bus.publish(
-                    V3EventChannels.CRISIS_ALERT,
-                    {
-                        "event_type": "crisis_detected",
-                        "user_id": user_id,
-                        "session_id": session_id,
-                        "crisis_level": enhanced_response_data.get("crisis_level"),
-                        "message": user_message,
-                        "timestamp": datetime.utcnow().isoformat()
-                    }
-                )
-            
-            logger.info(f"Published chat events for session {session_id}")
-    except Exception as e:
-        logger.error(f"Error publishing chat events: {e}")
+    """
+    Create a new chat session for frontend compatibility
+    Frontend expects this endpoint for session creation
+    
+    Returns:
+        dict: Session information with ID and metadata
+    """
+    return await create_chat_session(db, current_user)
 
-# Session Management Endpoints
-@app.post("/api/chatbot/chat/session")
+@app.post("/chat/session", response_model=dict)
 async def create_chat_session(
     db: Session = Depends(get_db),
     current_user: dict = Depends(get_current_user)
 ):
-    """Create new chat session"""
+    """
+    Create a new chat session for persistent conversation tracking
+    
+    Returns:
+        dict: Session information with ID and metadata
+    """
     try:
         user_id = current_user["user_id"]
+        logger.info(f"Creating new chat session for user {user_id}")
         
+        # Create new session
         new_session = ChatSession(
             user_id=user_id,
-            title=f"Enhanced Chat - {datetime.utcnow().strftime('%Y-%m-%d %H:%M')}",
-            session_type="enhanced_ai_support",
+            title=f"Chat - {datetime.utcnow().strftime('%Y-%m-%d %H:%M')}",
+            session_type="intelligent_support",
             is_active=True,
             created_at=datetime.utcnow()
         )
         db.add(new_session)
         db.commit()
         db.refresh(new_session)
+        
+        logger.info(f"Created session {new_session.id} for user {user_id}")
         
         return {
             "id": new_session.id,
@@ -429,25 +427,375 @@ async def create_chat_session(
         }
         
     except Exception as e:
-        logger.error(f"Error creating chat session: {e}")
+        logger.error(f"Error creating chat session: {str(e)}")
         db.rollback()
         raise HTTPException(status_code=500, detail="Failed to create chat session")
 
-@app.get("/api/chatbot/chat/sessions")
+@app.get("/chat/sessions", response_model=List[dict])
 async def get_chat_sessions(
-    limit: int = 10,
     db: Session = Depends(get_db),
     current_user: dict = Depends(get_current_user)
 ):
-    """Get user's chat sessions"""
+    """
+    Get all chat sessions for the current user
+    
+    Returns:
+        List[dict]: List of user's chat sessions
+    """
     try:
         user_id = current_user["user_id"]
         
-        sessions = db.query(ChatSession)\
-            .filter(ChatSession.user_id == user_id)\
-            .order_by(ChatSession.created_at.desc())\
-            .limit(limit)\
+        sessions = db.query(ChatSession).filter(
+            ChatSession.user_id == user_id
+        ).order_by(ChatSession.created_at.desc()).all()
+        
+        return [
+            {
+                "id": session.id,
+                "title": session.title,
+                "session_type": session.session_type,
+                "is_active": session.is_active,
+                "created_at": session.created_at.isoformat()
+            }
+            for session in sessions
+        ]
+        
+    except Exception as e:
+        logger.error(f"Error fetching chat sessions: {str(e)}")
+        raise HTTPException(status_code=500, detail="Failed to fetch chat sessions")
+
+@app.get("/chat/history", response_model=List[dict])
+async def get_chat_history(
+    session_id: str,
+    db: Session = Depends(get_db),
+    current_user: dict = Depends(get_current_user)
+):
+    """
+    Get chat history for a specific session
+    
+    Args:
+        session_id: ID of the chat session
+    
+    Returns:
+        List[dict]: List of messages in the session
+    """
+    try:
+        user_id = current_user["user_id"]
+        
+        # Verify session belongs to user
+        session = db.query(ChatSession).filter(
+            ChatSession.id == session_id,
+            ChatSession.user_id == user_id
+        ).first()
+        
+        if not session:
+            raise HTTPException(status_code=404, detail="Session not found")
+        
+        messages = db.query(ChatMessage).filter(
+            ChatMessage.session_id == session_id
+        ).order_by(ChatMessage.created_at.asc()).all()
+        
+        return [
+            {
+                "id": msg.id,
+                "sender": msg.sender,
+                "content": msg.content,
+                "message_type": msg.message_type,
+                "created_at": msg.created_at.isoformat()
+            }
+            for msg in messages
+        ]
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error fetching chat history: {str(e)}")
+        raise HTTPException(status_code=500, detail="Failed to fetch chat history")
+
+@app.post("/chat/intelligent", response_model=IntelligentChatResponse)
+async def intelligent_chat(
+    request: IntelligentChatRequest,
+    background_tasks: BackgroundTasks,
+    db: Session = Depends(get_db),
+    current_user: dict = Depends(get_current_user)
+):
+    """
+    Main intelligent chat endpoint with full context awareness and multi-language support
+    
+    This endpoint provides sophisticated, mood-aware responses by integrating
+    data from all MantraPath services and analyzing conversation context.
+    
+    Features:
+    - Mood-aware response generation
+    - Crisis detection and intervention
+    - Personalized communication style
+    - Therapeutic intervention suggestions
+    - Context-aware follow-up recommendations
+    - Multi-language support with auto-detection
+    - Cultural adaptation
+    """
+    try:
+        user_id = current_user["user_id"]
+        logger.info(f"Processing intelligent chat request for user {user_id}")
+        
+        # Language detection if auto mode
+        detected_language = "en"
+        if request.language == "auto":
+            lang_detection = await detect_language(request.message, app.state.http_client)
+            detected_language = lang_detection.get("language", "en")
+            logger.info(f"Auto-detected language: {detected_language} (confidence: {lang_detection.get('confidence', 0.0)})")
+        else:
+            detected_language = request.language or "en"
+        
+        # Determine response language
+        response_language = request.preferred_response_language or detected_language
+        
+        # Get or create chat session
+        session_id = request.session_id
+        if not session_id:
+            # Create new session
+            new_session = ChatSession(
+                user_id=user_id,
+                title=f"Chat - {datetime.utcnow().strftime('%Y-%m-%d %H:%M')}",
+                session_type="intelligent_support",
+                is_active=True,
+                created_at=datetime.utcnow()
+            )
+            db.add(new_session)
+            db.commit()
+            session_id = str(new_session.id)
+            logger.info(f"Created new chat session {session_id} for user {user_id}")
+        
+        # Get conversation history for context
+        conversation_history = await get_conversation_history(session_id, db)
+        
+        # Translate user message to English for processing if needed
+        processing_message = request.message
+        if detected_language != "en":
+            processing_message = await translate_text(
+                request.message, 
+                detected_language, 
+                "en", 
+                app.state.http_client
+            )
+            logger.info(f"Translated message for processing: {processing_message[:100]}...")
+        
+        # Generate intelligent response using our engine
+        intelligent_response = await app.state.response_generator.generate_intelligent_response(
+            user_id=user_id,
+            user_message=processing_message,
+            session_id=session_id,
+            conversation_history=conversation_history
+        )
+        
+        # Translate response to target language if needed
+        final_response = intelligent_response.response_text
+        translation_used = False
+        if response_language != "en":
+            # For complex responses, try translation with enhanced logic
+            translated_response = await translate_text_enhanced(
+                intelligent_response.response_text,
+                "en",
+                response_language,
+                app.state.http_client
+            )
+            if translated_response != intelligent_response.response_text:
+                final_response = translated_response
+                translation_used = True
+                logger.info(f"✅ Translated response to {response_language}")
+            else:
+                # If translation failed, try with simplified response
+                simplified_response = await get_simplified_response(
+                    response_language, 
+                    intelligent_response.intervention_type,
+                    app.state.http_client
+                )
+                if simplified_response:
+                    final_response = simplified_response
+                    translation_used = True
+                    logger.info(f"✅ Used simplified response for {response_language}")
+                else:
+                    logger.warning(f"⚠️ Translation failed for {response_language}, using English")
+        
+        # Prepare response data
+        response_data = IntelligentChatResponse(
+            response=final_response,
+            session_id=session_id,
+            tone=intelligent_response.tone,
+            intervention_type=intelligent_response.intervention_type,
+            breathing_exercise=intelligent_response.breathing_exercise,
+            follow_up_suggestions=intelligent_response.follow_up_suggestions or [],
+            crisis_detected=intelligent_response.crisis_detected,
+            confidence_score=intelligent_response.confidence_score,
+            context_summary=intelligent_response.context_used or {},
+            detected_language=detected_language,
+            response_language=response_language,
+            translation_used=translation_used
+        )
+        
+        # Save interaction to database (async background task)
+        background_tasks.add_task(
+            save_chat_interaction,
+            session_id=session_id,
+            user_message=request.message,
+            ai_response=final_response,
+            user_id=user_id,
+            response_metadata={
+                **intelligent_response.generation_metadata,
+                "detected_language": detected_language,
+                "response_language": response_language,
+                "translation_used": translation_used
+            } if intelligent_response.generation_metadata else {
+                "detected_language": detected_language,
+                "response_language": response_language,
+                "translation_used": translation_used
+            },
+            db=db
+        )
+        
+        logger.info(
+            f"Generated intelligent response for user {user_id} with confidence "
+            f"{intelligent_response.confidence_score:.2f}, language: {detected_language}->{response_language}"
+        )
+        
+        return response_data
+        
+    except Exception as e:
+        logger.error(f"Error in intelligent chat endpoint: {str(e)}")
+        raise HTTPException(
+            status_code=500, 
+            detail="An error occurred while generating response. Please try again."
+        )
+
+# Frontend-compatible chatbot endpoint
+@app.post("/api/chatbot/chat", response_model=IntelligentChatResponse)
+async def chatbot_chat_frontend(
+    request: IntelligentChatRequest,
+    background_tasks: BackgroundTasks,
+    db: Session = Depends(get_db),
+    current_user: dict = Depends(get_current_user)
+):
+    """
+    Frontend-compatible chatbot endpoint
+    Routes to the intelligent chat functionality
+    """
+    return await intelligent_chat(request, background_tasks, db, current_user)
+
+# Voice input endpoint for frontend
+@app.post("/api/chatbot/voice")
+async def chatbot_voice_input(
+    audio_file: UploadFile = File(...),
+    session_id: Optional[str] = Form(None),
+    background_tasks: BackgroundTasks = BackgroundTasks(),
+    db: Session = Depends(get_db),
+    current_user: Dict[str, Any] = Depends(get_current_user)
+) -> Dict[str, Any]:
+    """
+    Voice input endpoint that processes audio and returns chat response
+    
+    This endpoint:
+    1. Receives audio file from frontend
+    2. Converts speech to text using voice service
+    3. Detects language automatically
+    4. Generates intelligent response
+    5. Optionally converts response back to speech
+    """
+    try:
+        user_id = current_user["user_id"]
+        logger.info(f"Processing voice input for user {user_id}")
+        
+        # Read audio file
+        audio_content = await audio_file.read()
+        logger.info(f"Received audio file: {len(audio_content)} bytes, type: {audio_file.content_type}")
+        
+        # Send audio to voice service for speech-to-text
+        try:
+            files = {
+                'audio_file': (audio_file.filename, audio_content, audio_file.content_type)
+            }
+            
+            response = await app.state.http_client.post(
+                f"{SERVICE_URLS['voice_service']}/api/v1/voice/stt",
+                files=files,
+                timeout=30.0
+            )
+            
+            if response.status_code != 200:
+                logger.error(f"Voice service STT failed: {response.status_code} - {response.text}")
+                raise HTTPException(status_code=500, detail="Speech recognition failed")
+                
+            stt_result = response.json()
+            transcript = stt_result.get('transcript', '')
+            detected_language = stt_result.get('language', 'en')
+            confidence = stt_result.get('confidence', 0.0)
+            
+            logger.info(f"STT Result: '{transcript}' (lang: {detected_language}, confidence: {confidence})")
+            
+            if not transcript.strip():
+                raise HTTPException(status_code=400, detail="No speech detected in audio")
+                
+        except Exception as e:
+            logger.error(f"Voice processing error: {e}")
+            raise HTTPException(status_code=500, detail="Failed to process voice input")
+        
+        # Create chat request from voice input
+        chat_request = IntelligentChatRequest(
+            message=transcript,
+            session_id=session_id,
+            language=detected_language,
+            preferred_response_language=detected_language,  # Respond in same language
+            user_context_refresh=True  # Always refresh context for voice
+        )
+        
+        # Process through intelligent chat
+        chat_response = await intelligent_chat(chat_request, background_tasks, db, current_user)
+        
+        # Add voice-specific metadata
+        voice_response: Dict[str, Any] = {
+            **chat_response.model_dump(),
+            "voice_input": {
+                "transcript": transcript,
+                "detected_language": detected_language,
+                "confidence": confidence,
+                "audio_duration_ms": stt_result.get('duration_ms', 0)
+            }
+        }
+        
+        logger.info(f"Completed voice chat for user {user_id}")
+        return voice_response
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error in voice chat endpoint: {str(e)}")
+        raise HTTPException(
+            status_code=500, 
+            detail="An error occurred while processing voice input. Please try again."
+        )
+
+@app.get("/chat/sessions/{user_id}")
+async def get_user_chat_sessions(
+    user_id: str,
+    db: Session = Depends(get_db),
+    current_user: dict = Depends(get_current_user)
+):
+    """
+    Get chat sessions for a specific user
+    
+    Returns list of chat sessions with basic metadata for session management.
+    """
+    try:
+        # Verify user can access these sessions
+        if current_user["user_id"] != user_id and not current_user.get("is_admin", False):
+            raise HTTPException(status_code=403, detail="Access denied")
+        
+        sessions = (
+            db.query(ChatSession)
+            .filter(ChatSession.user_id == user_id)
+            .order_by(ChatSession.created_at.desc())
+            .limit(50)
             .all()
+        )
         
         return [
             {
@@ -456,106 +804,177 @@ async def get_chat_sessions(
                 "session_type": session.session_type,
                 "is_active": session.is_active,
                 "created_at": session.created_at.isoformat(),
-                "updated_at": session.updated_at.isoformat() if session.updated_at else None
+                "message_count": db.query(ChatMessage)
+                    .filter(ChatMessage.session_id == str(session.id))
+                    .count()
             }
             for session in sessions
-        ]
-        
-    except Exception as e:
-        logger.error(f"Error fetching chat sessions: {e}")
-        raise HTTPException(status_code=500, detail="Failed to fetch chat sessions")
-
-@app.get("/api/chatbot/chat/history")
-async def get_chat_history(
-    session_id: str,
-    limit: int = 50,
-    db: Session = Depends(get_db),
-    current_user: dict = Depends(get_current_user)
-):
-    """Get chat history for a session"""
-    try:
-        user_id = current_user["user_id"]
-        
-        # Verify session belongs to user
-        session = db.query(ChatSession)\
-            .filter(ChatSession.id == session_id, ChatSession.user_id == user_id)\
-            .first()
-        
-        if not session:
-            raise HTTPException(status_code=404, detail="Session not found")
-        
-        messages = db.query(ChatMessage)\
-            .filter(ChatMessage.session_id == session_id)\
-            .order_by(ChatMessage.created_at.asc())\
-            .limit(limit)\
-            .all()
-        
-        return [
-            {
-                "id": str(message.id),
-                "sender": message.sender,
-                "message_type": message.message_type,
-                "content": message.content,
-                "timestamp": message.created_at.isoformat(),
-                "metadata": message.message_metadata
-            }
-            for message in messages
         ]
         
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(f"Error fetching chat history: {e}")
-        raise HTTPException(status_code=500, detail="Failed to fetch chat history")
+        logger.error(f"Error retrieving chat sessions: {str(e)}")
+        raise HTTPException(status_code=500, detail="Error retrieving chat sessions")
 
-# Status and Monitoring
-@app.get("/api/chatbot/status")
-async def chatbot_status():
-    """Get chatbot service status"""
-    return {
-        "service": "chatbot",
-        "version": "2.0.0-clean",
-        "status": "healthy",
-        "enhanced_service": "active",
-        "timestamp": datetime.utcnow().isoformat()
-    }
-
-# Test Endpoint
-@app.get("/api/chatbot/test")
-async def test_chatbot():
-    """Test endpoint for service verification"""
+@app.get("/chat/analytics/{user_id}", response_model=ChatAnalyticsResponse)
+async def get_chat_analytics(
+    user_id: str,
+    current_user: dict = Depends(get_current_user)
+):
+    """
+    Get chat interaction analytics and insights for a user
+    
+    Provides comprehensive analytics about chat interactions, response effectiveness,
+    and engagement patterns for continuous improvement.
+    """
     try:
-        health_status = await enhanced_chatbot_service.health_check()
+        # Verify user can access these analytics
+        if current_user["user_id"] != user_id and not current_user.get("is_admin", False):
+            raise HTTPException(status_code=403, detail="Access denied")
+        
+        # Get analytics from response generator
+        analytics = await app.state.response_generator.get_response_analytics(user_id)
+        
+        if "error" in analytics:
+            raise HTTPException(status_code=404, detail="No analytics data found")
+        
+        return ChatAnalyticsResponse(
+            total_messages=analytics["total_responses"],
+            session_count=analytics.get("session_count", 0),
+            average_response_confidence=analytics["average_confidence"],
+            crisis_interactions=analytics["crisis_responses"],
+            most_common_intervention=analytics["most_common_intervention"],
+            user_engagement_score=min(1.0, analytics["average_confidence"] * 1.2)
+        )
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error retrieving chat analytics: {str(e)}")
+        raise HTTPException(status_code=500, detail="Error retrieving analytics")
+
+@app.get("/chat/engine/status", response_model=EngineStatusResponse)
+async def get_engine_status(current_user: dict = Depends(get_current_user)):
+    """
+    Get intelligent engine status and health information
+    
+    Provides comprehensive status information about all intelligent engine
+    components for monitoring and debugging purposes.
+    """
+    try:
+        status_data = app.state.response_generator.get_engine_status()
+        
+        return EngineStatusResponse(
+            status="active",
+            version="2.0.0",
+            components=status_data,
+            uptime_seconds=0.0,  # Will be implemented with proper startup tracking
+            total_responses_generated=status_data.get("total_responses_tracked", 0)
+        )
+        
+    except Exception as e:
+        logger.error(f"Error retrieving engine status: {str(e)}")
+        raise HTTPException(status_code=500, detail="Error retrieving engine status")
+
+@app.post("/chat/context/refresh/{user_id}")
+async def refresh_user_context(
+    user_id: str,
+    current_user: dict = Depends(get_current_user)
+):
+    """
+    Force refresh of user context from all MantraPath services
+    
+    Useful when user data has been updated in other services and chatbot
+    context needs to be refreshed for accurate responses.
+    """
+    try:
+        # Verify user can refresh this context
+        if current_user["user_id"] != user_id and not current_user.get("is_admin", False):
+            raise HTTPException(status_code=403, detail="Access denied")
+        
+        # Refresh context through service integrator
+        await app.state.response_generator.service_integrator.refresh_user_context(user_id)
+        
         return {
-            "status": "success",
-            "message": "Enhanced Chatbot Service V2 is operational",
-            "health": health_status,
+            "message": f"User context refreshed successfully for user {user_id}",
             "timestamp": datetime.utcnow().isoformat()
         }
+        
+    except HTTPException:
+        raise
     except Exception as e:
-        logger.error(f"Test endpoint error: {e}")
+        logger.error(f"Error refreshing user context: {str(e)}")
+        raise HTTPException(status_code=500, detail="Error refreshing context")
+
+# --- Health Check and Utility Endpoints ---
+
+@app.get("/health")
+async def health_check():
+    """Health check endpoint for monitoring"""
+    try:
+        # Test database connection
+        with engine.connect() as conn:
+            from sqlalchemy import text
+            conn.execute(text("SELECT 1"))
+        
+        # Test intelligent engine
+        engine_status = app.state.response_generator.get_engine_status()
+        
         return {
-            "status": "error",
+            "status": "healthy",
+            "timestamp": datetime.utcnow().isoformat(),
+            "database": "connected",
+            "intelligent_engine": "active",
+            "components": engine_status
+        }
+        
+    except Exception as e:
+        logger.error(f"Health check failed: {str(e)}")
+        return {
+            "status": "unhealthy",
             "error": str(e),
             "timestamp": datetime.utcnow().isoformat()
         }
 
-# Root endpoint
 @app.get("/")
 async def root():
-    """Root endpoint"""
+    """Root endpoint with service information"""
     return {
-        "service": "MantraPath Chatbot Service",
-        "version": "2.0.0-clean",
-        "description": "Enhanced AI Chatbot with Phase 2 Integration",
-        "status": "operational",
-        "endpoints": {
-            "chat": "/api/chatbot/chat/enhanced",
-            "health": "/health",
-            "docs": "/docs"
-        }
+        "service": "MantraPath Intelligent Chatbot Service",
+        "version": "2.0.0",
+        "description": "AI-powered, mood-aware chatbot with comprehensive mental health support",
+        "features": [
+            "Mood-aware response generation",
+            "Multi-service data integration", 
+            "Crisis detection and intervention",
+            "Personalized communication styles",
+            "Therapeutic intervention suggestions",
+            "Conversation context analysis"
+        ],
+        "docs_url": "/docs",
+        "health_check": "/health"
+    }
+
+# --- Error Handlers ---
+
+@app.exception_handler(Exception)
+async def global_exception_handler(request, exc):
+    """Global exception handler for unexpected errors"""
+    logger.error(f"Unhandled exception: {str(exc)}")
+    return {
+        "error": "An unexpected error occurred",
+        "message": "Please try again later or contact support if the problem persists",
+        "timestamp": datetime.utcnow().isoformat()
     }
 
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run(app, host="0.0.0.0", port=8004)
+    logger.info("Starting MantraPath Intelligent Chatbot Service directly")
+    uvicorn.run(
+        "main_intelligent:app", 
+        host="0.0.0.0", 
+        port=8004, 
+        reload=True,
+        log_level="info"
+    )

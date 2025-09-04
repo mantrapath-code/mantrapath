@@ -6,12 +6,13 @@ import asyncio
 import hashlib
 import json
 import time
+import os
 from typing import Dict, List, Optional, Any, Union
 import logging
 import redis.asyncio as redis
 
 from .base_translator import BaseTranslator, TranslationResult
-from .bhashini_translator import BhashiniTranslator
+from .anuvadini_translator import AnuvadiniTranslator
 
 logger = logging.getLogger(__name__)
 
@@ -29,16 +30,90 @@ class SimplifiedTranslationCoordinator:
         self.cache_ttl = 86400  # 24 hours
         self.cache_stats = {"hits": 0, "misses": 0}
         
-        # Supported languages (22 Indian languages)
+        # Enhanced Indian languages support (22 official + regional variants)
         self.indian_languages = [
-            "hi", "bn", "ta", "te", "ml", "kn", "gu", "or", "pa", "as", "mr", "ur",
-            "ne", "sd", "kok", "mai", "sat", "doi", "mni", "brx", "bh", "gom"
+            # Constitutional languages (official)
+            "hi",   # Hindi - Most widely spoken
+            "bn",   # Bengali - 2nd most spoken
+            "te",   # Telugu - Large South Indian population
+            "ta",   # Tamil - Significant South Indian language
+            "mr",   # Marathi - Western India
+            "gu",   # Gujarati - Business language of West India
+            "ur",   # Urdu - Significant Muslim population
+            "kn",   # Kannada - Karnataka state
+            "ml",   # Malayalam - Kerala state
+            "pa",   # Punjabi - Punjab region
+            "or",   # Odia - Odisha state
+            "as",   # Assamese - Assam state
+            
+            # Additional supported languages
+            "ne",   # Nepali
+            "sd",   # Sindhi
+            "sa",   # Sanskrit (classical)
+            "kok",  # Konkani
+            "mai",  # Maithili
+            "sat",  # Santali
+            "doi",  # Dogri
+            "mni",  # Manipuri (Meitei)
+            "brx",  # Bodo
+            "bh",   # Bhojpuri
+            "gom",  # Goan Konkani
+            
+            # Regional variants and dialects
+            "raj",  # Rajasthani
+            "bhb",  # Bhili
+            "mag",  # Magahi
+            "hne",  # Chhattisgarhi
+            "grt",  # Garo
+            "lus",  # Mizo
         ]
         
-        # International languages  
+        # International languages with good translation support
         self.international_languages = [
-            "en", "es", "fr", "de", "it", "pt", "ru", "ja", "ko", "zh", "ar"
+            "en",   # English - Primary international language
+            "es",   # Spanish
+            "fr",   # French
+            "de",   # German
+            "it",   # Italian
+            "pt",   # Portuguese
+            "ru",   # Russian
+            "ja",   # Japanese
+            "ko",   # Korean
+            "zh",   # Chinese (Simplified)
+            "ar",   # Arabic
         ]
+        
+        # Language groups for intelligent routing
+        self.language_groups = {
+            "north_indian": ["hi", "ur", "pa", "ne", "sd", "kok", "mai", "doi", "raj", "bhb", "mag", "hne"],
+            "south_indian": ["te", "ta", "kn", "ml"],
+            "east_indian": ["bn", "as", "or", "sat", "grt", "lus"],
+            "west_indian": ["mr", "gu", "gom"],
+            "northeast": ["as", "mni", "brx", "grt", "lus"],
+            "classical": ["sa", "ur"]
+        }
+        
+        # High-quality language pairs (known to work well)
+        self.optimized_pairs = {
+            ("hi", "en"), ("en", "hi"),  # Hindi-English (most common)
+            ("bn", "en"), ("en", "bn"),  # Bengali-English
+            ("te", "en"), ("en", "te"),  # Telugu-English
+            ("ta", "en"), ("en", "ta"),  # Tamil-English
+            ("mr", "en"), ("en", "mr"),  # Marathi-English
+            ("gu", "en"), ("en", "gu"),  # Gujarati-English
+            ("ur", "en"), ("en", "ur"),  # Urdu-English
+            ("kn", "en"), ("en", "kn"),  # Kannada-English
+            ("ml", "en"), ("en", "ml"),  # Malayalam-English
+            ("pa", "en"), ("en", "pa"),  # Punjabi-English
+            ("or", "en"), ("en", "or"),  # Odia-English
+            ("as", "en"), ("en", "as"),  # Assamese-English
+            
+            # Inter-Indian language pairs
+            ("hi", "bn"), ("bn", "hi"),  # Hindi-Bengali
+            ("hi", "ta"), ("ta", "hi"),  # Hindi-Tamil
+            ("hi", "te"), ("te", "hi"),  # Hindi-Telugu
+            ("hi", "mr"), ("mr", "hi"),  # Hindi-Marathi
+        }
         
         self.all_languages = self.indian_languages + self.international_languages
         
@@ -53,11 +128,21 @@ class SimplifiedTranslationCoordinator:
             # Setup cache first
             await self._setup_cache()
             
-            # Initialize only Bhashini translator
-            logger.info("Initializing Bhashini translator...")
-            self.engines['bhashini'] = BhashiniTranslator()
+            # Initialize only Anuvadini (Bhashini) translator with credentials
+            logger.info("Initializing Anuvadini (Bhashini) translator...")
             
-            # Bhashini initialization is fast (uses real data)
+            # Create configuration for Bhashini API
+            bhashini_config = {
+                "api_key": os.getenv("BHASHINI_API_KEY"),
+                "user_id": os.getenv("BHASHINI_USER_ID"),
+                "base_url": os.getenv("BHASHINI_BASE_URL", "https://meity-auth.ulcacontrib.org"),
+                "compute_url": os.getenv("BHASHINI_COMPUTE_URL", "https://dhruva-api.bhashini.gov.in/services/inference"),
+                "api_version": os.getenv("BHASHINI_API_VERSION", "v1")
+            }
+            
+            self.engines['bhashini'] = AnuvadiniTranslator(config=bhashini_config)
+            
+            # Anuvadini initialization is fast (uses real API)
             bhashini_result = await self.engines['bhashini'].initialize()
             
             if bhashini_result:
@@ -94,12 +179,19 @@ class SimplifiedTranslationCoordinator:
         target_language: str = "en",
         domain: Optional[str] = None
     ) -> TranslationResult:
-        """Translate text using available engines with caching"""
+        """Translate text using available engines with intelligent routing for Indian languages"""
         
         if not self.is_initialized:
             raise Exception("Translation coordinator not initialized")
         
-        # Check cache first
+        # Language pair detection and optimization
+        if source_language == "auto":
+            source_language = await self.detect_language(text)
+        
+        # Check if it's a high-quality pair
+        is_optimized_pair = (source_language, target_language) in self.optimized_pairs
+        
+        # Check cache first - prioritize for optimized pairs
         if self.cache_enabled:
             cached_result = await self._get_cached_translation(text, source_language, target_language)
             if cached_result:
@@ -112,20 +204,24 @@ class SimplifiedTranslationCoordinator:
         start_time = time.time()
         
         try:
-            # Use Bhashini for translation
-            result = await self.engines['bhashini'].translate(
-                text=text,
-                source_language=source_language,
-                target_language=target_language,
-                domain=domain
-            )
+            # Intelligent routing based on language pair
+            if self._is_indian_to_indian_pair(source_language, target_language):
+                # For Indian-to-Indian translations, use specific optimizations
+                result = await self._translate_indian_pair(text, source_language, target_language, domain)
+            elif self._is_indian_language(source_language) or self._is_indian_language(target_language):
+                # For Indian-English pairs, use Bhashini (optimized for these)
+                result = await self._translate_with_bhashini(text, source_language, target_language, domain)
+            else:
+                # For international pairs, use Bhashini with fallback
+                result = await self._translate_international_pair(text, source_language, target_language, domain)
             
             # Add processing time
             processing_time = int((time.time() - start_time) * 1000)
             result.processing_time_ms = processing_time
             
-            # Cache the result
-            if self.cache_enabled and result.confidence_score >= 0.5:
+            # Cache high-quality results and optimized pairs more aggressively
+            cache_threshold = 0.3 if is_optimized_pair else 0.5
+            if self.cache_enabled and result.confidence_score >= cache_threshold:
                 await self._cache_translation(text, source_language, target_language, result)
             
             logger.info(f"✅ Translation: {source_language}->{target_language} via {result.engine} ({processing_time}ms)")
@@ -134,6 +230,48 @@ class SimplifiedTranslationCoordinator:
         except Exception as e:
             logger.error(f"Translation failed: {e}")
             raise Exception(f"Translation failed: {str(e)}")
+
+    async def _translate_indian_pair(self, text: str, source_lang: str, target_lang: str, domain: Optional[str]) -> TranslationResult:
+        """Optimized translation for Indian language pairs"""
+        # Use Bhashini for Indian languages (it has better Indian language support)
+        return await self.engines['bhashini'].translate(
+            text=text,
+            source_language=source_lang,
+            target_language=target_lang,
+            domain=domain
+        )
+    
+    async def _translate_with_bhashini(self, text: str, source_lang: str, target_lang: str, domain: Optional[str]) -> TranslationResult:
+        """Use Bhashini translator for Indian-English pairs"""
+        return await self.engines['bhashini'].translate(
+            text=text,
+            source_language=source_lang,
+            target_language=target_lang,
+            domain=domain
+        )
+    
+    async def _translate_international_pair(self, text: str, source_lang: str, target_lang: str, domain: Optional[str]) -> TranslationResult:
+        """Handle international language pairs"""
+        # Try Bhashini first, which may have some international support
+        return await self.engines['bhashini'].translate(
+            text=text,
+            source_language=source_lang,
+            target_language=target_lang,
+            domain=domain
+        )
+    
+    def _is_indian_to_indian_pair(self, source_lang: str, target_lang: str) -> bool:
+        """Check if both languages are Indian languages"""
+        return (self._is_indian_language(source_lang) and 
+                self._is_indian_language(target_lang) and 
+                source_lang != target_lang)
+    
+    def _get_language_group(self, language_code: str) -> Optional[str]:
+        """Get the language group for intelligent routing"""
+        for group, languages in self.language_groups.items():
+            if language_code in languages:
+                return group
+        return None
 
     def get_supported_languages(self) -> List[str]:
         """Get list of all supported languages"""
@@ -146,6 +284,36 @@ class SimplifiedTranslationCoordinator:
     def get_international_languages(self) -> List[str]:
         """Get list of supported international languages"""
         return self.international_languages
+
+    async def detect_language(self, text: str) -> str:
+        """Detect language of given text (simplified version)"""
+        # Simple language detection using word patterns
+        text_lower = text.lower()
+        
+        # Simple heuristics for common Indian languages
+        if any(char in text for char in "हिंदी"):
+            return "hi"  # Hindi
+        elif any(char in text for char in "বাংলা"):
+            return "bn"  # Bengali
+        elif any(char in text for char in "தமிழ்"):
+            return "ta"  # Tamil
+        elif any(char in text for char in "తెలుగు"):
+            return "te"  # Telugu
+        elif any(char in text for char in "ಕನ್ನಡ"):
+            return "kn"  # Kannada
+        elif any(char in text for char in "മലയാളം"):
+            return "ml"  # Malayalam
+        elif any(char in text for char in "ગુજરાતી"):
+            return "gu"  # Gujarati
+        elif any(char in text for char in "मराठी"):
+            return "mr"  # Marathi
+        
+        # Default to English for ASCII text
+        if text.isascii():
+            return "en"
+        
+        # Default fallback
+        return "auto"
 
     async def health_check(self) -> bool:
         """Check if the coordinator is healthy"""

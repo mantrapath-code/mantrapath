@@ -23,6 +23,7 @@ from models.tts_engine import TTSEngine
 from models.nlp_engine import NLPEngine
 from models.model_manager import ModelManager
 from api.routes import router as api_router
+from api.translation_routes import router as translation_router, set_models_service
 from config.settings import get_settings
 from utils.logger import setup_logger
 
@@ -75,6 +76,9 @@ async def startup_event():
         await stt_engine.load_default_models()
         await tts_engine.load_default_models()
         await nlp_engine.load_default_models()
+        
+        # Set models service reference for translation routes
+        set_models_service(nlp_engine)
         
         logger.info("✅ Models Service initialized successfully")
         
@@ -161,6 +165,7 @@ async def get_loaded_models():
 
 # Include API routes
 app.include_router(api_router, prefix="/api/v1")
+app.include_router(translation_router, prefix="/api/v1/translation", tags=["translation"])
 
 if __name__ == "__main__":
     # Get port from environment or use default

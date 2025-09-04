@@ -4,6 +4,7 @@ Integration with Indian Government's Bhashini platform for regional language tra
 Free, no API key required, supports all 22 scheduled Indian languages
 """
 import logging
+import os
 import asyncio
 import httpx
 import json
@@ -21,8 +22,12 @@ class AnuvadiniTranslator(BaseTranslator):
     Supports all 22 scheduled Indian languages as per the Constitution of India
     """
     
-    def __init__(self, name: str = "anuvadini", config: Dict[str, Any] = None):
+    def __init__(self, name: str = "anuvadini", config: Optional[Dict[str, Any]] = None):
         super().__init__(name, config or {})
+        
+        # Get configuration from config or environment variables
+        self.api_key = (config.get("api_key") if config else None) or os.getenv("BHASHINI_API_KEY")
+        self.user_id = (config.get("user_id") if config else None) or os.getenv("BHASHINI_USER_ID")
         
         # Bhashini API endpoints (public, no API key required)
         self.base_url = "https://dhruva-api.bhashini.gov.in/services/inference/pipeline"
@@ -123,10 +128,10 @@ class AnuvadiniTranslator(BaseTranslator):
                 translated_text=text,
                 source_language=source_language,
                 target_language=target_language,
-                confidence=0.0,
+                confidence_score=0.0,
                 engine_name=self.name,
-                processing_time=time.time() - start_time,
-                error=f"Source language {source_language} not supported"
+                processing_time_ms=int((time.time() - start_time) * 1000),
+                metadata={"error": f"Source language {source_language} not supported"}
             )
         
         if target_language not in self.supported_languages:
@@ -134,10 +139,10 @@ class AnuvadiniTranslator(BaseTranslator):
                 translated_text=text,
                 source_language=source_language,
                 target_language=target_language,
-                confidence=0.0,
+                confidence_score=0.0,
                 engine_name=self.name,
-                processing_time=time.time() - start_time,
-                error=f"Target language {target_language} not supported"
+                processing_time_ms=int((time.time() - start_time) * 1000),
+                metadata={"error": f"Target language {target_language} not supported"}
             )
         
         # If source and target are the same, return original text
@@ -146,9 +151,9 @@ class AnuvadiniTranslator(BaseTranslator):
                 translated_text=text,
                 source_language=source_language,
                 target_language=target_language,
-                confidence=1.0,
+                confidence_score=1.0,
                 engine_name=self.name,
-                processing_time=time.time() - start_time
+                processing_time_ms=int((time.time() - start_time) * 1000)
             )
         
         try:
@@ -167,10 +172,10 @@ class AnuvadiniTranslator(BaseTranslator):
                     translated_text=translated_text,
                     source_language=source_language,
                     target_language=target_language,
-                    confidence=confidence,
+                    confidence_score=confidence,
                     engine_name=self.name,
-                    processing_time=time.time() - start_time,
-                    error="Service config not available, using fallback"
+                    processing_time_ms=int((time.time() - start_time) * 1000),
+                    metadata={"error": "Service config not available, using fallback"}
                 )
             
             # Prepare translation request
@@ -186,15 +191,24 @@ class AnuvadiniTranslator(BaseTranslator):
                 }
             }
             
+            # Prepare headers
+            headers = {
+                "Content-Type": "application/json",
+                "Accept": "application/json"
+            }
+            
+            # Add authentication if available
+            if self.api_key:
+                headers["Authorization"] = f"Bearer {self.api_key}"
+            if self.user_id:
+                headers["User-ID"] = self.user_id
+            
             # Make translation request
             async with httpx.AsyncClient(timeout=30.0) as client:
                 response = await client.post(
                     self.base_url,
                     json=translation_request,
-                    headers={
-                        "Content-Type": "application/json",
-                        "Accept": "application/json"
-                    }
+                    headers=headers
                 )
                 
                 if response.status_code == 200:
@@ -208,9 +222,9 @@ class AnuvadiniTranslator(BaseTranslator):
                         translated_text=translated_text,
                         source_language=source_language,
                         target_language=target_language,
-                        confidence=confidence,
+                        confidence_score=confidence,
                         engine_name=self.name,
-                        processing_time=time.time() - start_time,
+                        processing_time_ms=int((time.time() - start_time) * 1000),
                         metadata={
                             "bhashini_response": True,
                             "service_provider": "MeitY Government of India"
@@ -230,10 +244,10 @@ class AnuvadiniTranslator(BaseTranslator):
             translated_text=translated_text,
             source_language=source_language,
             target_language=target_language,
-            confidence=confidence,
+            confidence_score=confidence,
             engine_name=self.name,
-            processing_time=time.time() - start_time,
-            error="API unavailable, using fallback"
+            processing_time_ms=int((time.time() - start_time) * 1000),
+            metadata={"error": "API unavailable, using fallback"}
         )
     
     async def _rate_limit(self):
@@ -246,7 +260,7 @@ class AnuvadiniTranslator(BaseTranslator):
         
         self.last_request_time = time.time()
     
-    async def _get_service_config(self, source_lang: str, target_lang: str) -> Optional[Dict]:
+    async def _get_service_config(self, source_lang: str, target_lang: str) -> Optional[Dict[str, Any]]:
         """Get service configuration for language pair from cache or API"""
         cache_key = f"{source_lang}-{target_lang}"
         
@@ -416,3 +430,38 @@ class AnuvadiniTranslator(BaseTranslator):
     def is_indian_language(self, language_code: str) -> bool:
         """Check if language is an Indian language"""
         return language_code in self.indian_languages
+
+    async def translate_batch(
+        self,
+        texts: List[str],
+        source_language: str,
+        target_language: str,
+        domain: Optional[str] = None,
+        context: Optional[Dict[str, Any]] = None
+    ) -> List[TranslationResult]:
+        """Translate multiple texts in a batch"""
+        results = []
+        for text in texts:
+            result = await self.translate(text, source_language, target_language, domain, context)
+            results.append(result)
+        return results
+
+    async def get_quality_score(
+        self,
+        original_text: str,
+        translated_text: str,
+        source_language: str,
+        target_language: str
+    ) -> float:
+        """Calculate quality score for a translation"""
+        if not translated_text or translated_text == original_text:
+            return 0.5
+        
+        # Basic quality scoring
+        base_score = 0.8
+        
+        # Bonus for Indian languages (Anuvadini's specialty)
+        if source_language in self.indian_languages or target_language in self.indian_languages:
+            base_score += 0.1
+        
+        return min(base_score, 1.0)

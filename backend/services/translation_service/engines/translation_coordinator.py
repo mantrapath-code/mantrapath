@@ -11,7 +11,7 @@ import redis.asyncio as redis
 
 from .base_translator import BaseTranslator, TranslationResult
 from .bhashini_translator import BhashiniTranslator
-from .indictrans2_translator import IndicTrans2Translator
+from .lightweight_translator import LightweightTranslator
 
 logger = logging.getLogger(__name__)
 
@@ -38,8 +38,44 @@ class TranslationCoordinator:
         # Engine priority for fast response
         self.engine_priority = {
             'bhashini': 1,      # Fast, government service (real data)
-            'indictrans2': 2    # Slower but comprehensive (large model)
+            'lightweight': 2    # API-based fallback translator
         }
+        
+    async def initialize(self) -> bool:
+        """Fast initialization with cache setup - only initialize Bhashini for quick start"""
+        try:
+            # Setup Redis cache (optional)
+            await self._setup_cache()
+            
+            # Only initialize Bhashini for fast startup (real data, no model download)
+            logger.info("Fast initialization: Starting with Bhashini only...")
+            
+            self.engines['bhashini'] = BhashiniTranslator()
+            self.engine_initialized['bhashini'] = False
+            self.engine_initialized['lightweight'] = False
+            
+            # Quick initialization of Bhashini (uses real data, no model download)
+            bhashini_result = await self.engines['bhashini'].initialize()
+            
+            if bhashini_result:
+                self.engine_initialized['bhashini'] = True
+                logger.info("Bhashini initialized successfully - Service ready!")
+                self.is_initialized = True
+                
+                # Initialize lightweight translator in background
+                logger.info("Initializing lightweight translator for fallback...")
+                await self._initialize_lightweight_background()
+                
+                return True
+            else:
+                logger.warning("Bhashini initialization failed, trying lightweight translator...")
+                # If Bhashini fails, initialize lightweight translator synchronously
+                return await self._initialize_lightweight_sync()
+                
+        except Exception as e:
+            logger.error(f"Error in fast initialization: {e}")
+            # Fallback to lightweight translator
+            return await self._initialize_lightweight_sync()
         
     async def initialize(self) -> bool:
         """Fast initialization with cache setup - only initialize Bhashini for quick start"""
@@ -62,8 +98,9 @@ class TranslationCoordinator:
                 logger.info("Bhashini initialized successfully - Service ready!")
                 self.is_initialized = True
                 
-                # Initialize IndicTrans2 in background (don't wait)
-                asyncio.create_task(self._initialize_indictrans2_background())
+                # Initialize IndicTrans2 in background with memory management
+                asyncio.create_task(self._initialize_indictrans2_smart())
+                logger.info("IndicTrans2 will initialize in background with smart memory management")
                 
                 return True
             else:
@@ -87,6 +124,86 @@ class TranslationCoordinator:
             logger.warning(f"Redis cache not available: {e}. Continuing without cache.")
             self.cache_enabled = False
     
+    async def _initialize_indictrans2_smart(self):
+        """Smart initialization of IndicTrans2 with memory management and error recovery"""
+        try:
+            import psutil
+            import os
+            
+            # Check available memory before starting
+            memory = psutil.virtual_memory()
+            available_gb = memory.available / (1024**3)
+            
+            logger.info(f"Available memory: {available_gb:.1f}GB - Starting IndicTrans2 initialization")
+            
+            # Only proceed if we have sufficient memory (at least 2GB available)
+            if available_gb < 2.0:
+                logger.warning(f"Insufficient memory ({available_gb:.1f}GB available, need 2GB+). Skipping IndicTrans2.")
+                return
+            
+            # Initialize with memory monitoring
+            self.engines['indictrans2'] = IndicTrans2Translator()
+            
+            # Add a delay to let the system stabilize
+            await asyncio.sleep(2)
+            
+            # Monitor memory during initialization
+            start_memory = psutil.virtual_memory().available / (1024**3)
+            logger.info(f"Starting IndicTrans2 initialization with {start_memory:.1f}GB available")
+            
+            # Initialize with timeout to prevent hanging
+            try:
+                result = await asyncio.wait_for(
+                    self.engines['indictrans2'].initialize(), 
+                    timeout=300  # 5 minutes timeout
+                )
+                
+                if result:
+                    self.engine_initialized['indictrans2'] = True
+                    end_memory = psutil.virtual_memory().available / (1024**3)
+                    memory_used = start_memory - end_memory
+                    logger.info(f"✅ IndicTrans2 initialized successfully! Memory used: {memory_used:.1f}GB")
+                else:
+                    logger.warning("❌ IndicTrans2 initialization failed")
+                    # Clean up failed engine
+                    if 'indictrans2' in self.engines:
+                        del self.engines['indictrans2']
+                        
+            except asyncio.TimeoutError:
+                logger.error("⏰ IndicTrans2 initialization timed out after 5 minutes")
+                # Clean up timed out engine
+                if 'indictrans2' in self.engines:
+                    del self.engines['indictrans2']
+                    
+        except ImportError:
+            logger.warning("psutil not available, proceeding with basic IndicTrans2 initialization")
+            await self._initialize_indictrans2_basic()
+        except Exception as e:
+            logger.error(f"Smart IndicTrans2 initialization error: {e}")
+            # Fallback to basic initialization
+            await self._initialize_indictrans2_basic()
+    
+    async def _initialize_indictrans2_basic(self):
+        """Basic IndicTrans2 initialization without memory monitoring"""
+        try:
+            logger.info("Initializing IndicTrans2 with basic method...")
+            self.engines['indictrans2'] = IndicTrans2Translator()
+            
+            # Add delay for stability
+            await asyncio.sleep(1)
+            
+            result = await self.engines['indictrans2'].initialize()
+            
+            if result:
+                self.engine_initialized['indictrans2'] = True
+                logger.info("IndicTrans2 initialized successfully (basic)")
+            else:
+                logger.warning("IndicTrans2 basic initialization failed")
+                if 'indictrans2' in self.engines:
+                    del self.engines['indictrans2']
+        except Exception as e:
+            logger.error(f"Basic IndicTrans2 initialization error: {e}")
+
     async def _initialize_indictrans2_background(self):
         """Initialize IndicTrans2 in background (non-blocking)"""
         try:

@@ -6,7 +6,7 @@ import asyncio
 import logging
 import os
 from typing import Dict, Any, Optional, List
-from datetime import datetime
+from datetime import datetime, UTC
 import json
 
 # Import Phase 1 service clients
@@ -20,6 +20,7 @@ from src.clients.memory_service_client import memory_service_client, MemoryEntry
 from src.clients.proactive_assistance_engine_client import proactive_assistance_engine_client, ProactiveInsight, UserRiskAssessment
 from src.clients.ai_event_processor_client import ai_event_processor_client, ChatEvent
 from src.config import chatbot_config
+from src.models.chat_context import ChatContext, EnhancedChatResponse
 
 logger = logging.getLogger(__name__)
 
@@ -109,366 +110,381 @@ class EnhancedChatbotServiceV2:
     
     async def process_message(
         self, 
-        message: str,
-        user_id: str,
-        session_id: str,
-        user_language: Optional[str] = None,
+        message: str, 
+        context: ChatContext,
         jwt_token: Optional[str] = None
-    ) -> Dict[str, Any]:
+    ) -> EnhancedChatResponse:
         """
-        Process user message with comprehensive Phase 2 capabilities
+        Process chat message with intelligent orchestration
         
         Args:
-            message: User's message
-            user_id: User ID  
-            session_id: Conversation session ID
-            user_language: User's preferred language
-            jwt_token: JWT authentication token
+            message: User message
+            context: Chat context
+            jwt_token: JWT token for authentication
             
         Returns:
-            Comprehensive response with all enhancements
+            Enhanced chat response with orchestration data
         """
-        start_time = datetime.utcnow()
-        response_data = {
-            "session_id": session_id,
-            "user_id": user_id,
-            "timestamp": start_time.isoformat(),
-            "processing_steps": [],
-            "services_used": [],
-            "response": "",
-            "audio_response": None,
-            "crisis_level": "none",
-            "actions_triggered": [],
-            "cultural_adaptations": [],
-            "language_detected": user_language or self.config.default_language
-        }
-        
         try:
-            # Step 1: Language Detection
-            if not user_language and self.config.enable_translation:
-                response_data["processing_steps"].append("language_detection")
-                lang_detection = await translation_service_client.detect_language(message, jwt_token)
-                if lang_detection:
-                    response_data["language_detected"] = lang_detection.detected_language
-                    response_data["services_used"].append("translation")
+            # Extract user language preference and input type
+            user_language = context.get("user_language", "auto")
+            input_type = context.get("input_type", "text")  # text, voice, mixed
+            conversation_language = context.get("conversation_language", "en")
             
-            detected_language = response_data["language_detected"]
+            # Initialize response data
+            response_data = {
+                "user_id": context.get("user_id"),
+                "session_id": context.get("session_id"),
+                "timestamp": datetime.now(UTC).isoformat(),
+                "processing_steps": [],
+                "services_used": [],
+                "crisis_level": "none",
+                "actions_triggered": [],
+                "cultural_adaptations": [],
+                "language_detected": user_language or conversation_language or "en",
+                "input_type": input_type,
+                "should_respond_with_voice": input_type in ["voice", "mixed"]
+            }
             
-            # Step 2: Crisis Detection
-            if self.config.crisis_detection_enabled:
-                response_data["processing_steps"].append("crisis_assessment")
-                crisis_assessment = await ml_service_client.assess_crisis_risk(
-                    message, 
-                    {"user_id": user_id, "session_id": session_id}, 
-                    jwt_token
-                )
-                
-                if crisis_assessment:
-                    response_data["crisis_level"] = crisis_assessment.risk_level
-                    response_data["crisis_confidence"] = crisis_assessment.confidence
-                    response_data["services_used"].append("ml")
+            try:
+                # Step 1: Language Detection (Enhanced)
+                if not user_language or user_language == "auto":
+                    response_data["processing_steps"].append("language_detection")
                     
-                    # Trigger immediate intervention for high-risk situations
-                    if crisis_assessment.immediate_intervention:
-                        response_data["processing_steps"].append("crisis_intervention")
-                        intervention_result = await action_orchestrator_client.execute_action(
-                            "crisis_intervention",
-                            {
-                                "user_id": user_id,
-                                "session_id": session_id,
-                                "risk_level": crisis_assessment.risk_level,
-                                "message": message
-                            },
-                            priority="urgent",
-                            jwt_token=jwt_token
-                        )
-                        if intervention_result:
-                            response_data["actions_triggered"].append("crisis_intervention")
-                            response_data["services_used"].append("orchestrator")
-            
-            # Step 3: Sentiment and Intent Analysis
-            response_data["processing_steps"].append("nlp_analysis")
-            
-            # Parallel NLP processing
-            nlp_tasks = []
-            
-            if self.config.models_service.enabled:
-                nlp_tasks.extend([
-                    models_client.analyze_sentiment(message, detected_language),
-                    models_client.classify_intent_nlp(message, detected_language)
-                ])
-            
-            nlp_results = await asyncio.gather(*nlp_tasks, return_exceptions=True)
-            
-            sentiment_analysis = nlp_results[0] if len(nlp_results) > 0 and not isinstance(nlp_results[0], Exception) else None
-            intent_classification = nlp_results[1] if len(nlp_results) > 1 and not isinstance(nlp_results[1], Exception) else None
-            
-            if sentiment_analysis or intent_classification:
-                response_data["services_used"].append("models")
-            
-            # Step 4: Get User Context for Personalization (BEFORE response generation)
-            user_context = None
-            if self.config.ai_context_store.enabled:
-                response_data["processing_steps"].append("context_retrieval")
+                    # Try to detect language from the message
+                    lang_detection = await translation_service_client.detect_language(message, jwt_token)
+                    if lang_detection and lang_detection.detected_language:
+                        detected_language = lang_detection.detected_language
+                        response_data["language_detected"] = detected_language
+                        response_data["services_used"].append("translation")
+                        
+                        # Update conversation language for consistency
+                        if not conversation_language or conversation_language == "en":
+                            conversation_language = detected_language
+                            response_data["conversation_language"] = detected_language
+                    else:
+                        # Fallback to conversation language or default
+                        detected_language = conversation_language or "en"
+                        response_data["language_detected"] = detected_language
+                else:
+                    detected_language = user_language
+                    response_data["language_detected"] = detected_language
                 
-                # Smart refresh based on keywords
-                should_refresh = any(keyword in message.lower() for keyword in [
-                    'mood', 'feeling', 'journal', 'community', 'activity', 'progress', 'track', 'how am i', 'my', 'lately'
-                ])
-                
-                logger.info(f"🎯 CONTEXT RETRIEVAL TRIGGERED - message: '{message}', should_refresh: {should_refresh}, user_id: {user_id}")
-                
-                try:
-                    user_context = await ai_context_store_client.get_user_context(
-                        user_id, 
-                        jwt_token, 
-                        refresh_data=should_refresh
+                # Step 2: Crisis Detection
+                if self.config.crisis_detection_enabled:
+                    response_data["processing_steps"].append("crisis_assessment")
+                    crisis_assessment = await ml_service_client.assess_crisis_risk(
+                        message, 
+                        {"user_id": context.get("user_id"), "session_id": context.get("session_id")}, 
+                        jwt_token
                     )
                     
-                    if user_context:
-                        logger.info(f"📊 Retrieved user context (refreshed: {should_refresh}): user_id={user_context.user_id}, mood_history_count={len(user_context.mood_history)}")
-                        response_data["services_used"].append("context")
-                    else:
-                        logger.warning(f"⚠️ No context available for user {user_id}")
-                except Exception as e:
-                    logger.error(f"❌ Failed to retrieve user context: {e}")
-                    user_context = None
-            
-            # Step 5: Response Generation
-            response_data["processing_steps"].append("response_generation")
-            response_text = await self._generate_contextual_response(
-                message=message,
-                crisis_assessment=crisis_assessment,
-                sentiment_analysis=sentiment_analysis,
-                intent_classification=intent_classification,
-                user_context=user_context if 'user_context' in locals() else None,
-                language=detected_language,
-                jwt_token=jwt_token
-            )
-            
-            # Step 6: Context Management (after response generation)
-            if self.config.ai_context_store.enabled:
-                response_data["processing_steps"].append("context_management")
-                
-                # Update conversation context
-                context_update = await ai_context_store_client.update_conversation_context(
-                    session_id,
-                    message,  # user_message
-                    response_text,  # bot_response  
-                    {  # metadata
-                        "sentiment": sentiment_analysis.sentiment if sentiment_analysis else "neutral",
-                        "intent": intent_classification.intent if intent_classification else "general_chat",
-                        "timestamp": start_time.isoformat(),
-                        "language": detected_language,
-                        "crisis_level": crisis_assessment.risk_level if crisis_assessment else "none"
-                    },
-                    jwt_token
-                )
-            
-            # Step 6: Cultural Adaptation
-            cultural_adaptations = []
-            if self.config.cultural_adaptation_enabled and detected_language != "en":
-                response_data["processing_steps"].append("cultural_adaptation")
-                
-                # Get cultural context
-                cultural_context = await translation_service_client.get_cultural_context(
-                    detected_language, jwt_token=jwt_token
-                )
-                
-                if cultural_context:
-                    cultural_adaptations.append({
-                        "type": "cultural_context_applied",
-                        "language": detected_language,
-                        "adaptations": ["greeting_style", "formality_level", "cultural_references"]
-                    })
-                
-                # Adapt response culturally
-                adapted_response = await translation_service_client.adapt_response_culturally(
-                    response_text,
-                    detected_language,
-                    cultural_context.__dict__ if cultural_context else None,
-                    jwt_token
-                )
-                
-                if adapted_response and adapted_response != response_text:
-                    cultural_adaptations.append({
-                        "type": "response_culturally_adapted",
-                        "language": detected_language,
-                        "original_length": len(response_text),
-                        "adapted_length": len(adapted_response)
-                    })
-                    response_text = adapted_response
-                    response_data["services_used"].append("translation")
-                
-                # Add regional considerations for common languages
-                regional_adaptations = {
-                    "hi": ["respectful_pronouns", "hindi_cultural_context", "family_oriented_advice"],
-                    "bn": ["bengali_cultural_nuances", "festival_references", "family_respect"],
-                    "ta": ["tamil_cultural_respect", "traditional_values", "community_focus"],
-                    "te": ["telugu_cultural_context", "elder_respect", "regional_customs"],
-                    "ur": ["urdu_cultural_sensitivity", "islamic_considerations", "respectful_language"]
-                }
-                
-                if detected_language in regional_adaptations:
-                    cultural_adaptations.append({
-                        "type": "regional_adaptations_applied",
-                        "language": detected_language,
-                        "adaptations": regional_adaptations[detected_language]
-                    })
-            
-            response_data["cultural_adaptations"] = cultural_adaptations
-            
-            # Step 7: Translation (if needed)
-            if detected_language != "en" and self.config.enable_translation:
-                response_data["processing_steps"].append("translation")
-                translation_result = await translation_service_client.translate_text(
-                    response_text,
-                    detected_language,
-                    source_language="en",
-                    jwt_token=jwt_token
-                )
-                
-                if translation_result:
-                    response_text = translation_result.translated_text
-                    response_data["cultural_adaptations"].extend(translation_result.cultural_adaptations)
-                    response_data["services_used"].append("translation")
-            
-            response_data["response"] = response_text
-            
-            # Step 8: Voice Generation (if enabled)
-            if self.config.enable_voice:
-                response_data["processing_steps"].append("voice_synthesis")
-                tts_result = await voice_service_client.text_to_speech(
-                    response_text,
-                    detected_language,
-                    jwt_token=jwt_token
-                )
-                
-                if tts_result:
-                    import base64
-                    response_data["audio_response"] = base64.b64encode(tts_result.audio_data).decode('utf-8')
-                    response_data["audio_format"] = tts_result.audio_format
-                    response_data["services_used"].append("voice")
-            
-            # Step 9: Action Orchestration
-            actions_triggered = []
-            if crisis_assessment and crisis_assessment.risk_level in ["medium", "high", "critical"]:
-                response_data["processing_steps"].append("action_orchestration")
-                
-                # Trigger crisis intervention action
-                crisis_action = await action_orchestrator_client.execute_action(
-                    "crisis_intervention",
-                    {
-                        "user_id": user_id,
-                        "session_id": session_id,
-                        "risk_level": crisis_assessment.risk_level,
-                        "message": message,
-                        "timestamp": start_time.isoformat()
-                    },
-                    priority="high",
-                    context={"language": detected_language},
-                    jwt_token=jwt_token
-                )
-                
-                if crisis_action:
-                    actions_triggered.append({
-                        "action_type": "crisis_intervention",
-                        "action_id": crisis_action.action_id,
-                        "status": crisis_action.status.value,
-                        "priority": "high"
-                    })
-                
-                # Schedule follow-up if needed
-                followup_action = await action_orchestrator_client.execute_action(
-                    "followup_scheduling",
-                    {
-                        "user_id": user_id,
-                        "followup_type": "crisis_check",
-                        "schedule_delay_hours": 2
-                    },
-                    jwt_token=jwt_token
-                )
-                
-                if followup_action:
-                    actions_triggered.append({
-                        "action_type": "followup_scheduling", 
-                        "action_id": followup_action.action_id,
-                        "status": followup_action.status.value,
-                        "priority": "medium"
-                    })
-            
-            # Trigger mood assessment for all interactions
-            if sentiment_analysis:
-                mood_action = await action_orchestrator_client.execute_action(
-                    "mood_assessment",
-                    {
-                        "user_id": user_id,
-                        "sentiment": sentiment_analysis.sentiment,
-                        "confidence": sentiment_analysis.confidence,
-                        "timestamp": start_time.isoformat()
-                    },
-                    jwt_token=jwt_token
-                )
-                
-                if mood_action:
-                    actions_triggered.append({
-                        "action_type": "mood_assessment",
-                        "action_id": mood_action.action_id,
-                        "status": mood_action.status.value,
-                        "priority": "low"
-                    })
-            
-            response_data["actions_triggered"] = actions_triggered
-            if actions_triggered:
-                response_data["services_used"].append("orchestrator")
-            
-            # Step 10: ML Insights and Recommendations
-            if self.config.enable_ml_insights:
-                response_data["processing_steps"].append("ml_insights")
-                
-                # Get user insights
-                user_insights = await ml_service_client.get_user_insights(
-                    user_id, "comprehensive", jwt_token
-                )
-                
-                if user_insights:
-                    response_data["user_insights"] = [
-                        {
-                            "type": insight.insight_type,
-                            "description": insight.description,
-                            "confidence": insight.confidence
-                        }
-                        for insight in user_insights[:3]  # Top 3 insights
-                    ]
-                    response_data["services_used"].append("ml")
+                    if crisis_assessment:
+                        response_data["crisis_level"] = crisis_assessment.risk_level
+                        response_data["crisis_confidence"] = crisis_assessment.confidence
+                        response_data["services_used"].append("ml")
+                        
+                        # Trigger immediate intervention for high-risk situations
+                        if crisis_assessment.immediate_intervention:
+                            response_data["processing_steps"].append("crisis_intervention")
+                            intervention_result = await action_orchestrator_client.execute_action(
+                                "crisis_intervention",
+                                {
+                                    "user_id": context.get("user_id"),
+                                    "session_id": context.get("session_id"),
+                                    "risk_level": crisis_assessment.risk_level,
+                                    "message": message
+                                },
+                                priority="urgent",
+                                jwt_token=jwt_token
+                            )
+                            if intervention_result:
+                                response_data["actions_triggered"].append("crisis_intervention")
+                                response_data["services_used"].append("orchestrator")
                 else:
-                    # Provide mock insights for demonstration
-                    response_data["user_insights"] = [
-                        {
-                            "type": "communication_pattern",
-                            "description": "User prefers detailed emotional discussions",
-                            "confidence": 0.85
+                    crisis_assessment = None
+                
+                # Step 3: Sentiment and Intent Analysis
+                response_data["processing_steps"].append("nlp_analysis")
+                
+                # Parallel NLP processing
+                nlp_tasks = []
+                
+                if self.config.models_service.enabled:
+                    nlp_tasks.extend([
+                        models_client.analyze_sentiment(message, detected_language),
+                        models_client.classify_intent_nlp(message, detected_language)
+                    ])
+                
+                nlp_results = await asyncio.gather(*nlp_tasks, return_exceptions=True)
+                
+                sentiment_analysis = nlp_results[0] if len(nlp_results) > 0 and not isinstance(nlp_results[0], Exception) else None
+                intent_classification = nlp_results[1] if len(nlp_results) > 1 and not isinstance(nlp_results[1], Exception) else None
+                
+                if sentiment_analysis or intent_classification:
+                    response_data["services_used"].append("models")
+                
+                # Step 4: Get User Context for Personalization
+                user_context = None
+                if self.config.ai_context_store.enabled:
+                    response_data["processing_steps"].append("context_retrieval")
+                    
+                    # Smart refresh based on keywords
+                    should_refresh = any(keyword in message.lower() for keyword in [
+                        'mood', 'feeling', 'journal', 'community', 'activity', 'progress', 'track', 'how am i', 'my', 'lately'
+                    ])
+                    
+                    logger.info(f"🎯 CONTEXT RETRIEVAL TRIGGERED - message: '{message}', should_refresh: {should_refresh}, user_id: {context.get('user_id')}")
+                    
+                    try:
+                        user_context = await ai_context_store_client.get_user_context(
+                            context.get("user_id"), 
+                            jwt_token, 
+                            refresh_data=should_refresh
+                        )
+                        
+                        if user_context:
+                            logger.info(f"📊 Retrieved user context (refreshed: {should_refresh}): user_id={user_context.user_id}, mood_history_count={len(user_context.mood_history)}")
+                            response_data["services_used"].append("context")
+                        else:
+                            logger.warning(f"⚠️ No context available for user {context.get('user_id')}")
+                    except Exception as e:
+                        logger.error(f"❌ Failed to retrieve user context: {e}")
+                        user_context = None
+                
+                # Step 5: Response Generation (in detected language)
+                response_data["processing_steps"].append("response_generation")
+                response_text = await self._generate_contextual_response(
+                    message=message,
+                    crisis_assessment=crisis_assessment,
+                    sentiment_analysis=sentiment_analysis,
+                    intent_classification=intent_classification,
+                    user_context=user_context if 'user_context' in locals() else None,
+                    language=detected_language,
+                    jwt_token=jwt_token
+                )
+                
+                # Step 6: Context Management
+                if self.config.ai_context_store.enabled:
+                    response_data["processing_steps"].append("context_management")
+                    
+                    # Update conversation context
+                    context_update = await ai_context_store_client.update_conversation_context(
+                        context.get("session_id"),
+                        message,  # user_message
+                        response_text,  # bot_response  
+                        {  # metadata
+                            "sentiment": sentiment_analysis.sentiment if sentiment_analysis else "neutral",
+                            "intent": intent_classification.intent if intent_classification else "general_chat",
+                            "timestamp": response_data["timestamp"],
+                            "language": detected_language,
+                            "crisis_level": crisis_assessment.risk_level if crisis_assessment else "none",
+                            "input_type": input_type
                         },
+                        jwt_token
+                    )
+                
+                # Step 7: Cultural Adaptation
+                cultural_adaptations = []
+                if self.config.cultural_adaptation_enabled and detected_language != "en":
+                    response_data["processing_steps"].append("cultural_adaptation")
+                    
+                    # Get cultural context
+                    cultural_context = await translation_service_client.get_cultural_context(
+                        detected_language, jwt_token=jwt_token
+                    )
+                    
+                    if cultural_context:
+                        cultural_adaptations.append({
+                            "type": "cultural_context_applied",
+                            "language": detected_language,
+                            "adaptations": ["greeting_style", "formality_level", "cultural_references"]
+                        })
+                    
+                    # Adapt response culturally
+                    adapted_response = await translation_service_client.adapt_response_culturally(
+                        response_text,
+                        detected_language,
+                        cultural_context.__dict__ if cultural_context else None,
+                        jwt_token
+                    )
+                    
+                    if adapted_response and adapted_response != response_text:
+                        cultural_adaptations.append({
+                            "type": "response_culturally_adapted",
+                            "language": detected_language,
+                            "original_length": len(response_text),
+                            "adapted_length": len(adapted_response)
+                        })
+                        response_text = adapted_response
+                        response_data["services_used"].append("translation")
+                    
+                    # Add regional considerations for common languages
+                    regional_adaptations = {
+                        "hi": ["respectful_pronouns", "hindi_cultural_context", "family_oriented_advice"],
+                        "bn": ["bengali_cultural_nuances", "festival_references", "family_respect"],
+                        "ta": ["tamil_cultural_respect", "traditional_values", "community_focus"],
+                        "te": ["telugu_cultural_context", "elder_respect", "regional_customs"],
+                        "ur": ["urdu_cultural_sensitivity", "islamic_considerations", "respectful_language"]
+                    }
+                    
+                    if detected_language in regional_adaptations:
+                        cultural_adaptations.append({
+                            "type": "regional_adaptations_applied",
+                            "language": detected_language,
+                            "adaptations": regional_adaptations[detected_language]
+                        })
+                
+                response_data["cultural_adaptations"] = cultural_adaptations
+                
+                # Step 8: Translation (if needed and different from conversation language)
+                if detected_language != conversation_language and self.config.enable_translation:
+                    response_data["processing_steps"].append("translation")
+                    translation_result = await translation_service_client.translate_text(
+                        response_text,
+                        conversation_language,
+                        source_language=detected_language,
+                        jwt_token=jwt_token
+                    )
+                    
+                    if translation_result:
+                        response_text = translation_result.translated_text
+                        response_data["cultural_adaptations"].extend(translation_result.cultural_adaptations)
+                        response_data["services_used"].append("translation")
+                
+                response_data["response"] = response_text
+                
+                # Step 9: Voice Generation (Enhanced Logic)
+                if self.config.enable_voice and response_data["should_respond_with_voice"]:
+                    response_data["processing_steps"].append("voice_synthesis")
+                    
+                    # Generate voice in the conversation language (not detected language)
+                    voice_language = conversation_language or detected_language
+                    
+                    tts_result = await voice_service_client.text_to_speech(
+                        response_text,
+                        voice_language,
+                        jwt_token=jwt_token
+                    )
+                    
+                    if tts_result:
+                        import base64
+                        response_data["audio_response"] = base64.b64encode(tts_result.audio_data).decode('utf-8')
+                        response_data["audio_format"] = tts_result.audio_format
+                        response_data["voice_language"] = voice_language
+                        response_data["services_used"].append("voice")
+                        logger.info(f"🎤 Generated voice response in {voice_language} for user {context.get('user_id')}")
+                    else:
+                        logger.warning(f"⚠️ Failed to generate voice response for language {voice_language}")
+                elif self.config.enable_voice:
+                    # Even if not voice input, offer voice response for accessibility
+                    response_data["voice_available"] = True
+                    response_data["voice_language"] = conversation_language or detected_language
+                
+                # Step 10: Action Orchestration
+                actions_triggered = []
+                if crisis_assessment and crisis_assessment.risk_level in ["medium", "high", "critical"]:
+                    response_data["processing_steps"].append("action_orchestration")
+                    
+                    # Trigger crisis intervention action
+                    crisis_action = await action_orchestrator_client.execute_action(
+                        "crisis_intervention",
                         {
-                            "type": "engagement_trend",
-                            "description": "Active participation in evening hours",
-                            "confidence": 0.78
-                        }
-                    ]
-            
-            # Calculate processing time
-            end_time = datetime.utcnow()
-            response_data["processing_time_ms"] = int((end_time - start_time).total_seconds() * 1000)
-            response_data["status"] = "success"
-            
-            return response_data
-            
+                            "user_id": context.get("user_id"),
+                            "session_id": context.get("session_id"),
+                            "risk_level": crisis_assessment.risk_level,
+                            "message": message,
+                            "timestamp": response_data["timestamp"]
+                        },
+                        priority="high",
+                        context={"language": detected_language},
+                        jwt_token=jwt_token
+                    )
+                    
+                    if crisis_action:
+                        actions_triggered.append({
+                            "action_type": "crisis_intervention",
+                            "action_id": crisis_action.action_id,
+                            "status": crisis_action.status.value,
+                            "priority": "high"
+                        })
+                    
+                    # Schedule follow-up if needed
+                    followup_action = await action_orchestrator_client.execute_action(
+                        "followup_scheduling",
+                        {
+                            "user_id": context.get("user_id"),
+                            "followup_type": "crisis_check",
+                            "schedule_delay_hours": 2
+                        },
+                        jwt_token=jwt_token
+                    )
+                    
+                    if followup_action:
+                        actions_triggered.append({
+                            "action_type": "followup_scheduling", 
+                            "action_id": followup_action.action_id,
+                            "status": followup_action.status.value,
+                            "priority": "medium"
+                        })
+                
+                # Trigger mood assessment for all interactions
+                if sentiment_analysis:
+                    mood_action = await action_orchestrator_client.execute_action(
+                        "mood_assessment",
+                        {
+                            "user_id": context.get("user_id"),
+                            "sentiment": sentiment_analysis.sentiment,
+                            "confidence": sentiment_analysis.confidence,
+                            "timestamp": response_data["timestamp"]
+                        },
+                        jwt_token=jwt_token
+                    )
+                    
+                    if mood_action:
+                        actions_triggered.append({
+                            "action_type": "mood_assessment",
+                            "action_id": mood_action.action_id,
+                            "status": mood_action.status.value,
+                            "priority": "low"
+                        })
+                
+                response_data["actions_triggered"] = actions_triggered
+                
+                # Step 11: Update conversation language for consistency
+                if detected_language != conversation_language:
+                    response_data["conversation_language_updated"] = True
+                    response_data["conversation_language"] = detected_language
+                
+                # Final response preparation
+                return EnhancedChatResponse(
+                    response=response_text,
+                    session_id=context.get("session_id"),
+                    user_id=context.get("user_id"),
+                    timestamp=response_data["timestamp"],
+                    language_detected=detected_language,
+                    conversation_language=conversation_language or detected_language,
+                    input_type=input_type,
+                    should_respond_with_voice=response_data["should_respond_with_voice"],
+                    audio_response=response_data.get("audio_response"),
+                    audio_format=response_data.get("audio_format"),
+                    voice_language=response_data.get("voice_language"),
+                    crisis_level=response_data["crisis_level"],
+                    cultural_adaptations=cultural_adaptations,
+                    actions_triggered=actions_triggered,
+                    processing_steps=response_data["processing_steps"],
+                    services_used=response_data["services_used"],
+                    metadata=response_data
+                )
+                
+            except Exception as e:
+                logger.error(f"❌ Error in enhanced processing: {e}")
+                # Fallback to basic response
+                return await self._create_fallback_response(message, context, str(e))
+                
         except Exception as e:
-            logger.error(f"Error processing message: {e}")
-            response_data["status"] = "error"
-            response_data["error"] = str(e)
-            response_data["response"] = self._get_fallback_response(detected_language)
-            return response_data
+            logger.error(f"❌ Critical error in process_message: {e}")
+            return await self._create_error_response(str(e))
     
     async def _generate_contextual_response(
         self,

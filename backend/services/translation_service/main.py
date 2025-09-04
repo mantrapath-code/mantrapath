@@ -9,7 +9,7 @@ from pydantic import BaseModel
 from typing import Optional, List
 import uvicorn
 
-from engines.translation_coordinator import TranslationCoordinator
+from engines.phi3_enhanced_coordinator import Phi3EnhancedTranslationCoordinator as TranslationCoordinator
 
 # Setup logging
 logging.basicConfig(level=logging.INFO)
@@ -150,10 +150,12 @@ async def health_check():
     }
 
 if __name__ == "__main__":
+    import os
+    port = int(os.getenv("TRANSLATION_PORT", "8010"))
     uvicorn.run(
         "main:app",
         host="0.0.0.0",
-        port=9001,
+        port=port,
         reload=True,
         log_level="info"
     )

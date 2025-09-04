@@ -182,15 +182,15 @@ class ModelsServiceClient:
     
     async def generate_tts_response(self, text: str, language: str = "en", voice: str = "default") -> Optional[bytes]:
         """
-        Generate TTS audio response using Models Service
+        Generate TTS response using Models Service
         
         Args:
             text: Text to convert to speech
-            language: Language code
-            voice: Voice type
+            language: Language code (e.g., 'en', 'hi', 'bn')
+            voice: Voice type to use
             
         Returns:
-            Audio bytes or None if failed
+            Audio data as bytes or None if failed
         """
         if not self.is_enabled:
             logger.debug("Models Service is disabled, skipping TTS generation")
@@ -200,13 +200,12 @@ class ModelsServiceClient:
             payload = {
                 "text": text,
                 "language": language,
-                "model": "gtts",  # Use reliable gTTS model
                 "voice": voice
             }
             
             async with httpx.AsyncClient(timeout=self.timeout) as client:
                 response = await client.post(
-                    f"{self.models_service_url}/api/v1/tts/synthesize",
+                    f"{self.models_service_url}/api/v1/tts/generate",
                     json=payload
                 )
                 
@@ -218,6 +217,64 @@ class ModelsServiceClient:
                     
         except Exception as e:
             logger.error(f"Error in TTS generation: {e}")
+            return None
+    
+    async def generate_response(
+        self, 
+        message: str, 
+        language: str = "en", 
+        context: Optional[Dict[str, Any]] = None,
+        jwt_token: Optional[str] = None
+    ) -> Optional[Dict[str, Any]]:
+        """
+        Generate AI response using Models Service
+        
+        Args:
+            message: User message to respond to
+            language: Language code (e.g., 'en', 'hi', 'bn')
+            context: Additional context for response generation
+            jwt_token: JWT token for authentication
+            
+        Returns:
+            Response data or None if failed
+        """
+        if not self.is_enabled:
+            logger.debug("Models Service is disabled, skipping response generation")
+            return None
+            
+        try:
+            payload = {
+                "message": message,
+                "language": language,
+                "context": context or {},
+                "system_prompt": "You are Mantra-Mitra, an empathetic AI wellness companion. Respond in the user's language with empathy, understanding, and practical wellness guidance."
+            }
+            
+            headers = {}
+            if jwt_token:
+                headers["Authorization"] = f"Bearer {jwt_token}"
+            
+            async with httpx.AsyncClient(timeout=self.timeout) as client:
+                response = await client.post(
+                    f"{self.models_service_url}/api/v1/chat/generate",
+                    json=payload,
+                    headers=headers
+                )
+                
+                if response.status_code == 200:
+                    data = response.json()
+                    return {
+                        "response": data.get("response", ""),
+                        "confidence": data.get("confidence", 0.0),
+                        "model_used": data.get("model_used", "unknown"),
+                        "language": language
+                    }
+                else:
+                    logger.error(f"Response generation failed: {response.status_code} - {response.text}")
+                    return None
+                    
+        except Exception as e:
+            logger.error(f"Error in response generation: {e}")
             return None
     
     def _classify_intent_from_analysis(self, text: str, sentiment: SentimentAnalysis) -> str:

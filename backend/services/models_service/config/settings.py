@@ -259,11 +259,12 @@ class Settings(BaseSettings):
         "coqui_hi": {
             "type": "tts",
             "engine": "coqui",
-            "model_name": "tts_models/hi/male/fairseq",
-            "size": "500MB",
-            "languages": ["hi"],
-            "quality": "good",
-            "device": ["cpu", "gpu"]
+            "model_name": "tts_models/multilingual/multi-dataset/xtts_v2",
+            "size": "1.9GB",
+            "languages": ["hi", "en", "es", "fr", "de", "pt", "pl", "tr", "ru", "nl", "cs", "ar", "zh-cn", "ja"],
+            "quality": "excellent",
+            "device": ["cpu", "gpu"],
+            "features": ["multilingual", "voice_cloning", "emotional_speech"]
         },
         "coqui_bn": {
             "type": "tts",

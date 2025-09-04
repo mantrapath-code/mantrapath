@@ -524,7 +524,7 @@ services:
       - mantrapath-network
     restart: unless-stopped
 
-  # Translation Service
+  # Translation Service - Enhanced with Phi-3 Integration
   translation-service:
     build:
       context: .
@@ -535,48 +535,77 @@ services:
       - .env
     environment:
       - DATABASE_URL=postgresql://mantrapath:mantrapath123@postgres:5432/mantrapath
-      - REDIS_URL=redis://redis:6379
+      - REDIS_URL=redis://redis:6379/2
+      - MODELS_SERVICE_URL=http://models-service:${MODELS_SERVICE_INTERNAL_PORT}
       - JWT_SECRET_KEY=${JWT_SECRET_KEY:-your-super-secret-jwt-key-change-in-production}
+      # Bhashini API Configuration
+      - BHASHINI_API_KEY=${BHASHINI_API_KEY}
+      - BHASHINI_USER_ID=${BHASHINI_USER_ID}
+      - BHASHINI_BASE_URL=${BHASHINI_BASE_URL:-https://meity-auth.ulcacontrib.org}
+      - BHASHINI_COMPUTE_URL=${BHASHINI_COMPUTE_URL:-https://dhruva-api.bhashini.gov.in/services/inference}
+      - BHASHINI_API_VERSION=${BHASHINI_API_VERSION:-v1}
+      # Translation Service Configuration
+      - TRANSLATION_PORT=${TRANSLATION_SERVICE_PORT}
+      - TRANSLATION_DEBUG=true
     depends_on:
       postgres:
         condition: service_healthy
       redis:
         condition: service_healthy
-    networks:
-      - mantrapath-network
-    restart: unless-stopped
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8010/health"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-      start_period: 30s
+      models-service:
+        condition: service_healthy
+  #   networks:
+  #     - mantrapath-network
+  #   restart: unless-stopped
+  #   # Resource limits for ML model loading
+  #   deploy:
+  #     resources:
+  #       limits:
+  #         memory: 4G
+  #         cpus: '2'
+  #       reservations:
+  #         memory: 2G
+  #         cpus: '1'
+  #   # Re-enable health check with longer start period
+  #   healthcheck:
+  #     test: ["CMD", "curl", "-f", "http://localhost:8010/health"]
+  #     interval: 30s
+  #     timeout: 10s
+  #     retries: 3
+  #     start_period: 300s  # 5 minutes for model download
+    #   interval: 30s
+    #   timeout: 10s
+    #   retries: 3
+    #   start_period: 30s
 
-  # Voice Service
+  # Voice Service - Clean Implementation with Indian Language Support
   voice-service:
     build:
-      context: .
-      dockerfile: services/voice_service/Dockerfile
+      context: ./services/voice_service
+      dockerfile: Dockerfile
     ports:
-      - "${VOICE_SERVICE_PORT}:${VOICE_SERVICE_PORT}"
+      - "${VOICE_SERVICE_PORT:-8011}:8011"
     env_file:
       - .env
     environment:
       - DATABASE_URL=postgresql://mantrapath:mantrapath123@postgres:5432/mantrapath
       - REDIS_URL=redis://redis:6379
       - JWT_SECRET_KEY=${JWT_SECRET_KEY:-your-super-secret-jwt-key-change-in-production}
-      - OPENAI_API_KEY=${OPENAI_API_KEY}
-      - ELEVENLABS_API_KEY=${ELEVENLABS_API_KEY}
-      - AUTH_SERVICE_URL=http://auth-service:${AUTH_SERVICE_PORT}
-      - PROFILE_SERVICE_URL=http://profile-service:${PROFILE_SERVICE_PORT}
-      - CONTENT_SERVICE_URL=http://content-service:${CONTENT_SERVICE_PORT}
-      - COMMUNITY_SERVICE_URL=http://community-service:${COMMUNITY_SERVICE_PORT}
-      - TRANSLATION_SERVICE_URL=http://translation-service:${TRANSLATION_SERVICE_PORT}
-      - NOTIFICATION_SERVICE_URL=http://notification-service:${NOTIFICATION_SERVICE_PORT}
-      - MEDIA_SERVICE_URL=http://media-service:${MEDIA_SERVICE_PORT}
-      - MOOD_SERVICE_URL=http://mood-service:${MOOD_SERVICE_PORT}
-      - API_GATEWAY_URL=http://api-gateway:${API_GATEWAY_PORT}
-      - ACTION_ORCHESTRATOR_URL=http://action-orchestrator:${ACTION_ORCHESTRATOR_PORT}
+      - VOICE_PORT=8011
+      - LOG_LEVEL=INFO
+      - ENVIRONMENT=development
+      # Service Integration URLs
+      - CHATBOT_SERVICE_URL=http://chatbot-service:${CHATBOT_SERVICE_PORT:-8003}
+      - MOOD_SERVICE_URL=http://mood-service:${MOOD_SERVICE_PORT:-8004}
+      - ANALYTICS_SERVICE_URL=http://analytics-service:${ANALYTICS_SERVICE_PORT:-8008}
+      # Indian Language Support
+      - DEFAULT_LANGUAGE=hi
+      - SUPPORTED_LANGUAGES=hi,en,bn,ta,te,gu,mr,pa,ur,ml,kn
+      # Vosk Configuration
+      - VOSK_MODELS_DIR=/app/voice_models
+      - VOSK_DOWNLOAD_ENABLED=true
+    volumes:
+      - voice_models:/app/voice_models
     depends_on:
       postgres:
         condition: service_healthy
@@ -590,7 +619,7 @@ services:
       interval: 30s
       timeout: 10s
       retries: 3
-      start_period: 30s
+      start_period: 60s
 
   # Action Orchestrator Service
   action-orchestrator:
@@ -651,7 +680,7 @@ services:
       - NATS_URL=nats://nats:4222
       - NATS_SERVERS=nats://nats:4222
       - JWT_SECRET_KEY=${JWT_SECRET_KEY:-your-super-secret-jwt-key-change-in-production}
-      - LOG_LEVEL=info
+      - LOG_LEVEL=INFO
       - ENVIRONMENT=development
       # AI Model Configuration
       - AI_MODELS_CACHE_DIR=/app/models_cache
@@ -698,7 +727,7 @@ services:
       - REDIS_URL=redis://redis:6379
       - NATS_URL=nats://nats:4222
       - JWT_SECRET_KEY=${JWT_SECRET_KEY:-your-super-secret-jwt-key-change-in-production}
-      - LOG_LEVEL=info
+      - LOG_LEVEL=INFO
       - ENVIRONMENT=development
       - DEMO_MODE=true  # Enable demonstration mode with sample assistance content
       # Service Integration URLs
@@ -758,7 +787,7 @@ services:
       - REDIS_URL=redis://redis:6379
       - NATS_URL=nats://nats:4222
       - JWT_SECRET_KEY=${JWT_SECRET_KEY:-your-super-secret-jwt-key-change-in-production}
-      - LOG_LEVEL=info
+      - LOG_LEVEL=INFO
       - ENVIRONMENT=development
       # Voice Processing Configuration
       - MAX_CONCURRENT_STREAMS=100
@@ -842,7 +871,7 @@ services:
       - BATCH_PROCESSING_ENABLED=true
       
       # Logging and Monitoring
-      - LOG_LEVEL=info
+      - LOG_LEVEL=INFO
       - ENVIRONMENT=development
       - METRICS_ENABLED=true
       - HEALTH_CHECK_INTERVAL=30
@@ -871,6 +900,8 @@ volumes:
   ai_models_cache:
   models_cache:    # NEW - Models Service cache
   models_data:     # NEW - Models Service model storage
+  voice_models:    # NEW - Voice Service Vosk models
+  voice_audio:     # NEW - Voice Service audio files
 
 networks:
   mantrapath-network:

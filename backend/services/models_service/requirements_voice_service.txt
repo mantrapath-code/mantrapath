@@ -1,0 +1,56 @@
+# Core API Framework
+fastapi==0.104.1
+uvicorn[standard]==0.24.0
+pydantic==2.5.0
+pydantic-settings==2.1.0
+
+# HTTP Client
+aiohttp==3.9.1
+httpx==0.25.2
+requests==2.31.0
+
+# Audio Processing
+librosa==0.10.1
+soundfile==0.12.1
+pydub==0.25.1
+
+# Machine Learning Core
+torch>=2.0.0
+torchaudio>=2.0.0
+numpy>=1.24.0
+scipy>=1.11.0
+
+# Speech-to-Text Models - Focus on core voice service needs
+openai-whisper==20231117
+vosk==0.3.44
+
+# TTS Models - Enhanced for voice service
+TTS==0.22.0  # Coqui TTS for high-quality voice synthesis
+gTTS==2.4.0
+pyttsx3==2.90
+
+# NLP Libraries - Voice service essentials
+transformers==4.36.0
+sentence-transformers==2.2.2
+datasets==2.14.0  # Hugging Face datasets for model training
+accelerate==0.24.0  # For faster model loading
+spacy==3.7.0  # For NLP processing (without Japanese)
+textblob==0.17.1  # For sentiment analysis
+
+# Utilities
+python-multipart==0.0.6
+python-dotenv==1.0.0
+
+# Development and Testing
+pytest==7.4.3
+pytest-asyncio==0.21.1
+pytest-cov==4.1.0
+pytest-mock==3.12.0
+pytest-xdist==3.5.0
+coverage==7.3.2
+factory-boy==3.3.0
+faker==20.1.0
+
+# System utilities
+psutil==5.9.6
+loguru==0.7.2

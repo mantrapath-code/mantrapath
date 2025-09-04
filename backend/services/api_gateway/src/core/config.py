@@ -93,57 +93,57 @@ class ServiceConfig(BaseSettings):
     websocket_port: int = Field(default=8001, description="WebSocket port for real-time features")
     metrics_port: int = Field(default=9090, description="Metrics and monitoring port")
     
-    # Standardized Service Ports (8010-8030 range to avoid conflicts)
+    # Standardized Service Ports (using environment variables for correct ports)
     # Auth Service
-    auth_service_url: str = Field(default="http://auth-service:8010")
+    auth_service_url: str = Field(default_factory=lambda: f"http://auth-service:{os.getenv('AUTH_SERVICE_PORT', '8001')}")
     auth_service_health_path: str = Field(default="/health")
     
     # Profile Service  
-    profile_service_url: str = Field(default="http://profile-service:8011")
+    profile_service_url: str = Field(default_factory=lambda: f"http://profile-service:{os.getenv('PROFILE_SERVICE_PORT', '8002')}")
     profile_service_health_path: str = Field(default="/health")
     
     # Mood Service
-    mood_service_url: str = Field(default="http://mood-service:8012")
+    mood_service_url: str = Field(default_factory=lambda: f"http://mood-service:{os.getenv('MOOD_SERVICE_PORT', '8003')}")
     mood_service_health_path: str = Field(default="/health")
     
     # Chatbot Service
-    chatbot_service_url: str = Field(default="http://chatbot-service:8013")
+    chatbot_service_url: str = Field(default_factory=lambda: f"http://chatbot-service:{os.getenv('CHATBOT_SERVICE_PORT', '8004')}")
     chatbot_service_health_path: str = Field(default="/health")
     
     # Content Service (Fixed naming - was incorrectly mapped to translation service)
-    content_service_url: str = Field(default="http://content-service:8014")
+    content_service_url: str = Field(default_factory=lambda: f"http://content-service:{os.getenv('CONTENT_SERVICE_PORT', '8005')}")
     content_service_health_path: str = Field(default="/health")
     
     # Community Service
-    community_service_url: str = Field(default="http://community-service:8015")
+    community_service_url: str = Field(default_factory=lambda: f"http://community-service:{os.getenv('COMMUNITY_SERVICE_PORT', '8006')}")
     community_service_health_path: str = Field(default="/health")
     
     # Notification Service
-    notification_service_url: str = Field(default="http://notification-service:8016")
+    notification_service_url: str = Field(default_factory=lambda: f"http://notification-service:{os.getenv('NOTIFICATION_SERVICE_PORT', '8007')}")
     notification_service_health_path: str = Field(default="/health")
     
     # ML Service
-    ml_service_url: str = Field(default="http://ml-service:8017")
+    ml_service_url: str = Field(default_factory=lambda: f"http://ml-service:{os.getenv('ML_SERVICE_PORT', '8008')}")
     ml_service_health_path: str = Field(default="/health")
     
     # Media Service
-    media_service_url: str = Field(default="http://media-service:8018")
+    media_service_url: str = Field(default_factory=lambda: f"http://media-service:{os.getenv('MEDIA_SERVICE_PORT', '8009')}")
     media_service_health_path: str = Field(default="/health")
     
     # Translation Service (Fixed naming - was incorrectly mapped to content service) 
-    translation_service_url: str = Field(default="http://translation-service:8019")
+    translation_service_url: str = Field(default_factory=lambda: f"http://translation-service:{os.getenv('TRANSLATION_SERVICE_PORT', '8010')}")
     translation_service_health_path: str = Field(default="/health")
     
     # Voice Service
-    voice_service_url: str = Field(default="http://voice-service:8020")
+    voice_service_url: str = Field(default_factory=lambda: f"http://voice-service:{os.getenv('VOICE_SERVICE_PORT', '8011')}")
     voice_service_health_path: str = Field(default="/health")
     
     # Action Orchestrator Service
-    action_orchestrator_url: str = Field(default="http://action-orchestrator:8021")
+    action_orchestrator_url: str = Field(default_factory=lambda: f"http://action-orchestrator:{os.getenv('ACTION_ORCHESTRATOR_PORT', '8012')}")
     action_orchestrator_health_path: str = Field(default="/health")
     
-    # Models Service (Fixed port conflict - was 8080, now 8022)
-    models_service_url: str = Field(default="http://models-service:8022")
+    # Models Service (Fixed port conflict - was 8080, now using env var)
+    models_service_url: str = Field(default_factory=lambda: f"http://models-service:{os.getenv('MODELS_SERVICE_INTERNAL_PORT', '8080')}")
     models_service_health_path: str = Field(default="/health")
     
     model_config = {
