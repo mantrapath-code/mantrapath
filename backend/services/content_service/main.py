@@ -42,7 +42,7 @@ app.add_middleware(
 )
 
 # Redis for caching
-redis_client = redis.from_url(os.getenv("REDIS_URL", "redis://localhost:6379"))
+redis_client = redis.from_url(os.getenv("REDIS_URL", "redis://redis:6379"))
 
 # Pydantic models
 class ContentCreate(BaseModel):

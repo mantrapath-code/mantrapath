@@ -33,6 +33,13 @@ interface MoodInsights {
   mood_score: number
   energy_level: number
   stress_level: number
+  sleep_quality: number
+  emotional_granularity: number
+  mood_confidence: number
+  context_tags: string[]
+  environmental_context: Record<string, any>
+  collection_method: string
+  notes: string
 }
 
 interface MoodInsightsPanelProps {
@@ -73,7 +80,14 @@ export function MoodInsightsPanel({
           adaptive_questions: latestMood.adaptive_questions || [],
           mood_score: latestMood.mood_score,
           energy_level: latestMood.energy_level || 5,
-          stress_level: latestMood.stress_level || 5
+          stress_level: latestMood.stress_level || 5,
+          sleep_quality: latestMood.sleep_quality || 5,
+          emotional_granularity: latestMood.emotional_granularity || 3,
+          mood_confidence: latestMood.mood_confidence || 1.0,
+          context_tags: latestMood.context_tags || [],
+          environmental_context: latestMood.environmental_context || {},
+          collection_method: latestMood.collection_method || 'manual',
+          notes: latestMood.notes || ''
         })
         setLastUpdated(new Date())
       } else {
@@ -197,7 +211,7 @@ export function MoodInsightsPanel({
     )
   }
 
-  if (!insights || (insights.follow_up_responses.length === 0 && insights.celebration_triggers.length === 0)) {
+  if (!insights) {
     return (
       <Card className={className}>
         <CardHeader>
@@ -242,10 +256,11 @@ export function MoodInsightsPanel({
       </CardHeader>
 
       <CardContent className="space-y-6">
-        <AnimatePresence mode="wait">
+        <AnimatePresence>
           {/* Celebrations */}
           {showCelebrations && insights.celebration_triggers.length > 0 && (
             <motion.div
+              key="celebrations"
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, y: -20 }}
@@ -256,11 +271,11 @@ export function MoodInsightsPanel({
                 Celebrations
               </h4>
               <div className="space-y-2">
-                {insights.celebration_triggers.map((trigger, index) => {
+                {insights.celebration_triggers.filter(trigger => trigger && trigger.trim()).map((trigger, index) => {
                   const CelebrationIcon = getCelebrationIcon(trigger)
                   return (
                     <motion.div
-                      key={index}
+                      key={`celebration-${trigger}-${index}`}
                       initial={{ opacity: 0, scale: 0.95 }}
                       animate={{ opacity: 1, scale: 1 }}
                       transition={{ delay: index * 0.1 }}
@@ -289,9 +304,70 @@ export function MoodInsightsPanel({
             </motion.div>
           )}
 
+          {/* Enhanced Mood Data */}
+          <motion.div
+            key="mood-details"
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -20 }}
+            className="space-y-3"
+          >
+            <h4 className="flex items-center gap-2 text-sm font-medium text-gray-700">
+              <Heart size={16} className="text-red-500" />
+              Mood Details
+            </h4>
+            <div className="grid grid-cols-2 gap-3">
+              <div className="p-3 bg-gray-50 border border-gray-200 rounded-lg">
+                <div className="text-xs text-gray-500 mb-1">Mood Score</div>
+                <div className="text-lg font-semibold text-gray-800">{insights.mood_score}/10</div>
+              </div>
+              <div className="p-3 bg-gray-50 border border-gray-200 rounded-lg">
+                <div className="text-xs text-gray-500 mb-1">Energy Level</div>
+                <div className="text-lg font-semibold text-gray-800">{insights.energy_level}/10</div>
+              </div>
+              <div className="p-3 bg-gray-50 border border-gray-200 rounded-lg">
+                <div className="text-xs text-gray-500 mb-1">Stress Level</div>
+                <div className="text-lg font-semibold text-gray-800">{insights.stress_level}/10</div>
+              </div>
+              <div className="p-3 bg-gray-50 border border-gray-200 rounded-lg">
+                <div className="text-xs text-gray-500 mb-1">Sleep Quality</div>
+                <div className="text-lg font-semibold text-gray-800">{insights.sleep_quality}/10</div>
+              </div>
+            </div>
+            
+            {insights.context_tags && insights.context_tags.length > 0 && (
+              <div className="mt-3">
+                <div className="text-xs text-gray-500 mb-2">Context Tags</div>
+                <div className="flex flex-wrap gap-1">
+                  {insights.context_tags.filter(tag => tag && tag.trim()).map((tag, index) => (
+                    <Badge key={`tag-${tag}-${index}`} variant="secondary" className="text-xs">
+                      {tag}
+                    </Badge>
+                  ))}
+                </div>
+              </div>
+            )}
+            
+            {insights.notes && (
+              <div className="mt-3">
+                <div className="text-xs text-gray-500 mb-2">Notes</div>
+                <div className="text-sm text-gray-700 p-2 bg-gray-50 border border-gray-200 rounded">
+                  {insights.notes}
+                </div>
+              </div>
+            )}
+            
+            <div className="mt-3 text-xs text-gray-500">
+              <div>Collection Method: {insights.collection_method}</div>
+              <div>Confidence: {Math.round(insights.mood_confidence * 100)}%</div>
+              <div>Granularity: {insights.emotional_granularity}/5</div>
+            </div>
+          </motion.div>
+
           {/* Follow-up Questions */}
           {insights.follow_up_responses.length > 0 && (
             <motion.div
+              key="follow-up-questions"
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, y: -20 }}
@@ -302,9 +378,9 @@ export function MoodInsightsPanel({
                 Quick Check-in
               </h4>
               <div className="space-y-3">
-                {insights.follow_up_responses.map((response, index) => (
+                {insights.follow_up_responses.filter(response => response && response.question).map((response, index) => (
                   <motion.div
-                    key={index}
+                    key={`follow-up-${response.question}-${index}`}
                     initial={{ opacity: 0, x: -20 }}
                     animate={{ opacity: 1, x: 0 }}
                     transition={{ delay: index * 0.15 }}

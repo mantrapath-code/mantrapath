@@ -255,46 +255,58 @@ export function ChatBot({ className }: ChatBotProps) {
           
           try {
             toast.info('Processing voice input...', {
-              description: 'Converting speech to text'
+              description: 'Converting speech to text and analyzing mood...'
             })
             
-            // Use backend speech-to-text service
-            const sttResult = await apiService.speechToText(audioBlob, selectedLanguage)
-            console.log('STT Result:', sttResult) // Debug log
+            // Use the dedicated chatbot voice endpoint for integrated processing
+            const voiceResult = await apiService.chatbotVoiceInput(audioBlob, selectedLanguage, true)
+            console.log('Chatbot Voice Result:', voiceResult) // Debug log
             
-            // Extract text from VoiceResponse structure: data.transcription.text
-            let transcribedText = ''
-            if (sttResult && (sttResult as any).success && (sttResult as any).data?.transcription?.text) {
-              transcribedText = (sttResult as any).data.transcription.text.trim()
-            } else if (sttResult && (sttResult as any).text) {
-              // Fallback for other response formats
-              transcribedText = (sttResult as any).text.trim()
-            }
-            
-            if (transcribedText) {
-              setInput(transcribedText)
-              setLastInputMethod('voice') // Mark this as voice input
+            // Extract data from the integrated response
+            if (voiceResult && (voiceResult as any).success && (voiceResult as any).transcription?.text) {
+              const transcribedText = (voiceResult as any).transcription.text.trim()
+              const chatbotResponse = (voiceResult as any).chatbot_response
+              const moodUpdate = (voiceResult as any).mood_update
               
-              toast.success('Voice input captured', {
-                description: `Detected: "${transcribedText.substring(0, 50)}..."`
+              // Update input field to show what was transcribed temporarily
+              setInput(transcribedText)
+              setLastInputMethod('voice')
+              
+              toast.success('Voice message processed successfully', {
+                description: `Transcribed: "${transcribedText.substring(0, 50)}${transcribedText.length > 50 ? '...' : ''}"`
               })
               
-              // Auto-send after voice input with a reasonable delay
-              setTimeout(() => {
-                // Double check the input is still there and send
-                if (transcribedText) {
-                  handleSendVoiceInput(transcribedText)
+              // Send the transcribed message through the regular chatbot flow to maintain consistency
+              // This will add the user message and get an AI response
+              setTimeout(async () => {
+                try {
+                  await actions.sendMessage(transcribedText)
+                  setInput('') // Clear input after sending
+                  
+                  // Show additional information about the voice processing
+                  if (moodUpdate) {
+                    console.log('Voice processing included mood update:', moodUpdate)
+                  }
+                  
+                  // Show processing time info
+                  if ((voiceResult as any).processing_time_ms) {
+                    console.log('Voice processing completed in:', (voiceResult as any).processing_time_ms, 'ms')
+                  }
+                } catch (error) {
+                  console.error('Failed to send transcribed message:', error)
+                  toast.error('Failed to send transcribed message')
                 }
-              }, 1500)
+              }, 500)
+              
             } else {
-              console.log('STT result empty or missing text:', sttResult)
+              console.log('Voice result empty or missing data:', voiceResult)
               toast.error('No speech detected', {
                 description: 'Please try speaking again, louder and clearer'
               })
             }
           } catch (error) {
-            console.error('Speech-to-text error:', error)
-            toast.error('Backend speech-to-text failed', {
+            console.error('Chatbot voice processing error:', error)
+            toast.error('Voice processing failed', {
               description: 'Please try again or type your message'
             })
             
@@ -379,6 +391,19 @@ export function ChatBot({ className }: ChatBotProps) {
         setSupportedLanguages(Array.isArray(languages) ? languages : [])
       } catch (error) {
         console.error('Failed to load supported languages:', error)
+        // Fallback languages when translation service is not available
+        setSupportedLanguages([
+          { code: 'en', name: 'English' },
+          { code: 'hi', name: 'Hindi' },
+          { code: 'bn', name: 'Bengali' },
+          { code: 'te', name: 'Telugu' },
+          { code: 'ta', name: 'Tamil' },
+          { code: 'mr', name: 'Marathi' },
+          { code: 'gu', name: 'Gujarati' },
+          { code: 'kn', name: 'Kannada' },
+          { code: 'ml', name: 'Malayalam' },
+          { code: 'pa', name: 'Punjabi' }
+        ])
       }
     }
     loadLanguages()
@@ -624,7 +649,7 @@ export function ChatBot({ className }: ChatBotProps) {
             "flex-1 overflow-y-auto space-y-4",
             className?.includes('h-full') ? "max-h-none" : "max-h-64"
           )}>
-            <AnimatePresence>
+            <AnimatePresence mode="popLayout">
               {messages.length === 0 && (
                 <motion.div
                   initial={{ opacity: 0, y: 20 }}
@@ -645,9 +670,9 @@ export function ChatBot({ className }: ChatBotProps) {
                 </motion.div>
               )}
               
-              {messages.map((message) => (
+        {messages.map((message, idx) => (
                 <motion.div
-                  key={message.id}
+          key={message.id ?? `${message.sender}-${message.timestamp ?? ''}-${idx}`}
                   initial={{ opacity: 0, y: 20 }}
                   animate={{ opacity: 1, y: 0 }}
                   className={cn(
@@ -779,26 +804,26 @@ export function ChatBot({ className }: ChatBotProps) {
                   )}
                 </motion.div>
               ))}
-            </AnimatePresence>
-            
-            {isLoading && (
-              <motion.div
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                className="flex justify-start"
-              >
-                <div className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center shrink-0">
-                  <Robot size={16} className="text-primary" />
-                </div>
-                <div className="ml-2 bg-muted p-3 rounded-lg">
-                  <div className="flex gap-1">
-                    <div className="w-2 h-2 bg-muted-foreground/60 rounded-full animate-bounce" style={{ animationDelay: '0ms' }} />
-                    <div className="w-2 h-2 bg-muted-foreground/60 rounded-full animate-bounce" style={{ animationDelay: '150ms' }} />
-                    <div className="w-2 h-2 bg-muted-foreground/60 rounded-full animate-bounce" style={{ animationDelay: '300ms' }} />
+              
+              {isLoading && (
+                <motion.div
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  className="flex justify-start"
+                >
+                  <div className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center shrink-0">
+                    <Robot size={16} className="text-primary" />
                   </div>
-                </div>
-              </motion.div>
-            )}
+                  <div className="ml-2 bg-muted p-3 rounded-lg">
+                    <div className="flex gap-1">
+                      <div className="w-2 h-2 bg-muted-foreground/60 rounded-full animate-bounce" style={{ animationDelay: '0ms' }} />
+                      <div className="w-2 h-2 bg-muted-foreground/60 rounded-full animate-bounce" style={{ animationDelay: '150ms' }} />
+                      <div className="w-2 h-2 bg-muted-foreground/60 rounded-full animate-bounce" style={{ animationDelay: '300ms' }} />
+                    </div>
+                  </div>
+                </motion.div>
+              )}
+            </AnimatePresence>
             
             <div ref={messagesEndRef} />
           </div>

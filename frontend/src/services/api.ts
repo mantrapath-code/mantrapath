@@ -1336,7 +1336,7 @@ class ApiService {
         }>
         cycles: number
       }
-    }>('/api/chatbot/enhanced/chat', {
+    }>('/chat/intelligent', {
       method: 'POST',
       body: JSON.stringify({
         message,
@@ -1509,6 +1509,26 @@ class ApiService {
     })
   }
 
+  async chatbotVoiceInput(audioBlob: Blob, language: string = 'auto', updateMood: boolean = true) {
+    const formData = new FormData()
+    const filename = audioBlob.type.includes('webm') ? 'audio.webm' : 'audio.wav'
+    formData.append('file', audioBlob, filename)
+    formData.append('language', language)
+    formData.append('update_mood', updateMood.toString())
+    
+    // For FormData uploads, we need to exclude Content-Type to let browser set multipart boundary
+    const headers: HeadersInit = {}
+    if (this.token) {
+      headers.Authorization = `Bearer ${this.token}`
+    }
+    
+    return this.request('/voice/chatbot/voice', {
+      method: 'POST',
+      body: formData,
+      headers
+    })
+  }
+
   // Translation Service API Methods
   async detectLanguage(text: string) {
     return this.request('/translate/detect-language', {
@@ -1562,13 +1582,13 @@ class ApiService {
   // Real-time AI Insights from backend services
   async getAIEmotionAnalysis(text: string) {
     try {
-      const response = await fetch(`http://localhost:8014/api/v1/analyze/emotion`, {
+      const response = await fetch(`http://localhost:8000/ai-events/api/v1/analyze/emotion`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${this.token}`
         },
-        body: JSON.stringify({ text, user_id: 'current' })
+        body: JSON.stringify({ text, user_id: this.getUserId() })
       });
 
       if (!response.ok) {
@@ -1597,7 +1617,8 @@ class ApiService {
   async getAIInsights() {
     try {
       // Get predictive intervention analysis
-      const response = await fetch(`http://localhost:8014/api/v1/predict/intervention/current`, {
+      const userId = this.getUserId()
+      const response = await fetch(`http://localhost:8000/ai-events/api/v1/predict/intervention/${userId}`, {
         method: 'GET',
         headers: {
           'Content-Type': 'application/json',

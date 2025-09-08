@@ -54,43 +54,157 @@ export function processApiError(error: any): UserFriendlyError {
 
 function handleValidationError(error: ApiError): UserFriendlyError {
   const message = error.message || 'Please check your input'
+  const lowerMessage = message.toLowerCase()
   
   // Extract field-specific validation errors
-  if (message.includes('email')) {
-    return {
-      title: 'Email Issue',
-      message: 'Please check your email address',
-      description: 'Make sure your email is valid and not already registered.',
-      actionable: 'Try a different email or log in if you already have an account.',
-      severity: 'warning',
-      category: 'validation'
+  if (lowerMessage.includes('email')) {
+    if (lowerMessage.includes('invalid') || lowerMessage.includes('format')) {
+      return {
+        title: 'Invalid Email Format',
+        message: 'Please enter a valid email address',
+        description: 'Make sure your email follows the standard format (e.g., user@example.com).',
+        actionable: 'Check for typos and ensure you\'re using a valid email address.',
+        severity: 'warning',
+        category: 'validation'
+      }
+    } else if (lowerMessage.includes('required') || lowerMessage.includes('missing')) {
+      return {
+        title: 'Email Required',
+        message: 'Please provide your email address',
+        description: 'We need your email to create your account and send important updates.',
+        actionable: 'Enter a valid email address in the email field.',
+        severity: 'warning',
+        category: 'validation'
+      }
+    } else if (lowerMessage.includes('already registered') || lowerMessage.includes('already exists')) {
+      return {
+        title: 'Email Already Registered',
+        message: 'This email is already in use',
+        description: 'You already have an account with us using this email address.',
+        actionable: 'Try logging in instead, or use a different email address.',
+        severity: 'info',
+        category: 'validation'
+      }
     }
   }
   
-  if (message.includes('password')) {
-    return {
-      title: 'Password Requirements',
-      message: 'Your password needs to be stronger',
-      description: 'Passwords must be at least 8 characters with a mix of letters, numbers, and symbols.',
-      actionable: 'Create a secure password that meets our requirements.',
-      severity: 'warning',
-      category: 'validation'
+  if (lowerMessage.includes('password')) {
+    if (lowerMessage.includes('weak') || lowerMessage.includes('too short') || lowerMessage.includes('minimum')) {
+      return {
+        title: 'Password Too Weak',
+        message: 'Your password needs to be stronger',
+        description: 'Passwords must be at least 8 characters with a mix of letters, numbers, and symbols.',
+        actionable: 'Create a secure password that meets our requirements.',
+        severity: 'warning',
+        category: 'validation'
+      }
+    } else if (lowerMessage.includes('required') || lowerMessage.includes('missing')) {
+      return {
+        title: 'Password Required',
+        message: 'Please create a password',
+        description: 'A strong password helps protect your account and personal information.',
+        actionable: 'Enter a secure password that meets our requirements.',
+        severity: 'warning',
+        category: 'validation'
+      }
+    } else if (lowerMessage.includes('mismatch') || lowerMessage.includes('confirm')) {
+      return {
+        title: 'Password Mismatch',
+        message: 'Passwords do not match',
+        description: 'The password and confirmation password must be identical.',
+        actionable: 'Make sure both password fields contain the same value.',
+        severity: 'warning',
+        category: 'validation'
+      }
     }
   }
   
-  if (message.includes('username')) {
-    return {
-      title: 'Username Unavailable',
-      message: 'This username is already taken',
-      description: 'Choose a unique username that represents you.',
-      actionable: 'Try a different username or add numbers/symbols.',
-      severity: 'warning',
-      category: 'validation'
+  if (lowerMessage.includes('username')) {
+    if (lowerMessage.includes('taken') || lowerMessage.includes('already exists')) {
+      return {
+        title: 'Username Unavailable',
+        message: 'This username is already taken',
+        description: 'Choose a unique username that represents you.',
+        actionable: 'Try a different username or add numbers/symbols.',
+        severity: 'warning',
+        category: 'validation'
+      }
+    } else if (lowerMessage.includes('invalid') || lowerMessage.includes('format')) {
+      return {
+        title: 'Invalid Username Format',
+        message: 'Username contains invalid characters',
+        description: 'Usernames can only contain letters, numbers, underscores, and hyphens.',
+        actionable: 'Use only alphanumeric characters, underscores, and hyphens.',
+        severity: 'warning',
+        category: 'validation'
+      }
+    } else if (lowerMessage.includes('too short') || lowerMessage.includes('minimum')) {
+      return {
+        title: 'Username Too Short',
+        message: 'Username must be at least 3 characters',
+        description: 'Choose a username that\'s easy to remember and type.',
+        actionable: 'Make your username at least 3 characters long.',
+        severity: 'warning',
+        category: 'validation'
+      }
+    } else if (lowerMessage.includes('required') || lowerMessage.includes('missing')) {
+      return {
+        title: 'Username Required',
+        message: 'Please choose a username',
+        description: 'A username helps identify you in the community.',
+        actionable: 'Enter a unique username for your account.',
+        severity: 'warning',
+        category: 'validation'
+      }
+    }
+  }
+  
+  if (lowerMessage.includes('first_name') || lowerMessage.includes('first name')) {
+    if (lowerMessage.includes('required') || lowerMessage.includes('missing')) {
+      return {
+        title: 'First Name Required',
+        message: 'Please provide your first name',
+        description: 'We use your name to personalize your experience.',
+        actionable: 'Enter your first name in the appropriate field.',
+        severity: 'warning',
+        category: 'validation'
+      }
+    } else if (lowerMessage.includes('invalid') || lowerMessage.includes('format')) {
+      return {
+        title: 'Invalid First Name',
+        message: 'First name contains invalid characters',
+        description: 'Names should only contain letters, spaces, hyphens, and apostrophes.',
+        actionable: 'Use only valid characters for your name.',
+        severity: 'warning',
+        category: 'validation'
+      }
+    }
+  }
+  
+  if (lowerMessage.includes('last_name') || lowerMessage.includes('last name')) {
+    if (lowerMessage.includes('required') || lowerMessage.includes('missing')) {
+      return {
+        title: 'Last Name Required',
+        message: 'Please provide your last name',
+        description: 'We use your name to personalize your experience.',
+        actionable: 'Enter your last name in the appropriate field.',
+        severity: 'warning',
+        category: 'validation'
+      }
+    } else if (lowerMessage.includes('invalid') || lowerMessage.includes('format')) {
+      return {
+        title: 'Invalid Last Name',
+        message: 'Last name contains invalid characters',
+        description: 'Names should only contain letters, spaces, hyphens, and apostrophes.',
+        actionable: 'Use only valid characters for your name.',
+        severity: 'warning',
+        category: 'validation'
+      }
     }
   }
 
   // Challenge creation specific errors
-  if (message.includes('title') || message.includes('name')) {
+  if (lowerMessage.includes('title') || lowerMessage.includes('name')) {
     return {
       title: 'Title Required',
       message: 'Your challenge needs a meaningful title',
@@ -101,29 +215,23 @@ function handleValidationError(error: ApiError): UserFriendlyError {
     }
   }
 
-  if (message.includes('description')) {
-    return {
-      title: 'Description Required',
-      message: 'Please describe your challenge',
-      description: 'Help others understand what this challenge is about.',
-      actionable: 'Add a detailed description of your wellness challenge.',
-      severity: 'warning',
-      category: 'validation'
-    }
-  }
-
+  // Generic validation error
   return {
-    title: 'Input Validation',
-    message: 'Please review your information',
+    title: 'Validation Error',
+    message: 'Please check your input',
     description: message,
-    actionable: 'Check the highlighted fields and try again.',
+    actionable: 'Review the highlighted fields and correct any errors.',
     severity: 'warning',
     category: 'validation'
   }
 }
 
 function handleAuthenticationError(error: ApiError): UserFriendlyError {
-  if (error.message?.includes('verify') || error.message?.includes('verification')) {
+  const message = error.message || ''
+  const lowerMessage = message.toLowerCase()
+  
+  // Handle email verification errors
+  if (lowerMessage.includes('verify') || lowerMessage.includes('verification')) {
     return {
       title: 'Email Verification Required',
       message: 'Please verify your email first',
@@ -133,7 +241,81 @@ function handleAuthenticationError(error: ApiError): UserFriendlyError {
       category: 'authentication'
     }
   }
+  
+  // Handle invalid credentials
+  if (lowerMessage.includes('invalid credentials') || 
+      lowerMessage.includes('incorrect password') ||
+      lowerMessage.includes('wrong password') ||
+      lowerMessage.includes('bad credentials')) {
+    return {
+      title: 'Invalid Credentials',
+      message: 'The email/username or password you entered is incorrect',
+      description: 'Please double-check your login information and try again.',
+      actionable: 'Verify your email/username and password, or use the "Forgot Password" option.',
+      severity: 'warning',
+      category: 'authentication'
+    }
+  }
+  
+  // Handle user not found
+  if (lowerMessage.includes('user not found') || 
+      lowerMessage.includes('does not exist') ||
+      lowerMessage.includes('no account') ||
+      lowerMessage.includes('account not found')) {
+    return {
+      title: 'Account Not Found',
+      message: 'No account found with these credentials',
+      description: 'The email or username you entered doesn\'t match any existing account.',
+      actionable: 'Check your spelling, create a new account, or contact support if you believe this is an error.',
+      severity: 'info',
+      category: 'authentication'
+    }
+  }
+  
+  // Handle account locked/suspended
+  if (lowerMessage.includes('locked') || 
+      lowerMessage.includes('suspended') ||
+      lowerMessage.includes('disabled') ||
+      lowerMessage.includes('inactive')) {
+    return {
+      title: 'Account Temporarily Unavailable',
+      message: 'Your account has been temporarily restricted',
+      description: 'This may be due to security concerns or policy violations.',
+      actionable: 'Please contact our support team to resolve this issue.',
+      severity: 'error',
+      category: 'authentication'
+    }
+  }
+  
+  // Handle too many attempts
+  if (lowerMessage.includes('too many attempts') || 
+      lowerMessage.includes('rate limit') ||
+      lowerMessage.includes('multiple failed')) {
+    return {
+      title: 'Too Many Login Attempts',
+      message: 'Your account has been temporarily locked',
+      description: 'For security reasons, we\'ve temporarily blocked login attempts.',
+      actionable: 'Wait 15 minutes before trying again, or use the "Forgot Password" option.',
+      severity: 'warning',
+      category: 'authentication'
+    }
+  }
+  
+  // Handle expired tokens
+  if (lowerMessage.includes('expired') || 
+      lowerMessage.includes('token expired') ||
+      lowerMessage.includes('session expired')) {
+    return {
+      title: 'Session Expired',
+      message: 'Your login session has expired',
+      description: 'Please sign in again to continue using MantraPath.',
+      actionable: 'Enter your credentials to start a new session.',
+      severity: 'info',
+      category: 'authentication'
+    }
+  }
 
+  // Default authentication error
   return {
     title: 'Authentication Required',
     message: 'Please log in to continue',
@@ -167,7 +349,58 @@ function handleNotFoundError(error: ApiError): UserFriendlyError {
 }
 
 function handleConflictError(error: ApiError): UserFriendlyError {
-  if (error.message?.includes('email') || error.message?.includes('already exists')) {
+  const message = error.message || ''
+  const lowerMessage = message.toLowerCase()
+  
+  // Handle email already exists
+  if (lowerMessage.includes('email') && 
+      (lowerMessage.includes('already exists') || 
+       lowerMessage.includes('already registered') ||
+       lowerMessage.includes('duplicate'))) {
+    return {
+      title: 'Email Already Registered',
+      message: 'This email address is already in use',
+      description: 'You already have an account with us using this email address.',
+      actionable: 'Try logging in instead, or use a different email address for registration.',
+      severity: 'info',
+      category: 'validation'
+    }
+  }
+  
+  // Handle username already taken
+  if (lowerMessage.includes('username') && 
+      (lowerMessage.includes('already exists') || 
+       lowerMessage.includes('already taken') ||
+       lowerMessage.includes('duplicate') ||
+       lowerMessage.includes('taken'))) {
+    return {
+      title: 'Username Unavailable',
+      message: 'This username is already taken',
+      description: 'Choose a unique username that represents you.',
+      actionable: 'Try adding numbers, symbols, or using a different username.',
+      severity: 'warning',
+      category: 'validation'
+    }
+  }
+  
+  // Handle phone number conflicts
+  if (lowerMessage.includes('phone') && 
+      (lowerMessage.includes('already exists') || 
+       lowerMessage.includes('already registered'))) {
+    return {
+      title: 'Phone Number Already Registered',
+      message: 'This phone number is already in use',
+      description: 'You already have an account with us using this phone number.',
+      actionable: 'Try logging in instead, or use a different phone number.',
+      severity: 'info',
+      category: 'validation'
+    }
+  }
+  
+  // Handle general account conflicts
+  if (lowerMessage.includes('already exists') || 
+      lowerMessage.includes('already registered') ||
+      lowerMessage.includes('duplicate')) {
     return {
       title: 'Account Already Exists',
       message: 'You already have an account with us',
@@ -178,6 +411,7 @@ function handleConflictError(error: ApiError): UserFriendlyError {
     }
   }
 
+  // Default conflict error
   return {
     title: 'Duplicate Action',
     message: 'This action has already been completed',

@@ -332,7 +332,7 @@ class ActionDispatcher:
             "auth_service": settings.AUTH_SERVICE_URL
         }
         
-        return service_urls.get(service_name, "http://localhost:8000")
+        return service_urls.get(service_name, "http://api-gateway:8000")
     
     async def close(self) -> None:
         """Close HTTP client"""

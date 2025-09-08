@@ -307,3 +307,4 @@ class UsageTrackerService:
             
         except Exception as e:
             return {"error": f"Failed to get system stats: {str(e)}"}
+

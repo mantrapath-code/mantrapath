@@ -338,3 +338,4 @@ For support and questions:
 - **Issues** - Report bugs and feature requests
 - **Discussions** - Join community discussions
 - **Email** - Contact the development team
+

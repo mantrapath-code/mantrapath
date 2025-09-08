@@ -259,3 +259,4 @@ class HealthCheckerService:
             }
         except Exception as e:
             return {"error": f"Failed to get metrics for {service_name}: {str(e)}"}
+

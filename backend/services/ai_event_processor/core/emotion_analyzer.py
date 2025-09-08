@@ -2,6 +2,7 @@ import asyncio
 import time
 from typing import Dict, Any, Optional, List
 from datetime import datetime, timezone
+import os
 
 import structlog
 import torch
@@ -10,6 +11,7 @@ from langdetect import detect
 import numpy as np
 
 from models.ai_models import EmotionResult, AIMetrics
+from .models_service_client import ModelsServiceClient
 
 logger = structlog.get_logger(__name__)
 
@@ -29,6 +31,10 @@ class EmotionAnalyzer:
         self.models = {}
         self.tokenizers = {}
         self.is_initialized = False
+        self.use_models_service = os.getenv("USE_MODELS_SERVICE", "true").lower() == "true"
+        self.models_service_client = ModelsServiceClient()
+        self.local_models_available = False
+        
         self.supported_languages = [
             'en', 'hi', 'es', 'fr', 'de', 'it', 'pt', 'ru', 
             'ja', 'zh', 'ko', 'ar', 'bn', 'ta', 'te'
@@ -77,31 +83,39 @@ class EmotionAnalyzer:
             logger.error("Error stopping Emotion Analyzer", error=str(e))
     
     async def _load_primary_models(self):
-        """Load primary emotion analysis models"""
-        try:
-            # Load English emotion classification model
-            self.models['en_emotion'] = pipeline(
-                "text-classification",
-                model="j-hartmann/emotion-english-distilroberta-base",
-                device=0 if torch.cuda.is_available() else -1,
-                truncation=True,
-                max_length=512
-            )
-            
-            # Load sentiment analysis model for backup
-            self.models['sentiment'] = pipeline(
-                "sentiment-analysis",
-                model="cardiffnlp/twitter-roberta-base-sentiment-latest",
-                device=0 if torch.cuda.is_available() else -1,
-                truncation=True,
-                max_length=512
-            )
-            
-            logger.info("Primary emotion models loaded")
-            
-        except Exception as e:
-            logger.error("Error loading primary models", error=str(e))
-            raise
+        """Load primary emotion analysis models only if needed as fallback"""
+        if not self.use_models_service or not self.models_service_client:
+            try:
+                logger.info("Loading local emotion models as fallback")
+                
+                # Load English emotion classification model
+                self.models['en_emotion'] = pipeline(
+                    "text-classification",
+                    model="j-hartmann/emotion-english-distilroberta-base",
+                    device=0 if torch.cuda.is_available() else -1,
+                    truncation=True,
+                    max_length=512
+                )
+                
+                # Load sentiment analysis model for backup
+                self.models['sentiment'] = pipeline(
+                    "sentiment-analysis",
+                    model="cardiffnlp/twitter-roberta-base-sentiment-latest",
+                    device=0 if torch.cuda.is_available() else -1,
+                    truncation=True,
+                    max_length=512
+                )
+                
+                self.local_models_available = True
+                logger.info("Primary emotion models loaded successfully")
+                
+            except Exception as e:
+                logger.error("Error loading primary models", error=str(e))
+                self.local_models_available = False
+                raise
+        else:
+            logger.info("Using Models Service - skipping local model loading")
+            self.local_models_available = False
     
     async def _load_multilingual_models(self):
         """Load multilingual emotion models"""
@@ -217,47 +231,97 @@ class EmotionAnalyzer:
             return 'en'  # Default to English
     
     async def _analyze_emotion(self, text: str, language: str) -> Dict[str, Any]:
-        """Analyze emotion using appropriate model"""
+        """Analyze emotion using Models Service or local models"""
         try:
-            # Choose appropriate model
-            if language == 'en':
-                model = self.models.get('en_emotion')
-            else:
-                model = self.models.get('multilingual', self.models.get('en_emotion'))
+            # Try Models Service first
+            if self.use_models_service:
+                try:
+                    sentiment_result = await self.models_service_client.analyze_sentiment(text)
+                    if sentiment_result and sentiment_result.get('score', 0) > 0.1:
+                        # Convert sentiment to emotion format
+                        emotion_label = self._convert_sentiment_to_emotion(sentiment_result)
+                        confidence = sentiment_result.get('score', 0.5)
+                        
+                        # Create emotion scores dict for compatibility
+                        emotion_scores = {emotion_label: confidence}
+                        for emotion in self.emotion_labels:
+                            if emotion != emotion_label:
+                                emotion_scores[emotion] = 0.1  # Low confidence for other emotions
+                        
+                        return {
+                            "primary_emotion": emotion_label,
+                            "confidence": confidence,
+                            "emotion_scores": emotion_scores,
+                            "model_source": "models_service",
+                            "raw_results": [{"label": emotion_label, "score": confidence}]
+                        }
+                except Exception as e:
+                    logger.warning(f"Models Service emotion analysis failed: {e}, falling back to local models")
             
-            if not model:
-                raise RuntimeError("No emotion model available")
-            
-            # Run inference
-            results = model(text)
-            
-            # Process results
-            emotion_scores = {}
-            primary_emotion = "neutral"
-            max_confidence = 0.0
-            
-            for result in results:
-                emotion = result['label'].lower()
-                confidence = result['score']
-                emotion_scores[emotion] = confidence
+            # Fallback to local models if available
+            if self.local_models_available and self.is_initialized:
+                # Choose appropriate model
+                if language == 'en':
+                    model = self.models.get('en_emotion')
+                else:
+                    model = self.models.get('multilingual', self.models.get('en_emotion'))
                 
-                if confidence > max_confidence:
-                    max_confidence = confidence
-                    primary_emotion = emotion
+                if not model:
+                    raise RuntimeError("No emotion model available")
+                
+                # Run inference
+                results = model(text)
+                
+                # Process results
+                emotion_scores = {}
+                primary_emotion = "neutral"
+                max_confidence = 0.0
+                
+                for result in results:
+                    emotion = result['label'].lower()
+                    confidence = result['score']
+                    emotion_scores[emotion] = confidence
+                    
+                    if confidence > max_confidence:
+                        max_confidence = confidence
+                        primary_emotion = emotion
+                
+                # Normalize emotion labels
+                primary_emotion = self._normalize_emotion_label(primary_emotion)
+                
+                return {
+                    "primary_emotion": primary_emotion,
+                    "confidence": max_confidence,
+                    "emotion_scores": emotion_scores,
+                    "model_source": "local_transformer",
+                    "raw_results": results
+                }
             
-            # Normalize emotion labels
-            primary_emotion = self._normalize_emotion_label(primary_emotion)
-            
-            return {
-                "primary_emotion": primary_emotion,
-                "confidence": max_confidence,
-                "emotion_scores": emotion_scores,
-                "raw_results": results
-            }
+            # No models available - return fallback
+            logger.warning("No emotion analysis models available, returning fallback result")
+            return self._create_fallback_emotion_result(text)
             
         except Exception as e:
             logger.error("Emotion analysis failed", error=str(e))
             return self._create_fallback_emotion_result(text)
+    
+    def _convert_sentiment_to_emotion(self, sentiment_result: Dict) -> str:
+        """Convert Models Service sentiment result to emotion label"""
+        sentiment_label = sentiment_result.get('label', '').lower()
+        score = sentiment_result.get('score', 0.5)
+        
+        # Map sentiment to emotion
+        if 'positive' in sentiment_label or 'pos' in sentiment_label:
+            return 'joy' if score > 0.7 else 'neutral'
+        elif 'negative' in sentiment_label or 'neg' in sentiment_label:
+            if score > 0.8:
+                return 'anger'
+            elif score > 0.6:
+                return 'sadness'
+            else:
+                return 'neutral'
+        else:
+            return 'neutral'
     
     async def _apply_cultural_adaptation(
         self, 

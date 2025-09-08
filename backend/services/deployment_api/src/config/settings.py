@@ -33,21 +33,21 @@ class Settings(BaseSettings):
         "http://127.0.0.1:3000",
         "http://127.0.0.1:3001"
     ]
-    ALLOWED_HOSTS: List[str] = ["localhost", "127.0.0.1", "0.0.0.0"]
+    ALLOWED_HOSTS: List[str] = ["localhost", "127.0.0.1", "0.0.0.0", "api-gateway", "deployment-api"]
     
     # Service Discovery
-    API_GATEWAY_URL: str = "http://localhost:8000"
-    VOICE_SERVICE_URL: str = "http://localhost:8011"
-    MODELS_SERVICE_URL: str = "http://localhost:8085"
-    COMMUNITY_SERVICE_URL: str = "http://localhost:8012"
-    ML_SERVICE_URL: str = "http://localhost:8013"
+    API_GATEWAY_URL: str = "http://api-gateway:8000"
+    VOICE_SERVICE_URL: str = "http://voice-service:8011"
+    MODELS_SERVICE_URL: str = "http://models-service:8085"
+    COMMUNITY_SERVICE_URL: str = "http://community-service:8006"
+    ML_SERVICE_URL: str = "http://ml-service:8008"
     
     # Redis Configuration
-    REDIS_URL: str = "redis://localhost:6379"
+    REDIS_URL: str = "redis://redis:6379"
     REDIS_DB: int = 0
     
     # Database Configuration
-    DATABASE_URL: str = "postgresql://user:password@localhost/mantrapath"
+    DATABASE_URL: str = "postgresql://mantrapath:mantrapath123@postgres:5432/mantrapath"
     
     # Logging
     LOG_LEVEL: str = "INFO"

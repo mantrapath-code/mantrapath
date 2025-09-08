@@ -30,7 +30,8 @@ class GatewayConfig(BaseSettings):
     # CORS settings
     cors_origins: List[str] = Field(default_factory=lambda: [
         os.getenv("FRONTEND_URL", "http://localhost:5173"),
-        os.getenv("API_GATEWAY_URL", "http://localhost:8000"),
+        os.getenv("API_GATEWAY_URL", "http://api-gateway:8000"),
+        
         "http://localhost:5174"  # Additional dev port
     ])
     cors_credentials: bool = Field(default=True)
@@ -56,7 +57,7 @@ class GatewayConfig(BaseSettings):
     circuit_breaker_recovery_timeout: int = Field(default=60)
     
     # Redis (for caching and state)
-    redis_url: str = Field(default="redis://localhost:6379")
+    redis_url: str = Field(default="redis://redis:6379")
     redis_ttl: int = Field(default=300)  # 5 minutes
     
     # Security
@@ -145,6 +146,14 @@ class ServiceConfig(BaseSettings):
     # Models Service (Fixed port conflict - was 8080, now using env var)
     models_service_url: str = Field(default_factory=lambda: f"http://models-service:{os.getenv('MODELS_SERVICE_INTERNAL_PORT', '8080')}")
     models_service_health_path: str = Field(default="/health")
+    
+    # AI Event Processor Service
+    ai_event_processor_url: str = Field(default_factory=lambda: f"http://ai-event-processor:{os.getenv('AI_EVENT_PROCESSOR_PORT', '8014')}")
+    ai_event_processor_health_path: str = Field(default="/health")
+    
+    # AI Context Store Service
+    ai_context_store_url: str = Field(default_factory=lambda: f"http://ai-context-store:{os.getenv('AI_CONTEXT_STORE_PORT', '8013')}")
+    ai_context_store_health_path: str = Field(default="/health")
     
     model_config = {
         "env_file": ".env", 

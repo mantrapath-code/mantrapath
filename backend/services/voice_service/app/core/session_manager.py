@@ -34,7 +34,7 @@ class SessionManager:
     """Manages user sessions with Redis persistence"""
     
     def __init__(self, redis_url: Optional[str] = None):
-        self.redis_url = redis_url or os.getenv("REDIS_URL", "redis://localhost:6379")
+        self.redis_url = redis_url or os.getenv("REDIS_URL", "redis://redis:6379")
         self.redis_client = None
         self.session_timeout_hours = 24
         self.cleanup_interval_hours = 1

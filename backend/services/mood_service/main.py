@@ -20,6 +20,14 @@ try:
 except ImportError:
     TEXTBLOB_AVAILABLE = False
 
+# Redis for AI services data caching
+try:
+    import redis
+    REDIS_AVAILABLE = True
+except ImportError:
+    REDIS_AVAILABLE = False
+    print("⚠️  Warning: Redis not available - AI services caching disabled")
+
 # Add parent directories to path
 import os
 sys.path.append(os.path.join(os.path.dirname(__file__), '../../'))
@@ -108,6 +116,93 @@ class MemoryServiceIntegration:
 
 # Global memory integration instance
 memory_integration = MemoryServiceIntegration()
+
+class AIServicesCacheManager:
+    """Cache manager for AI services data integration - fixes empty/mock data issue"""
+    
+    def __init__(self, redis_url: str = "redis://redis:6379/4"):
+        self.redis_url = redis_url
+        self.redis_client = None
+        if REDIS_AVAILABLE:
+            try:
+                self.redis_client = redis.from_url(redis_url, decode_responses=True)
+                # Test connection
+                self.redis_client.ping()
+                print("✅ AI Services Cache Manager connected to Redis")
+            except Exception as e:
+                print(f"⚠️  AI Services Cache Manager Redis connection failed: {e}")
+                self.redis_client = None
+        else:
+            print("⚠️  Redis not available - AI services caching disabled")
+    
+    async def cache_mood_for_ai_analysis(self, user_id: str, mood_entry_data: Dict[str, Any]) -> bool:
+        """Cache mood data in format expected by AI Event Processor - CRITICAL FIX"""
+        if not self.redis_client:
+            return False
+            
+        try:
+            # Prepare data in format expected by AI Event Processor
+            mood_key = f"mood_history:{user_id}"
+            cache_data = {
+                "mood_score": mood_entry_data.get("mood_score"),
+                "energy_level": mood_entry_data.get("energy_level"),
+                "stress_level": mood_entry_data.get("stress_level"),
+                "sleep_quality": mood_entry_data.get("sleep_quality"),
+                "context_tags": mood_entry_data.get("context_tags", []),
+                "notes": mood_entry_data.get("notes", ""),
+                "timestamp": mood_entry_data.get("created_at") or datetime.now().isoformat(),
+                "source": "mood_service"
+            }
+            
+            # Store in Redis list (keep last 50 entries for pattern analysis)
+            self.redis_client.lpush(mood_key, json.dumps(cache_data))
+            self.redis_client.ltrim(mood_key, 0, 49)
+            
+            # Cache user metrics for quick access
+            user_metrics_key = f"user_metrics:{user_id}"
+            metrics = {
+                "latest_mood": mood_entry_data.get("mood_score"),
+                "latest_stress": mood_entry_data.get("stress_level"),
+                "latest_energy": mood_entry_data.get("energy_level"),
+                "last_updated": datetime.now().isoformat()
+            }
+            self.redis_client.hset(user_metrics_key, mapping=metrics)
+            self.redis_client.expire(user_metrics_key, 86400 * 7)  # 7 days
+            
+            print(f"✅ Cached mood data for AI analysis - user {user_id}")
+            return True
+            
+        except Exception as e:
+            print(f"❌ AI Services caching error: {e}")
+            return False
+    
+    async def cache_journal_for_ai_analysis(self, user_id: str, journal_entry_data: Dict[str, Any]) -> bool:
+        """Cache journal data for AI sentiment analysis"""
+        if not self.redis_client:
+            return False
+            
+        try:
+            journal_key = f"journal_history:{user_id}"
+            cache_data = {
+                "content": journal_entry_data.get("content", ""),
+                "mood_context": journal_entry_data.get("mood_context", {}),
+                "timestamp": journal_entry_data.get("created_at") or datetime.now().isoformat(),
+                "source": "mood_service"
+            }
+            
+            # Store in Redis list (keep last 30 entries)
+            self.redis_client.lpush(journal_key, json.dumps(cache_data))
+            self.redis_client.ltrim(journal_key, 0, 29)
+            
+            print(f"✅ Cached journal data for AI analysis - user {user_id}")
+            return True
+            
+        except Exception as e:
+            print(f"❌ Journal caching error: {e}")
+            return False
+
+# Global AI services cache manager
+ai_cache_manager = AIServicesCacheManager()
 
 # Import cross-platform mood intelligence
 try:
@@ -202,42 +297,6 @@ class AdaptiveMoodCollector:
         db.refresh(mood_entry)
         return mood_entry
     
-    async def generate_adaptive_questions(self, user_id: str, db: Session):
-        """Generate personalized follow-up questions based on user patterns"""
-        # Get recent mood entries to identify patterns
-        recent_entries = db.query(MoodEntry).filter(
-            MoodEntry.user_id == user_id,
-            MoodEntry.created_at >= datetime.utcnow() - timedelta(days=7)
-        ).order_by(desc(MoodEntry.created_at)).limit(10).all()
-        
-        if not recent_entries:
-            return []
-        
-        questions = []
-        
-        # Analyze stress pattern
-        recent_stress = [entry.stress_level for entry in recent_entries if entry.stress_level]
-        if recent_stress and len(recent_stress) >= 3:
-            avg_stress = sum(recent_stress) / len(recent_stress)
-            if avg_stress > 7:
-                questions.extend(self.question_templates["stress_increasing"])
-        
-        # Analyze energy pattern
-        recent_energy = [entry.energy_level for entry in recent_entries if entry.energy_level]
-        if recent_energy and len(recent_energy) >= 3:
-            avg_energy = sum(recent_energy) / len(recent_energy)
-            if avg_energy < 4:
-                questions.extend(self.question_templates["energy_low"])
-        
-        # Analyze mood trend
-        recent_moods = [entry.mood_score for entry in recent_entries]
-        if len(recent_moods) >= 3:
-            avg_mood = sum(recent_moods) / len(recent_moods)
-            if avg_mood < 5:
-                questions.extend(self.question_templates["mood_declining"])
-        
-        return questions[:2]  # Return max 2 questions to avoid overwhelming
-
     async def generate_adaptive_questions(self, user_id: str, db: Session):
         """Generate personalized follow-up questions based on user patterns"""
         # Get recent mood entries to identify patterns
@@ -1023,6 +1082,24 @@ async def create_mood_entry(
             print(f"✅ Mood entry event published for user {current_user['user_id']}")
         except Exception as e:
             print(f"⚠️  Event publishing failed: {e}")
+
+    # 🤖 CRITICAL FIX: Cache mood data for AI services analysis
+    try:
+        await ai_cache_manager.cache_mood_for_ai_analysis(
+            user_id=current_user["user_id"],
+            mood_entry_data={
+                "mood_score": mood_entry.mood_score,
+                "energy_level": mood_entry.energy_level,
+                "stress_level": mood_entry.stress_level,
+                "sleep_quality": mood_entry.sleep_quality,
+                "notes": mood_entry.notes,
+                "context_tags": mood_entry.context_tags or [],
+                "created_at": mood_entry.created_at.isoformat() if mood_entry.created_at else None
+            }
+        )
+        print(f"🤖 Mood data cached for AI services analysis - user {current_user['user_id']}")
+    except Exception as e:
+        print(f"❌ AI services caching failed: {e}")
 
     # Check for celebration moments after mood entry
     celebrations = await celebration_detector.detect_celebrations(

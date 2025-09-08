@@ -97,7 +97,7 @@ class Phi3EnhancedTranslationCoordinator:
     async def _init_cache(self):
         """Initialize Redis cache if available"""
         try:
-            redis_url = os.getenv("REDIS_URL", "redis://localhost:6379/2")
+            redis_url = os.getenv("REDIS_URL", "redis://redis:6379/2")
             self.redis_client = redis.from_url(redis_url)
             await self.redis_client.ping()
             self.cache_enabled = True
@@ -119,9 +119,9 @@ class Phi3EnhancedTranslationCoordinator:
             }
             
             # Initialize Anuvadini translator
-            anuvadini = AnuvadiniTranslator()
+            anuvadini = AnuvadiniTranslator(config=bhashini_config)
             # Anuvadini initialization is fast (uses real API)
-            if await anuvadini.initialize(bhashini_config):
+            if await anuvadini.initialize():
                 self.engines["anuvadini"] = anuvadini
                 self.engine_initialized["anuvadini"] = True
                 logger.info("✅ Bhashini/Anuvadini engine initialized")

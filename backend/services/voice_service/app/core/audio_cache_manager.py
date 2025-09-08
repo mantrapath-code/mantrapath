@@ -30,7 +30,7 @@ class AudioCacheManager:
     """Manages audio caching for TTS and processed audio"""
     
     def __init__(self, redis_url: Optional[str] = None, cache_dir: Optional[str] = None):
-        self.redis_url = redis_url or os.getenv("REDIS_URL", "redis://localhost:6379")
+        self.redis_url = redis_url or os.getenv("REDIS_URL", "redis://redis:6379")
         self.cache_dir = cache_dir or os.getenv("AUDIO_CACHE_DIR", "/tmp/voice_cache")
         self.redis_client = None
         self.cache_ttl_hours = 24

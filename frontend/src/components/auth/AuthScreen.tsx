@@ -17,6 +17,7 @@ export function AuthScreen() {
   const [backendStatus, setBackendStatus] = useState<'checking' | 'connected' | 'disconnected'>('checking')
   const [showVerification, setShowVerification] = useState(false)
   const [verificationEmail, setVerificationEmail] = useState('')
+  const [activeTab, setActiveTab] = useState<'login' | 'register'>('login')
   
   // Login form state
   const [loginData, setLoginData] = useState({
@@ -78,17 +79,32 @@ export function AuthScreen() {
       notificationService.success('login')
     } catch (error: any) {
       console.error('Login failed:', error)
-      notificationService.error(error)
       
+      // Enhanced error handling for better user experience
       const errorMessage = error.message || 'Failed to login'
+      const errorStatus = error.status || 0
+      
       if (errorMessage.includes('verify your email')) {
         setVerificationEmail(loginData.emailOrUsername.includes('@') ? loginData.emailOrUsername : '')
         setShowVerification(true)
-      }
-      
-      // Provide helpful hints for common issues
-      if (error.status === 0 || errorMessage.includes('fetch')) {
+        notificationService.warning('Email Verification Required', 'Please verify your email before logging in. Check your inbox for a verification link.')
+      } else if (errorStatus === 401) {
+        // Handle authentication errors more specifically
+        if (errorMessage.toLowerCase().includes('invalid credentials') || 
+            errorMessage.toLowerCase().includes('incorrect password') ||
+            errorMessage.toLowerCase().includes('wrong password')) {
+          notificationService.warning('Invalid Credentials', 'The email/username or password you entered is incorrect. Please check your credentials and try again.')
+        } else if (errorMessage.toLowerCase().includes('user not found') || 
+                   errorMessage.toLowerCase().includes('does not exist') ||
+                   errorMessage.toLowerCase().includes('no account')) {
+          notificationService.warning('Account Not Found', 'No account found with these credentials. Please check your email/username or create a new account.')
+        } else {
+          notificationService.error(error)
+        }
+      } else if (errorStatus === 0 || errorMessage.includes('fetch')) {
         notificationService.warning('Backend Offline', 'Unable to connect to the server. Please check your connection and try again.')
+      } else {
+        notificationService.error(error)
       }
     } finally {
       setLoading(false)
@@ -118,7 +134,9 @@ export function AuthScreen() {
         setVerificationEmail(registerData.email)
         setShowVerification(true)
       } else {
-        notificationService.success('register', { context: 'Registration successful! You can now log in with your credentials.' })
+        // Registration successful - redirect to login with success message
+        notificationService.success('register', { context: 'Your account has been created successfully. You can now log in with your credentials.' })
+        
         // Clear the registration form
         setRegisterData({
           email: '',
@@ -127,13 +145,40 @@ export function AuthScreen() {
           first_name: '',
           last_name: ''
         })
+        
+        // Switch to login tab and show success message
+        setActiveTab('login')
+        
+        // Pre-fill the login form with the registered email/username
+        setLoginData(prev => ({
+          ...prev,
+          emailOrUsername: registerData.email
+        }))
+        
+        // Show a helpful message in the login form
+        setTimeout(() => {
+          notificationService.info('Ready to Login', `Welcome to MantraPath! Please sign in with your email (${registerData.email}) and password.`)
+        }, 500)
       }
     } catch (error: any) {
       console.error('❌ Could not register user:', error)
       
-      // Provide helpful feedback for common registration issues
-      if (error.message && error.message.includes('already registered')) {
-        notificationService.warning('Account Exists', 'This email is already registered. Please try logging in instead.')
+      // Enhanced error handling for registration issues
+      const errorMessage = error.message || 'Registration failed'
+      
+      if (errorMessage.toLowerCase().includes('already registered') || 
+          errorMessage.toLowerCase().includes('already exists') ||
+          errorMessage.toLowerCase().includes('duplicate')) {
+        notificationService.warning('Account Already Exists', 'This email is already registered. Please try logging in instead, or use a different email address.')
+      } else if (errorMessage.toLowerCase().includes('username') && 
+                 errorMessage.toLowerCase().includes('taken')) {
+        notificationService.warning('Username Unavailable', 'This username is already taken. Please choose a different username.')
+      } else if (errorMessage.toLowerCase().includes('email') && 
+                 errorMessage.toLowerCase().includes('invalid')) {
+        notificationService.warning('Invalid Email', 'Please enter a valid email address.')
+      } else if (errorMessage.toLowerCase().includes('password') && 
+                 errorMessage.toLowerCase().includes('weak')) {
+        notificationService.warning('Password Too Weak', 'Please create a stronger password that meets our security requirements.')
       } else {
         notificationService.error(error)
       }
@@ -228,13 +273,23 @@ export function AuthScreen() {
             </CardDescription>
           </CardHeader>
           <CardContent>
-            <Tabs defaultValue="login" className="w-full">
+            <Tabs value={activeTab} onValueChange={(value) => setActiveTab(value as 'login' | 'register')} className="w-full">
               <TabsList className="grid w-full grid-cols-2">
                 <TabsTrigger value="login">Login</TabsTrigger>
                 <TabsTrigger value="register">Register</TabsTrigger>
               </TabsList>
               
               <TabsContent value="login" className="space-y-4">
+                {/* Show welcome message for newly registered users */}
+                {activeTab === 'login' && loginData.emailOrUsername && (
+                  <div className="p-3 bg-green-50 border border-green-200 rounded-lg">
+                    <div className="flex items-center gap-2 text-green-800">
+                      <CheckCircle size={16} />
+                      <span className="text-sm font-medium">Welcome! You can now sign in with your credentials.</span>
+                    </div>
+                  </div>
+                )}
+                
                 <form onSubmit={handleLogin} className="space-y-4">
                   <div className="space-y-2">
                     <Label htmlFor="login-email">Email or Username</Label>
@@ -274,10 +329,57 @@ export function AuthScreen() {
                   <Button type="submit" className="w-full" disabled={loading}>
                     {loading ? 'Signing in...' : 'Sign In'}
                   </Button>
+                  
+                  {/* Forgot Password Link */}
+                  <div className="text-center">
+                    <button
+                      type="button"
+                      className="text-sm text-muted-foreground hover:text-primary transition-colors"
+                      onClick={() => {
+                        notificationService.info('Password Recovery', 'Please contact our support team to reset your password, or try logging in with your email address instead of username.')
+                      }}
+                    >
+                      Forgot your password?
+                    </button>
+                  </div>
+                  
+                  {/* Login Help */}
+                  <div className="p-3 bg-amber-50 border border-amber-200 rounded-lg">
+                    <div className="flex items-start gap-2 text-amber-800">
+                      <div className="w-5 h-5 bg-amber-200 rounded-full flex items-center justify-center mt-0.5">
+                        <span className="text-xs font-bold">💡</span>
+                      </div>
+                      <div className="text-sm">
+                        <p className="font-medium mb-1">Having trouble logging in?</p>
+                        <ul className="text-xs space-y-1">
+                          <li>• Try using your email address instead of username</li>
+                          <li>• Check if Caps Lock is enabled</li>
+                          <li>• Make sure your account is verified</li>
+                        </ul>
+                      </div>
+                    </div>
+                  </div>
                 </form>
               </TabsContent>
               
               <TabsContent value="register" className="space-y-4">
+                {/* Registration Tips */}
+                <div className="p-3 bg-blue-50 border border-blue-200 rounded-lg">
+                  <div className="flex items-start gap-2 text-blue-800">
+                    <div className="w-5 h-5 bg-blue-200 rounded-full flex items-center justify-center mt-0.5">
+                      <span className="text-xs font-bold">💡</span>
+                    </div>
+                    <div className="text-sm">
+                      <p className="font-medium mb-1">Quick Tips:</p>
+                      <ul className="text-xs space-y-1">
+                        <li>• Use a strong password with 8+ characters</li>
+                        <li>• Choose a unique username that's easy to remember</li>
+                        <li>• Verify your email to activate your account</li>
+                      </ul>
+                    </div>
+                  </div>
+                </div>
+                
                 <form onSubmit={handleRegister} className="space-y-4">
                   <div className="grid grid-cols-2 gap-4">
                     <div className="space-y-2">
@@ -388,7 +490,6 @@ export function AuthScreen() {
                 </form>
               </TabsContent>
             </Tabs>
-            
             
             <p className="text-xs text-muted-foreground text-center mt-4">
               By creating an account, you agree to our terms of service and privacy policy.

@@ -50,7 +50,7 @@ Base.metadata.create_all(bind=engine)
 # Service URLs configuration for translation integration via Models Service
 SERVICE_URLS = {
     'models_service': os.getenv('MODELS_SERVICE_URL', 'http://models-service:8080'),
-    'voice_service': os.getenv('VOICE_SERVICE_URL', 'http://localhost:8011'),
+    'voice_service': os.getenv('VOICE_SERVICE_URL', 'http://voice-service:8011'),
 }
 
 import asyncio
@@ -130,7 +130,7 @@ app.add_middleware(
     CORSMiddleware,
     allow_origins=[
         os.getenv("FRONTEND_URL", "http://localhost:5173"),
-        os.getenv("API_GATEWAY_URL", "http://localhost:8000")
+        os.getenv("API_GATEWAY_URL", "http://api-gateway:8000")
     ],  # Frontend URLs
     allow_credentials=True,
     allow_methods=["GET", "POST", "PUT", "DELETE"],
@@ -667,7 +667,7 @@ async def intelligent_chat(
             detail="An error occurred while generating response. Please try again."
         )
 
-# Frontend-compatible chatbot endpoint
+# Frontend-compatible chatbot endpoints
 @app.post("/api/chatbot/chat", response_model=IntelligentChatResponse)
 async def chatbot_chat_frontend(
     request: IntelligentChatRequest,
@@ -680,6 +680,42 @@ async def chatbot_chat_frontend(
     Routes to the intelligent chat functionality
     """
     return await intelligent_chat(request, background_tasks, db, current_user)
+
+@app.post("/api/chatbot/enhanced/chat", response_model=IntelligentChatResponse)
+async def chatbot_enhanced_chat_frontend(
+    request: IntelligentChatRequest,
+    background_tasks: BackgroundTasks,
+    db: Session = Depends(get_db),
+    current_user: dict = Depends(get_current_user)
+):
+    """
+    Enhanced chatbot endpoint for frontend compatibility
+    Routes to the intelligent chat functionality
+    """
+    return await intelligent_chat(request, background_tasks, db, current_user)
+
+@app.get("/api/chatbot/chat/sessions", response_model=List[dict])
+async def get_chatbot_sessions_frontend(
+    db: Session = Depends(get_db),
+    current_user: dict = Depends(get_current_user)
+):
+    """
+    Frontend-compatible chat sessions endpoint
+    Routes to the chat sessions functionality
+    """
+    return await get_chat_sessions(db, current_user)
+
+@app.get("/api/chatbot/chat/history", response_model=List[dict])
+async def get_chatbot_history_frontend(
+    session_id: str,
+    db: Session = Depends(get_db),
+    current_user: dict = Depends(get_current_user)
+):
+    """
+    Frontend-compatible chat history endpoint
+    Routes to the chat history functionality
+    """
+    return await get_chat_history(session_id, db, current_user)
 
 # Voice input endpoint for frontend
 @app.post("/api/chatbot/voice")

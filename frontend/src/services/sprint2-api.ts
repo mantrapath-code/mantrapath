@@ -15,30 +15,30 @@ const BACKEND_API_ENDPOINTS = {
     metrics: '/api/v3/metrics/performance'
   },
   
-  // AI Context Store (Port 8013)
+  // AI Context Store (Port 8013) - via API Gateway
   context: {
-    base: 'http://localhost:8013',
+    base: 'http://localhost:8000/ai-context',
     root: '/',
     metrics: '/metrics'
   },
   
-  // AI Event Processor (Port 8014) 
+  // AI Event Processor (Port 8014) - via API Gateway
   aiEvents: {
-    base: 'http://localhost:8014',
+    base: 'http://localhost:8000/ai-events',
     health: '/health',
     metrics: '/metrics'
   },
   
-  // Voice Event Processor (Port 8015)
+  // Voice Event Processor (Port 8015) - via API Gateway
   voiceEvents: {
-    base: 'http://localhost:8015',
+    base: 'http://localhost:8000/voice-events',
     health: '/health',
     metrics: '/metrics'
   },
   
-  // Proactive Assistance Engine (Port 8018) - Key for Sprint 2
+  // Proactive Assistance Engine (Port 8018) - via API Gateway
   assistance: {
-    base: 'http://localhost:8018',
+    base: 'http://localhost:8000/assistance',
     evaluate: (userId: string) => `/api/v3/assistance/evaluate/${userId}`,
     status: (userId: string) => `/api/v3/assistance/status/${userId}`,
     trigger: (userId: string) => `/api/v3/assistance/trigger/${userId}`,
@@ -50,25 +50,25 @@ const BACKEND_API_ENDPOINTS = {
     metrics: '/metrics'
   },
   
-  // Notification Service (Port 8007) - Docker corrected port
+  // Notification Service (Port 8007) - via API Gateway
   notifications: {
-    base: 'http://localhost:8007',
+    base: 'http://localhost:8000/notifications',
     health: '/health',
     // WebSocket primary: /ws/{user_id}
   },
   
-  // Mood Service (Port 8002) - Enhanced mood tracking
+  // Mood Service (Port 8002) - via API Gateway
   mood: {
-    base: 'http://localhost:8002',
+    base: 'http://localhost:8000/mood',
     health: '/health',
     entries: '/api/v3/mood/entries',
     patterns: '/api/v3/mood/patterns',
     insights: '/api/v3/mood/insights'
   },
   
-  // Chatbot Service (Port 8004) - Phase 2 enhanced
+  // Chatbot Service (Port 8004) - via API Gateway
   chatbot: {
-    base: 'http://localhost:8004',
+    base: 'http://localhost:8000/chatbot',
     health: '/health',
     chat: '/api/v3/chat',
     sessions: '/api/v3/chat/sessions'

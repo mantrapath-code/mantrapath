@@ -43,7 +43,7 @@ app.add_middleware(
 )
 
 # Redis for queuing and caching
-redis_client = redis.from_url(os.getenv("REDIS_URL", "redis://localhost:6379"))
+redis_client = redis.from_url(os.getenv("REDIS_URL", "redis://redis:6379"))
 
 # WebSocket connection manager
 class ConnectionManager:
@@ -1032,7 +1032,7 @@ async def schedule_smart_notifications(
         # 🤖 STEP 2: Get optimal notification times from ML service (Ensemble Timing Predictor)
         import httpx
         async with httpx.AsyncClient(timeout=30.0) as client:
-            ml_service_url = os.getenv("ML_SERVICE_URL", "http://localhost:8008")
+            ml_service_url = os.getenv("ML_SERVICE_URL", "http://ml-service:8008")
             
             # Prepare ML input data
             ml_request_data = {
@@ -1602,7 +1602,7 @@ async def track_ml_notification_effectiveness(
         # Send to ML service for RL learning
         import httpx
         async with httpx.AsyncClient(timeout=10.0) as client:
-            ml_service_url = os.getenv("ML_SERVICE_URL", "http://localhost:8008")
+            ml_service_url = os.getenv("ML_SERVICE_URL", "http://ml-service:8008")
             
             rl_response = await client.post(
                 f"{ml_service_url}/track-effectiveness",

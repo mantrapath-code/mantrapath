@@ -94,3 +94,4 @@ uvicorn src.main:app \
     --reload \
     --log-level info \
     --access-log
+

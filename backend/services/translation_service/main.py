@@ -139,6 +139,12 @@ async def get_supported_languages():
         logger.error(f"Error getting languages: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
+# API v1 endpoints for frontend compatibility
+@app.post("/api/v1/translation/generate-text", response_model=TranslationResponse)
+async def generate_text_v1(request: TranslationRequest):
+    """Generate translated text - API v1 endpoint for frontend compatibility"""
+    return await translate_text(request)
+
 @app.get("/health")
 async def health_check():
     """Health check endpoint"""

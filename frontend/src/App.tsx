@@ -1,26 +1,24 @@
-import { useState, useEffect, useRef, useMemo } from "react"
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import { useState, useEffect, useMemo } from "react"
 import { Button } from "@/components/ui/button"
-import { ChatCircle, X, List, House, ChartLine, Brain, Trophy, BookOpen, Users } from "@phosphor-icons/react"
+import { X } from "@phosphor-icons/react"
 import { JournalSection } from "@/components/journal"
 import { ChatBot } from "@/components/chatbot"
 import { EnhancedCommunitySection } from "@/components/community"
 import { WellnessDashboard } from "@/components/dashboard"
-import { RealTimeNotifications } from "@/components/notifications"
+import { CrisisDetectionDashboard } from "@/components/crisis"
 import { AuthScreen } from "@/components/auth"
 import { EmailVerification } from "@/components/auth"
 import { DevelopmentBanner } from "@/components/common"
-import { ProfileDropdown, ProfileDashboard } from "@/components/profile"
+import { ProfileDashboard } from "@/components/profile"
 import { EnhancedInsightsPage } from "@/pages/EnhancedInsightsPage"
 import { AchievementsPage } from "@/pages/AchievementsPage"
 import { ProactiveAssistancePanel } from "@/components/assistance"
+import { SidebarLayout } from "@/components/layout/SidebarLayout"
 import { AuthProvider, useAuth } from "@/hooks/useAuth"
 import { useMoodBasedTheme } from "@/hooks/useMoodTheme"
-import { useEnhancedWebSocket } from "@/hooks/useEnhancedWebSocket"
+import { useRobustWebSocket } from "@/hooks/useRobustWebSocket"
 import { RealtimeProvider } from "@/contexts/RealtimeContext"
 import { useDeviceCapabilities } from "@/hooks/useDeviceCapabilities"
-import { useResponsiveLayout, useResponsiveNavigation, useResponsiveInteractions } from "@/hooks/useResponsiveLayout"
-import { useTouchGestures } from "@/hooks/useTouchGestures"
 import { usePerformanceMonitor } from "@/hooks/usePerformanceMonitor"
 import { motion, AnimatePresence } from "framer-motion"
 import { Toaster } from "@/components/ui/sonner"
@@ -39,26 +37,19 @@ function AppContent() {
   const [showChat, setShowChat] = useState(false)
   const [showProfile, setShowProfile] = useState(false)
   const [showEmailVerification, setShowEmailVerification] = useState(false)
-  const [showMobileMenu, setShowMobileMenu] = useState(false)
   
-  // Enhanced device capabilities and responsive layout
+  // Enhanced device capabilities
   const deviceCapabilities = useDeviceCapabilities()
-  const { currentLayout, adaptComponent } = useResponsiveLayout()
-  const { navigationType, navigationPosition, isSticky, isCollapsible } = useResponsiveNavigation()
-  const { isTouchFriendly, hasGestureSupport, hasHoverEffects } = useResponsiveInteractions()
   
   // Initialize mood-based theme system
   const { currentTheme } = useMoodBasedTheme()
   
-  // Initialize enhanced WebSocket connection for real-time features (Sprint 2)
-  const { isConnected, connectionError, connectionStats } = useEnhancedWebSocket([], {
-    maxConnections: 3,
+  // Initialize robust WebSocket connection for real-time features
+  const { isConnected, connectionError, connectionStats } = useRobustWebSocket(user?.id, {
+    maxReconnectAttempts: 5,
+    reconnectDelay: 1000,
     heartbeatInterval: 30000,
-    reconnectStrategy: {
-      maxAttempts: 3,
-      baseDelay: 2000,
-      backoffMultiplier: 1.5
-    }
+    enableHeartbeat: true
   })
   
   // Fallback mode when WebSocket is not available
@@ -69,17 +60,6 @@ function AppContent() {
   
   // Memoize performance score to prevent excessive re-calculations
   const performanceScore = useMemo(() => getPerformanceScore(metrics), [getPerformanceScore, metrics])
-  
-  // Touch gesture support for mobile navigation
-  const mobileMenuRef = useRef<HTMLDivElement>(null)
-  
-  // Memoize gesture handlers to prevent infinite re-renders
-  const gestureHandlers = useMemo(() => ({
-    onSwipeLeft: () => setShowMobileMenu(false),
-    onSwipeRight: () => setShowMobileMenu(true)
-  }), [])
-  
-  const { isTracking: isGestureTracking } = useTouchGestures(mobileMenuRef as React.RefObject<HTMLElement>, gestureHandlers)
 
   // Check for email verification token in URL
   useEffect(() => {
@@ -149,107 +129,84 @@ function AppContent() {
     )
   }
   
+  const renderContent = () => {
+    switch (activeTab) {
+      case "dashboard":
+        return (
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+          >
+            <WellnessDashboard />
+          </motion.div>
+        )
+      case "insights":
+        return (
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+          >
+            <EnhancedInsightsPage />
+          </motion.div>
+        )
+      case "crisis":
+        return (
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+          >
+            <CrisisDetectionDashboard />
+          </motion.div>
+        )
+      case "achievements":
+        return (
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+          >
+            <AchievementsPage />
+          </motion.div>
+        )
+      case "journal":
+        return (
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+          >
+            <JournalSection />
+          </motion.div>
+        )
+      case "community":
+        return (
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+          >
+            <EnhancedCommunitySection />
+          </motion.div>
+        )
+      default:
+        return (
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+          >
+            <WellnessDashboard />
+          </motion.div>
+        )
+    }
+  }
+
   return (
-    <div className="min-h-screen bg-background">
-      <header className={`border-b bg-card/50 backdrop-blur-sm ${isSticky ? 'sticky top-0' : ''} z-40`}>
-        <div className="container mx-auto px-4 py-4">
-          <div className="flex items-center justify-between">
-            {/* Logo and Title */}
-            <motion.div
-              initial={{ opacity: 0, x: -20 }}
-              animate={{ opacity: 1, x: 0 }}
-              className="flex items-center gap-3"
-            >
-              <div className="w-10 h-10 mood-ring flex items-center justify-center">
-                <span className="text-white font-bold text-lg">M</span>
-              </div>
-              <div className="hidden sm:block">
-                <h1 className="text-2xl font-bold text-foreground">MantraPath</h1>
-                <p className="text-sm text-muted-foreground">Welcome back, {user?.username}!</p>
-              </div>
-              <div className="sm:hidden">
-                <h1 className="text-xl font-bold text-foreground">MantraPath</h1>
-              </div>
-            </motion.div>
-            
-            {/* Mobile Menu Button */}
-            {deviceCapabilities.isMobile && (
-              <Button
-                onClick={() => setShowMobileMenu(!showMobileMenu)}
-                size="sm"
-                variant="ghost"
-                className="lg:hidden"
-              >
-                <List size={20} />
-              </Button>
-            )}
-            
-            {/* Desktop Actions */}
-            <div className="hidden lg:flex items-center gap-3">
-              <RealTimeNotifications />
-              
-              {/* Connection Status Indicator */}
-              {!isOfflineMode && (
-                <div className="flex items-center gap-1 px-2 py-1 rounded-full bg-muted/50">
-                  <div className={`w-2 h-2 rounded-full ${isConnected ? 'bg-green-500' : 'bg-yellow-500'}`} />
-                  <span className="text-xs text-muted-foreground">
-                    {isConnected ? 'Live' : 'Connecting...'}
-                  </span>
-                </div>
-              )}
-              
-              <Button
-                onClick={() => setShowChat(!showChat)}
-                size="sm"
-                variant={showChat ? "secondary" : "default"}
-              >
-                <ChatCircle size={16} />
-              </Button>
-              
-              <ProfileDropdown
-                user={user!}
-                onProfileView={() => setShowProfile(true)}
-                onProfileEdit={() => setShowProfile(true)}
-                onSettings={() => setShowProfile(true)}
-                onLogout={logout}
-              />
-            </div>
-            
-            {/* Mobile Actions */}
-            <div className="flex lg:hidden items-center gap-2">
-              <RealTimeNotifications />
-              
-              {/* Connection Status Indicator */}
-              {!isOfflineMode && (
-                <div className="flex items-center gap-1 px-2 py-1 rounded-full bg-muted/50">
-                  <div className={`w-2 h-2 rounded-full ${isConnected ? 'bg-green-500' : 'bg-yellow-500'}`} />
-                  <span className="text-xs text-muted-foreground">
-                    {isConnected ? 'Live' : 'Connecting...'}
-                  </span>
-                </div>
-              )}
-              
-              <Button
-                onClick={() => setShowChat(!showChat)}
-                size="sm"
-                variant={showChat ? "secondary" : "default"}
-              >
-                <ChatCircle size={16} />
-              </Button>
-              
-              <ProfileDropdown
-                user={user!}
-                onProfileView={() => setShowProfile(true)}
-                onProfileEdit={() => setShowProfile(true)}
-                onSettings={() => setShowProfile(true)}
-                onLogout={logout}
-              />
-            </div>
-          </div>
-        </div>
-      </header>
-      
-      <div className="container mx-auto px-4 py-6 min-h-[calc(100vh-200px)]">
+    <>
+      <SidebarLayout
+        activeTab={activeTab}
+        onTabChange={setActiveTab}
+        onShowChat={() => setShowChat(true)}
+        onShowProfile={() => setShowProfile(true)}
+        isConnected={isConnected}
+        isOfflineMode={isOfflineMode}
+      >
         <DevelopmentBanner />
         
         {/* Offline Mode Notice */}
@@ -278,148 +235,13 @@ function AppContent() {
           </div>
         )}
         
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 pb-8">
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
           <div className="lg:col-span-2">
-            <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-              {/* Mobile Navigation - Bottom Navigation */}
-              {deviceCapabilities.isMobile && (
-                <div className="fixed bottom-0 left-0 right-0 bg-background border-t z-30 lg:hidden">
-                  <div className="flex justify-around items-center py-2">
-                    <button
-                      onClick={() => setActiveTab("dashboard")}
-                      className={`flex flex-col items-center p-2 rounded-lg transition-colors ${
-                        activeTab === "dashboard" ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:text-foreground"
-                      }`}
-                    >
-                      <House size={20} />
-                      <span className="text-xs mt-1">Dashboard</span>
-                    </button>
-                    <button
-                      onClick={() => setActiveTab("insights")}
-                      className={`flex flex-col items-center p-2 rounded-lg transition-colors ${
-                        activeTab === "insights" ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:text-foreground"
-                      }`}
-                    >
-                      <ChartLine size={20} />
-                      <span className="text-xs mt-1">Insights</span>
-                    </button>
-                    <button
-                      onClick={() => setActiveTab("crisis")}
-                      className={`flex flex-col items-center p-2 rounded-lg transition-colors ${
-                        activeTab === "crisis" ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:text-foreground"
-                      }`}
-                    >
-                      <Brain size={20} />
-                      <span className="text-xs mt-1">Monitor</span>
-                    </button>
-                    <button
-                      onClick={() => setActiveTab("achievements")}
-                      className={`flex flex-col items-center p-2 rounded-lg transition-colors ${
-                        activeTab === "achievements" ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:text-foreground"
-                      }`}
-                    >
-                      <Trophy size={20} />
-                      <span className="text-xs mt-1">Goals</span>
-                    </button>
-                    <button
-                      onClick={() => setActiveTab("journal")}
-                      className={`flex flex-col items-center p-2 rounded-lg transition-colors ${
-                        activeTab === "journal" ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:text-foreground"
-                      }`}
-                    >
-                      <BookOpen size={20} />
-                      <span className="text-xs mt-1">Journal</span>
-                    </button>
-                    <button
-                      onClick={() => setActiveTab("community")}
-                      className={`flex flex-col items-center p-2 rounded-lg transition-colors ${
-                        activeTab === "community" ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:text-foreground"
-                      }`}
-                    >
-                      <Users size={20} />
-                      <span className="text-xs mt-1">Community</span>
-                    </button>
-                  </div>
-                </div>
-              )}
-              
-              {/* Tablet Navigation - Sidebar */}
-              {deviceCapabilities.isTablet && (
-                <div className="hidden md:block lg:hidden mb-6">
-                  <TabsList className="grid grid-cols-3 w-full">
-                    <TabsTrigger value="dashboard">Dashboard</TabsTrigger>
-                    <TabsTrigger value="insights">Insights</TabsTrigger>
-                    <TabsTrigger value="achievements">Goals</TabsTrigger>
-                  </TabsList>
-                  <TabsList className="grid grid-cols-2 w-full mt-2">
-                    <TabsTrigger value="journal">Journal</TabsTrigger>
-                    <TabsTrigger value="community">Community</TabsTrigger>
-                  </TabsList>
-                </div>
-              )}
-              
-              {/* Desktop Navigation - Grid Layout */}
-              {deviceCapabilities.isDesktop && (
-                <div className="hidden lg:block mb-6">
-                  <TabsList className="grid grid-cols-5 w-full">
-                    <TabsTrigger value="dashboard">Dashboard</TabsTrigger>
-                    <TabsTrigger value="insights">Insights</TabsTrigger>
-                    <TabsTrigger value="achievements">Achievements</TabsTrigger>
-                    <TabsTrigger value="journal">Journal</TabsTrigger>
-                    <TabsTrigger value="community">Community</TabsTrigger>
-                  </TabsList>
-                </div>
-              )}
-              
-              <TabsContent value="dashboard" className="space-y-6">
-                <motion.div
-                  initial={{ opacity: 0, y: 20 }}
-                  animate={{ opacity: 1, y: 0 }}
-                >
-                  <WellnessDashboard />
-                </motion.div>
-              </TabsContent>
-
-              <TabsContent value="insights" className="space-y-6">
-                <motion.div
-                  initial={{ opacity: 0, y: 20 }}
-                  animate={{ opacity: 1, y: 0 }}
-                >
-                  <EnhancedInsightsPage />
-                </motion.div>
-              </TabsContent>
-
-              <TabsContent value="achievements" className="space-y-6">
-                <motion.div
-                  initial={{ opacity: 0, y: 20 }}
-                  animate={{ opacity: 1, y: 0 }}
-                >
-                  <AchievementsPage />
-                </motion.div>
-              </TabsContent>
-              
-              <TabsContent value="journal" className="space-y-6">
-                <motion.div
-                  initial={{ opacity: 0, y: 20 }}
-                  animate={{ opacity: 1, y: 0 }}
-                >
-                  <JournalSection />
-                </motion.div>
-              </TabsContent>
-              
-              <TabsContent value="community" className="space-y-6">
-                <motion.div
-                  initial={{ opacity: 0, y: 20 }}
-                  animate={{ opacity: 1, y: 0 }}
-                >
-                  <EnhancedCommunitySection />
-                </motion.div>
-              </TabsContent>
-            </Tabs>
+            {renderContent()}
           </div>
           
           {/* Desktop chatbot sidebar */}
-          {deviceCapabilities.isDesktop && (
+          {!deviceCapabilities.isMobile && (
             <div className="lg:col-span-1">
               <motion.div
                 initial={{ opacity: 0, x: 20 }}
@@ -432,134 +254,8 @@ function AppContent() {
             </div>
           )}
         </div>
-      </div>
-      
-      {/* Mobile Menu Overlay */}
-      <AnimatePresence>
-        {showMobileMenu && deviceCapabilities.isMobile && (
-          <motion.div
-            initial={{ opacity: 0, x: -300 }}
-            animate={{ opacity: 1, x: 0 }}
-            exit={{ opacity: 0, x: -300 }}
-            className="fixed inset-y-0 left-0 w-80 bg-background border-r z-50 lg:hidden"
-            ref={mobileMenuRef}
-          >
-            <div className="p-6">
-              <div className="flex items-center justify-between mb-6">
-                <h2 className="text-xl font-bold">Menu</h2>
-                <Button
-                  onClick={() => setShowMobileMenu(false)}
-                  size="sm"
-                  variant="ghost"
-                >
-                  <X size={20} />
-                </Button>
-              </div>
-              
-              <nav className="space-y-4">
-                <button
-                  onClick={() => {
-                    setActiveTab("dashboard")
-                    setShowMobileMenu(false)
-                  }}
-                  className={`w-full flex items-center gap-3 p-3 rounded-lg transition-colors ${
-                    activeTab === "dashboard" ? "bg-primary text-primary-foreground" : "hover:bg-muted"
-                  }`}
-                >
-                  <House size={20} />
-                  <span>Dashboard</span>
-                </button>
-                
-                <button
-                  onClick={() => {
-                    setActiveTab("insights")
-                    setShowMobileMenu(false)
-                  }}
-                  className={`w-full flex items-center gap-3 p-3 rounded-lg transition-colors ${
-                    activeTab === "insights" ? "bg-primary text-primary-foreground" : "hover:bg-muted"
-                  }`}
-                >
-                  <ChartLine size={20} />
-                  <span>Insights</span>
-                </button>
-                
-                <button
-                  onClick={() => {
-                    setActiveTab("crisis")
-                    setShowMobileMenu(false)
-                  }}
-                  className={`w-full flex items-center gap-3 p-3 rounded-lg transition-colors ${
-                    activeTab === "crisis" ? "bg-primary text-primary-foreground" : "hover:bg-muted"
-                  }`}
-                >
-                  <Brain size={20} />
-                  <span>Crisis Monitor</span>
-                </button>
-                
-                <button
-                  onClick={() => {
-                    setActiveTab("achievements")
-                    setShowMobileMenu(false)
-                  }}
-                  className={`w-full flex items-center gap-3 p-3 rounded-lg transition-colors ${
-                    activeTab === "achievements" ? "bg-primary text-primary-foreground" : "hover:bg-muted"
-                  }`}
-                >
-                  <Trophy size={20} />
-                  <span>Achievements</span>
-                </button>
-                
-                <button
-                  onClick={() => {
-                    setActiveTab("journal")
-                    setShowMobileMenu(false)
-                  }}
-                  className={`w-full flex items-center gap-3 p-3 rounded-lg transition-colors ${
-                    activeTab === "journal" ? "bg-primary text-primary-foreground" : "hover:bg-muted"
-                  }`}
-                >
-                  <BookOpen size={20} />
-                  <span>Journal</span>
-                </button>
-                
-                <button
-                  onClick={() => {
-                    setActiveTab("community")
-                    setShowMobileMenu(false)
-                  }}
-                  className={`w-full flex items-center gap-3 p-3 rounded-lg transition-colors ${
-                    activeTab === "community" ? "bg-primary text-primary-foreground" : "hover:bg-muted"
-                  }`}
-                >
-                  <Users size={20} />
-                  <span>Community</span>
-                </button>
-              </nav>
-              
-              <div className="mt-8 pt-6 border-t">
-                <div className="text-sm text-muted-foreground mb-2">Connection Status</div>
-                <div className="flex items-center gap-2">
-                  <div className={`w-2 h-2 rounded-full ${isConnected ? 'bg-green-500' : isOfflineMode ? 'bg-gray-500' : 'bg-red-500'}`} />
-                  <span className="text-sm">
-                    {isConnected ? 'Connected' : isOfflineMode ? 'Offline Mode' : 'Disconnected'}
-                  </span>
-                </div>
-                {connectionStats && connectionStats.totalConnections > 0 && (
-                  <div className="text-xs text-muted-foreground mt-1">
-                    {connectionStats.healthyConnections}/{connectionStats.totalConnections} connections
-                  </div>
-                )}
-                {isOfflineMode && (
-                  <div className="text-xs text-muted-foreground mt-1">
-                    Real-time features disabled
-                  </div>
-                )}
-              </div>
-            </div>
-          </motion.div>
-        )}
-      </AnimatePresence>
-      
+      </SidebarLayout>
+        
       {/* Profile Dashboard Modal */}
       <AnimatePresence>
         {showProfile && (
@@ -585,7 +281,7 @@ function AppContent() {
         )}
       </AnimatePresence>
 
-            {/* Mobile chatbot overlay */}
+      {/* Mobile chatbot overlay */}
       <AnimatePresence>
         {showChat && deviceCapabilities.isMobile && (
           <motion.div
@@ -620,39 +316,8 @@ function AppContent() {
         )}
       </AnimatePresence>
       
-      {/* Floating chat button for mobile */}
-      {deviceCapabilities.isMobile && !showChat && (
-        <motion.div
-          initial={{ opacity: 0, scale: 0 }}
-          animate={{ opacity: 1, scale: 1 }}
-          className="fixed bottom-24 right-6 z-30 lg:hidden"
-        >
-          <Button
-            onClick={() => setShowChat(true)}
-            size="lg"
-            className="rounded-full w-14 h-14 shadow-lg"
-          >
-            <ChatCircle size={24} />
-          </Button>
-        </motion.div>
-      )}
-      
-      {/* Add bottom padding for mobile devices to account for bottom navigation */}
-      {deviceCapabilities.isMobile && (
-        <div className="h-20 lg:hidden" />
-      )}
-      
       {/* Sprint 2: Proactive Assistance Panel */}
       <ProactiveAssistancePanel />
-      
-      <footer className="border-t bg-card/50 mt-12">
-        <div className="container mx-auto px-4 py-6">
-          <div className="text-center text-sm text-muted-foreground">
-            <p>MantraPath - Supporting your mental wellness journey, one step at a time. 💜</p>
-            <p className="mt-2">Remember: This app complements but doesn't replace professional mental health support.</p>
-          </div>
-        </div>
-      </footer>
       
       <Toaster 
         position="top-right"
@@ -660,7 +325,7 @@ function AppContent() {
         richColors
         closeButton
       />
-    </div>
+    </>
   )
 }
 

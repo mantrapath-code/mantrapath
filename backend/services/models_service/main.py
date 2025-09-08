@@ -7,6 +7,7 @@ Serves STT, TTS, and NLP models to other services via REST API
 from fastapi import FastAPI, HTTPException, UploadFile, File, BackgroundTasks
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
+from contextlib import asynccontextmanager
 import uvicorn
 import asyncio
 import logging
@@ -24,6 +25,9 @@ from models.nlp_engine import NLPEngine
 from models.model_manager import ModelManager
 from api.routes import router as api_router
 from api.translation_routes import router as translation_router, set_models_service
+# from api.emotion_routes import router as emotion_router
+# from api.translation_routes_ollama import router as ollama_translation_router
+# from api.text_generation_routes import router as text_generation_router
 from config.settings import get_settings
 from utils.logger import setup_logger
 
@@ -31,36 +35,24 @@ from utils.logger import setup_logger
 settings = get_settings()
 logger = setup_logger(__name__)
 
-# FastAPI app
-app = FastAPI(
-    title="MantraPath Models Service",
-    description="Centralized AI Models Service for STT, TTS, NLP, and Training",
-    version="1.0.0",
-    docs_url="/docs",
-    redoc_url="/redoc"
-)
-
-# CORS
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
-
 # Global components
 stt_engine: Optional[STTEngine] = None
 tts_engine: Optional[TTSEngine] = None
 nlp_engine: Optional[NLPEngine] = None
 model_manager: Optional[ModelManager] = None
 
-@app.on_event("startup")
-async def startup_event():
-    """Initialize models and services on startup"""
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """Application lifespan events"""
     global stt_engine, tts_engine, nlp_engine, model_manager
     
+    # Startup
     logger.info("🚀 Starting MantraPath Models Service...")
+    
+    # Check if we're in minimal mode
+    minimal_mode = os.environ.get("MODELS_SERVICE_MODE") == "minimal"
+    if minimal_mode:
+        logger.info("🔧 Running in MINIMAL MODE - models will load on-demand")
     
     try:
         # Initialize model manager
@@ -72,10 +64,13 @@ async def startup_event():
         tts_engine = TTSEngine(model_manager)
         nlp_engine = NLPEngine(model_manager)
         
-        # Load default models
-        await stt_engine.load_default_models()
-        await tts_engine.load_default_models()
-        await nlp_engine.load_default_models()
+        if minimal_mode:
+            logger.info("✅ Models Service initialized in minimal mode (skipping model loading)")
+        else:
+            # Load default models only if not in minimal mode
+            await stt_engine.load_default_models()
+            await tts_engine.load_default_models()
+            await nlp_engine.load_default_models()
         
         # Set models service reference for translation routes
         set_models_service(nlp_engine)
@@ -85,16 +80,41 @@ async def startup_event():
     except Exception as e:
         logger.error(f"❌ Failed to initialize Models Service: {e}")
         raise
-
-@app.on_event("shutdown")
-async def shutdown_event():
-    """Cleanup on shutdown"""
+    
+    yield
+    
+    # Shutdown
     logger.info("🛑 Shutting down Models Service...")
     
     if model_manager:
         await model_manager.cleanup()
     
     logger.info("✅ Models Service shutdown complete")
+
+# FastAPI app
+app = FastAPI(
+    title="MantraPath Models Service",
+    description="Centralized AI Models Service for STT, TTS, NLP, and Training",
+    version="1.0.0",
+    docs_url="/docs",
+    redoc_url="/redoc",
+    lifespan=lifespan
+)
+
+# Global components
+stt_engine: Optional[STTEngine] = None
+tts_engine: Optional[TTSEngine] = None
+nlp_engine: Optional[NLPEngine] = None
+model_manager: Optional[ModelManager] = None
+
+# CORS
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 # Health and Status endpoints
 @app.get("/health")
@@ -125,9 +145,9 @@ async def get_status():
             "gpu_memory_gb": []
         },
         "models": {
-            "stt_loaded": len(stt_engine.loaded_models) if stt_engine else 0,
-            "tts_loaded": len(tts_engine.loaded_models) if tts_engine else 0,
-            "nlp_loaded": len(nlp_engine.loaded_models) if nlp_engine else 0
+            "stt_loaded": len(stt_engine.loaded_models) if stt_engine and hasattr(stt_engine, 'loaded_models') else 0,
+            "tts_loaded": len(tts_engine.loaded_models) if tts_engine and hasattr(tts_engine, 'loaded_models') else 0,
+            "nlp_loaded": len(nlp_engine.loaded_models) if nlp_engine and hasattr(nlp_engine, 'loaded_models') else 0
         },
         "supported_languages": {
             "stt": list(stt_engine.supported_languages.keys()) if stt_engine else [],
@@ -166,6 +186,11 @@ async def get_loaded_models():
 # Include API routes
 app.include_router(api_router, prefix="/api/v1")
 app.include_router(translation_router, prefix="/api/v1/translation", tags=["translation"])
+
+# Include new Ollama-based routes for centralized model service (temporarily commented out)
+# app.include_router(emotion_router, tags=["emotion"])  # Includes /api/v1/emotion/*
+# app.include_router(ollama_translation_router, prefix="/api/v1/translation/ollama", tags=["ollama-translation"])
+# app.include_router(text_generation_router, tags=["text-generation"])  # Includes /api/v1/nlp/*
 
 if __name__ == "__main__":
     # Get port from environment or use default

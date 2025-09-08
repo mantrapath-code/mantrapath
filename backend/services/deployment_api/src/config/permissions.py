@@ -244,3 +244,4 @@ def get_rate_limit(engineer_id: str, endpoint: str) -> int:
     level = get_permission_level(engineer_id)
     endpoint_limits = ENDPOINT_RATE_LIMITS.get(endpoint, {})
     return endpoint_limits.get(level, endpoint_limits.get("basic", 100))
+

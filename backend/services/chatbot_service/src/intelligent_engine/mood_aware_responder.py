@@ -17,10 +17,14 @@ Version: 1.0.0
 
 import asyncio
 import logging
+import os
 from datetime import datetime, timedelta
 from typing import Dict, List, Optional, Any, Tuple
 from dataclasses import dataclass
 from enum import Enum
+
+# HTTP client for MantraPath services
+import httpx
 
 # Configure logging
 logger = logging.getLogger(__name__)
@@ -85,7 +89,7 @@ class MoodAwareResponse:
     tone: str
     intervention_type: str
     breathing_exercise: Optional[Dict[str, Any]] = None
-    follow_up_suggestions: List[str] = None
+    follow_up_suggestions: Optional[List[str]] = None
     crisis_detected: bool = False
     confidence_score: float = 0.0
 
@@ -107,13 +111,22 @@ class MoodAwareResponder:
         self.crisis_threshold = 3.0  # Mood score threshold for crisis detection
         self.distress_threshold = 5.0  # Mood score threshold for distress detection
         
-        logger.info("MoodAwareResponder initialized successfully")
+        # MantraPath service URLs from environment
+        self.models_service_url = os.getenv('MODELS_SERVICE_URL', 'http://localhost:8085')
+        self.phi4_agent_url = os.getenv('PHI4_AGENT_URL', 'http://localhost:8016')
+        self.ai_context_store_url = os.getenv('AI_CONTEXT_STORE_URL', 'http://localhost:8006')
+        self.memory_service_url = os.getenv('MEMORY_SERVICE_URL', 'http://localhost:8017')
+        
+        # Prioritize models service over phi4_agent for consistency
+        self.use_models_service_first = True
+        
+        logger.info("MoodAwareResponder initialized with centralized models service priority")
 
     async def generate_mood_aware_response(
         self, 
         user_message: str, 
         mood_context: MoodContext,
-        conversation_history: List[Dict[str, Any]] = None
+        conversation_history: Optional[List[Dict[str, Any]]] = None
     ) -> MoodAwareResponse:
         """
         Generate a mood-aware response based on user message and mood context
@@ -313,7 +326,7 @@ I care about your safety and wellbeing. Would you like me to help you connect wi
         user_message: str, 
         mood_context: MoodContext, 
         strategy: str,
-        conversation_history: List[Dict[str, Any]] = None
+        conversation_history: Optional[List[Dict[str, Any]]] = None
     ) -> MoodAwareResponse:
         """
         Generate contextually appropriate response based on strategy and mood context
@@ -326,6 +339,488 @@ I care about your safety and wellbeing. Would you like me to help you connect wi
             
         Returns:
             MoodAwareResponse: Generated response
+        """
+        # Try Models Service (centralized Ollama) first, then fallback to Phi4 Agent
+        try:
+            if self.use_models_service_first:
+                logger.info(f"Using centralized Models Service (Ollama) for strategy: {strategy}")
+                models_response = await self._generate_via_models_service_ollama(
+                    user_message, mood_context, strategy, conversation_history
+                )
+                if models_response:
+                    logger.info(f"Models Service response generated successfully with confidence: {models_response.confidence_score}")
+                    return models_response
+        except Exception as e:
+            logger.error(f"Centralized Models Service generation failed: {e}")
+        
+        # Fallback to Phi4 Agent if models service fails
+        try:
+            logger.info(f"Fallback to Phi4 Agent for strategy: {strategy}")
+            phi4_response = await self._generate_phi4_agent_response(
+                user_message, mood_context, strategy, conversation_history
+            )
+            if phi4_response:
+                logger.info(f"Phi4 Agent response generated successfully")
+                return phi4_response
+        except Exception as e:
+            logger.error(f"Phi4 Agent generation failed: {e}")
+        
+        # Final fallback to template-based responses
+        logger.warning(f"All AI services failed, using template response for strategy: {strategy}")
+        return await self._generate_template_response(user_message, mood_context, strategy)
+    
+    def _build_system_prompt(self, mood_context: MoodContext, strategy: str) -> str:
+        """
+        Build system prompt for OpenAI based on mood context and strategy
+        
+        Args:
+            mood_context (MoodContext): Current mood context
+            strategy (str): Response strategy
+            
+        Returns:
+            str: System prompt for AI
+        """
+        base_prompt = f"""You are Mantra-Mitra, the AI wellness companion for MantraPath - a comprehensive mental health platform. You have access to the user's mood tracking data, journal entries, and wellness journey.
+
+Platform Context:
+- MantraPath tracks mood scores (1-10 scale), energy levels, stress levels, and sleep quality
+- Users can journal, join community forums, and participate in wellness challenges
+- The platform provides emotional weather forecasts and personalized insights
+- Current user mood score: {mood_context.current_mood_score}/10
+- Recent mood trend: {mood_context.mood_trend}
+- Stress level: {mood_context.stress_level}/10
+- Energy level: {mood_context.energy_level}/10
+
+Response Guidelines:
+- Reference their actual mood data when relevant ("I see your mood score is {mood_context.current_mood_score}/10...")
+- Be aware of their wellness journey on MantraPath
+- Suggest platform features when appropriate (mood tracking, journaling, community)
+- Keep responses warm, personal, and actionable (2-3 sentences)
+- Never diagnose - focus on wellness support and professional referrals when needed
+"""
+        
+        # Add mood-specific context
+        mood_info = f"\nCurrent user context:\n- Mood score: {mood_context.current_mood_score}/10\n- Mood trend: {mood_context.mood_trend}\n- Stress level: {mood_context.stress_level}/10\n- Energy level: {mood_context.energy_level}/10"
+        
+        # Add strategy-specific guidance
+        strategy_guidance = {
+            "crisis_intervention": "\nIMPORTANT: User may be in crisis. Provide immediate support and encourage professional help.",
+            "supportive_intervention": "\nFocus on validation and gentle support. Offer coping strategies.",
+            "guidance_focused": "\nUser is seeking guidance. Provide practical advice and resources.",
+            "positive_reinforcement": "\nUser is sharing positive experiences. Celebrate and encourage continued wellness.",
+            "maintenance_support": "\nProvide general wellness support and check-in."
+        }
+        
+        return base_prompt + mood_info + strategy_guidance.get(strategy, "")
+    
+    def _generate_follow_up_suggestions(self, mood_context: MoodContext) -> List[str]:
+        """
+        Generate follow-up suggestions based on mood context
+        
+        Args:
+            mood_context (MoodContext): Current mood context
+            
+        Returns:
+            List[str]: Follow-up suggestions
+        """
+        suggestions = []
+        
+        if mood_context.current_mood_score <= 5:
+            suggestions.extend([
+                "Consider taking a short walk outside",
+                "Try journaling your thoughts and feelings",
+                "Reach out to a supportive friend or family member"
+            ])
+        
+        if mood_context.stress_level >= 7:
+            suggestions.extend([
+                "Practice deep breathing exercises",
+                "Try a brief meditation or mindfulness exercise"
+            ])
+        
+        if mood_context.energy_level <= 4:
+            suggestions.extend([
+                "Engage in gentle movement or stretching",
+                "Listen to uplifting music"
+            ])
+        
+        return suggestions[:3]  # Limit to 3 suggestions
+    
+    async def _generate_via_models_service_ollama(
+        self,
+        user_message: str,
+        mood_context: MoodContext,
+        strategy: str,
+        conversation_history: Optional[List[Dict[str, Any]]] = None
+    ) -> Optional[MoodAwareResponse]:
+        """
+        Generate response using centralized Models Service (Ollama backend)
+        """
+        try:
+            # Get enhanced user context from AI Context Store and Memory Service
+            enhanced_context = await self._get_enhanced_user_context(mood_context)
+            
+            # Build context for AI with enhanced user insights
+            system_prompt = self._build_enhanced_system_prompt(mood_context, strategy, enhanced_context)
+            
+            # Build conversation context
+            conversation_context = ""
+            if conversation_history:
+                for msg in conversation_history[-3:]:  # Last 3 messages for context
+                    role = "User" if msg.get("sender") == "user" else "Assistant"
+                    conversation_context += f"{role}: {msg.get('content', '')}\n"
+            
+            # Create complete prompt for centralized models service
+            complete_prompt = f"""{system_prompt}
+
+Previous conversation:
+{conversation_context}
+
+Current user message: {user_message}
+
+Please provide a thoughtful, empathetic response that addresses the user's needs based on their mood context and the conversation strategy."""
+
+            # Use centralized text generation endpoint
+            request_data = {
+                "prompt": complete_prompt,
+                "max_tokens": 250,
+                "temperature": 0.7,
+                "model": "phi4"  # Use Phi-4 via Ollama
+            }
+            
+            # Make request to centralized models service
+            async with httpx.AsyncClient(timeout=30.0) as client:
+                response = await client.post(
+                    f"{self.models_service_url}/api/v1/nlp/generate",  # Centralized endpoint
+                    json=request_data
+                )
+                
+                if response.status_code == 200:
+                    result = response.json()
+                    ai_text = result.get("generated_text", "").strip()
+                    
+                    if ai_text:
+                        # Clean up response
+                        if ai_text.startswith("System:") or ai_text.startswith("Assistant:"):
+                            lines = ai_text.split("\n")
+                            ai_text = "\n".join([line for line in lines if not line.strip().startswith(("System:", "Assistant:", "User:"))])
+                            ai_text = ai_text.strip()
+                        
+                        # Determine if breathing exercise should be suggested
+                        breathing_exercise = None
+                        if mood_context.stress_level >= 7 or "anxious" in user_message.lower() or "stress" in user_message.lower():
+                            breathing_exercise = {
+                                "name": "4-7-8 Calming Breath",
+                                "description": "A powerful technique to reduce anxiety and stress",
+                                "steps": [
+                                    {"action": "inhale", "duration": 4, "instruction": "Breathe in slowly through your nose"},
+                                    {"action": "hold", "duration": 7, "instruction": "Hold your breath gently"},
+                                    {"action": "exhale", "duration": 8, "instruction": "Exhale completely through your mouth"}
+                                ],
+                                "cycles": 4
+                            }
+                        
+                        return MoodAwareResponse(
+                            response_text=ai_text,
+                            tone=self._determine_response_tone(mood_context),
+                            intervention_type=strategy,
+                            breathing_exercise=breathing_exercise,
+                            confidence_score=0.88,  # High confidence for centralized models service
+                            follow_up_suggestions=self._generate_follow_up_suggestions(mood_context)
+                        )
+                    else:
+                        logger.warning(f"Centralized Models Service returned empty response")
+                        return None
+                else:
+                    logger.error(f"Centralized Models Service request failed with status {response.status_code}")
+                    return None
+                    
+        except Exception as e:
+            logger.error(f"Centralized Models Service request failed: {e}")
+            return None
+    
+    async def _generate_phi4_agent_response(
+        self,
+        user_message: str,
+        mood_context: MoodContext,
+        strategy: str,
+        conversation_history: Optional[List[Dict[str, Any]]] = None
+    ) -> Optional[MoodAwareResponse]:
+        """
+        Generate response using Phi4 Agent Service as fallback
+        """
+        try:
+            # Get enhanced user context from AI Context Store and Memory Service
+            enhanced_context = await self._get_enhanced_user_context(mood_context)
+            
+            # Build context for AI with enhanced user insights
+            system_prompt = self._build_enhanced_system_prompt(mood_context, strategy, enhanced_context)
+            
+            # Build conversation context
+            conversation_context = ""
+            if conversation_history:
+                for msg in conversation_history[-3:]:  # Last 3 messages for context
+                    role = "User" if msg.get("sender") == "user" else "Assistant"
+                    conversation_context += f"{role}: {msg.get('content', '')}\n"
+            
+            # Create complete prompt for Phi-4 Agent
+            complete_prompt = f"""{system_prompt}
+
+Previous conversation:
+{conversation_context}
+
+Current user message: {user_message}
+
+Please provide a thoughtful, empathetic response that addresses the user's needs based on their mood context and the conversation strategy."""
+
+            # Prepare request data for Phi4 agent service
+            request_data = {
+                "prompt": complete_prompt,
+                "max_tokens": 250,
+                "temperature": 0.7
+            }
+            
+            # Make request to phi4 agent service
+            async with httpx.AsyncClient(timeout=30.0) as client:
+                response = await client.post(
+                    f"{self.phi4_agent_url}/generate",
+                    json=request_data
+                )
+                
+                if response.status_code == 200:
+                    result = response.json()
+                    ai_text = result.get("generated_text", "").strip()
+                    
+                    if ai_text:
+                        # Clean up response
+                        if ai_text.startswith("System:") or ai_text.startswith("Assistant:"):
+                            lines = ai_text.split("\n")
+                            ai_text = "\n".join([line for line in lines if not line.strip().startswith(("System:", "Assistant:", "User:"))])
+                            ai_text = ai_text.strip()
+                        
+                        # Determine if breathing exercise should be suggested
+                        breathing_exercise = None
+                        if mood_context.stress_level >= 7 or "anxious" in user_message.lower() or "stress" in user_message.lower():
+                            breathing_exercise = {
+                                "name": "4-7-8 Calming Breath",
+                                "description": "A powerful technique to reduce anxiety and stress",
+                                "steps": [
+                                    {"action": "inhale", "duration": 4, "instruction": "Breathe in slowly through your nose"},
+                                    {"action": "hold", "duration": 7, "instruction": "Hold your breath gently"},
+                                    {"action": "exhale", "duration": 8, "instruction": "Exhale completely through your mouth"}
+                                ],
+                                "cycles": 4
+                            }
+                        
+                        return MoodAwareResponse(
+                            response_text=ai_text,
+                            tone=self._determine_response_tone(mood_context),
+                            intervention_type=strategy,
+                            breathing_exercise=breathing_exercise,
+                            confidence_score=0.85,  # High confidence for phi4 agent
+                            follow_up_suggestions=self._generate_follow_up_suggestions(mood_context)
+                        )
+                    else:
+                        logger.warning(f"Phi4 Agent returned empty response")
+                        return None
+                else:
+                    logger.error(f"Phi4 Agent request failed with status {response.status_code}")
+                    return None
+                    
+        except Exception as e:
+            logger.error(f"Phi4 Agent request failed: {e}")
+            return None
+    
+    async def _generate_models_service_response(
+        self,
+        user_message: str,
+        mood_context: MoodContext,
+        strategy: str,
+        conversation_history: Optional[List[Dict[str, Any]]] = None
+    ) -> Optional[MoodAwareResponse]:
+        """
+        Generate AI-powered response using Phi-4 Agent Service via Ollama with enhanced context
+        
+        Args:
+            user_message (str): User's message
+            mood_context (MoodContext): Current mood context
+            strategy (str): Selected response strategy
+            conversation_history (List[Dict]): Previous conversation messages
+            
+        Returns:
+            Optional[MoodAwareResponse]: AI-generated response or None if failed
+        """
+        try:
+            # Get enhanced user context from AI Context Store and Memory Service
+            enhanced_context = await self._get_enhanced_user_context(mood_context)
+            
+            # Get Phi-4 agent service URL from environment or config
+            phi4_agent_url = self.phi4_agent_url
+            
+            # Build context for AI with enhanced user insights
+            system_prompt = self._build_enhanced_system_prompt(mood_context, strategy, enhanced_context)
+            
+            # Build conversation context
+            conversation_context = ""
+            if conversation_history:
+                for msg in conversation_history[-3:]:  # Last 3 messages for context
+                    role = "User" if msg.get("sender") == "user" else "Assistant"
+                    conversation_context += f"{role}: {msg.get('content', '')}\n"
+            
+            # Create complete prompt for Phi-3 
+            complete_prompt = f"""{system_prompt}
+
+Previous conversation:
+{conversation_context}
+
+Current user message: {user_message}
+
+Please provide a thoughtful, empathetic response that addresses the user's needs based on their mood context and the conversation strategy."""
+
+            # Prepare request data for models service
+            request_data = {
+                "prompt": complete_prompt,
+                "max_tokens": 250,
+                "temperature": 0.7
+            }
+            
+            # Make request to models service
+            async with httpx.AsyncClient(timeout=30.0) as client:
+                response = await client.post(
+                    f"{phi4_agent_url}/generate",
+                    json=request_data
+                )
+                
+                if response.status_code == 200:
+                    result = response.json()
+                    ai_text = result.get("response", "").strip()
+                    
+                    if ai_text:
+                        
+                        # Remove any system prompt echoing
+                        if ai_text.startswith("System:") or ai_text.startswith("Assistant:"):
+                            lines = ai_text.split("\n")
+                            ai_text = "\n".join([line for line in lines if not line.strip().startswith(("System:", "Assistant:", "User:"))])
+                            ai_text = ai_text.strip()
+                        
+                        # Determine if breathing exercise should be suggested
+                        breathing_exercise = None
+                        if mood_context.stress_level >= 7 or "anxious" in user_message.lower() or "stress" in user_message.lower():
+                            breathing_exercise = {
+                                "name": "4-7-8 Calming Breath",
+                                "description": "A powerful technique to reduce anxiety and stress",
+                                "steps": [
+                                    {"action": "inhale", "duration": 4, "instruction": "Breathe in slowly through your nose"},
+                                    {"action": "hold", "duration": 7, "instruction": "Hold your breath gently"},
+                                    {"action": "exhale", "duration": 8, "instruction": "Exhale completely through your mouth"}
+                                ],
+                                "cycles": 4
+                            }
+                        
+                        return MoodAwareResponse(
+                            response_text=ai_text,
+                            tone=self._determine_response_tone(mood_context),
+                            intervention_type=strategy,
+                            breathing_exercise=breathing_exercise,
+                            confidence_score=0.85,  # High confidence for models service
+                            follow_up_suggestions=self._generate_follow_up_suggestions(mood_context)
+                        )
+                    else:
+                        logger.warning(f"Phi-4 Agent returned empty response")
+                        return None
+                else:
+                    logger.error(f"Phi-4 Agent request failed with status {response.status_code}")
+                    return None
+                    
+        except Exception as e:
+            logger.error(f"Phi-4 Agent request failed: {e}")
+            return None
+    
+    async def _get_enhanced_user_context(self, mood_context: MoodContext) -> Dict[str, Any]:
+        """
+        Get enhanced user context from AI Context Store and Memory Service
+        
+        Args:
+            mood_context (MoodContext): Current mood context
+            
+        Returns:
+            Dict[str, Any]: Enhanced user context data
+        """
+        enhanced_context = {
+            "ai_insights": {},
+            "behavioral_patterns": {},
+            "memory_insights": {}
+        }
+        
+        try:
+            # Try to get AI insights from AI Context Store
+            async with httpx.AsyncClient(timeout=10.0) as client:
+                # Note: In a real implementation, we'd need user_id from the request context
+                # For now, we'll use a placeholder approach
+                ai_context_response = await client.get(
+                    f"{self.ai_context_store_url}/api/v1/intelligence/insights/user_placeholder",
+                    timeout=5.0
+                )
+                if ai_context_response.status_code == 200:
+                    enhanced_context["ai_insights"] = ai_context_response.json()
+        except Exception as e:
+            logger.warning(f"Could not get AI Context Store insights: {e}")
+        
+        try:
+            # Try to get behavioral insights from Memory Service
+            async with httpx.AsyncClient(timeout=10.0) as client:
+                memory_response = await client.get(
+                    f"{self.memory_service_url}/api/v1/insights/user_placeholder",
+                    timeout=5.0
+                )
+                if memory_response.status_code == 200:
+                    enhanced_context["memory_insights"] = memory_response.json()
+        except Exception as e:
+            logger.warning(f"Could not get Memory Service insights: {e}")
+        
+        return enhanced_context
+    
+    def _build_enhanced_system_prompt(self, mood_context: MoodContext, strategy: str, enhanced_context: Dict[str, Any]) -> str:
+        """
+        Build enhanced system prompt with AI Context Store and Memory Service insights
+        
+        Args:
+            mood_context (MoodContext): Current mood context
+            strategy (str): Response strategy
+            enhanced_context (Dict): Enhanced user context from other services
+            
+        Returns:
+            str: Enhanced system prompt for AI
+        """
+        base_prompt = self._build_system_prompt(mood_context, strategy)
+        
+        # Add enhanced context insights if available
+        if enhanced_context.get("ai_insights"):
+            ai_insights = enhanced_context["ai_insights"]
+            base_prompt += f"\n\nAI-Generated User Insights:\n{ai_insights}"
+        
+        if enhanced_context.get("memory_insights"):
+            memory_insights = enhanced_context["memory_insights"]
+            base_prompt += f"\n\nBehavioral Memory Insights:\n{memory_insights}"
+        
+        return base_prompt
+    
+    async def _generate_template_response(
+        self,
+        user_message: str,
+        mood_context: MoodContext,
+        strategy: str
+    ) -> MoodAwareResponse:
+        """
+        Generate template-based response as fallback
+        
+        Args:
+            user_message (str): User's message
+            mood_context (MoodContext): Current mood context
+            strategy (str): Selected response strategy
+            
+        Returns:
+            MoodAwareResponse: Template-based response
         """
         response_templates = self.response_templates.get(strategy, {})
         
@@ -350,7 +845,7 @@ I care about your safety and wellbeing. Would you like me to help you connect wi
             response_text=personalized_response,
             tone=self._determine_response_tone(mood_context),
             intervention_type=strategy,
-            confidence_score=0.85
+            confidence_score=0.65  # Lower confidence for template responses
         )
 
     async def _add_therapeutic_interventions(

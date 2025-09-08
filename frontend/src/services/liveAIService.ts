@@ -24,6 +24,20 @@ class LiveAIService {
     };
   }
 
+  private getUserId(): string {
+    // Helper method to get current user ID from auth state
+    const storedUser = localStorage.getItem('user');
+    if (storedUser) {
+      try {
+        const user = JSON.parse(storedUser);
+        return user.id || user.user_id || '';
+      } catch (e) {
+        console.warn('Failed to parse stored user data:', e);
+      }
+    }
+    return '';
+  }
+
   async getInsights() {
     try {
       // Use the real unified insights endpoint from ML service
@@ -83,7 +97,7 @@ class LiveAIService {
   async getCommunityData() {
     try {
       // Use real community service endpoint
-      const response = await fetch(`http://localhost:8006/user/stats`, {
+      const response = await fetch(`http://localhost:8000/community/user/stats`, {
         headers: this.getAuthHeaders()
       });
       
@@ -114,7 +128,7 @@ class LiveAIService {
   async getMoodData() {
     try {
       // Use real mood service endpoint
-      const response = await fetch(`http://localhost:8007/mood/current`, {
+      const response = await fetch(`http://localhost:8000/notifications/mood/current`, {
         headers: this.getAuthHeaders()
       });
       
@@ -136,10 +150,10 @@ class LiveAIService {
   async getEmotionDetection(text: string) {
     try {
       // Use real AI Event Processor emotion detection
-      const response = await fetch(`http://localhost:8014/api/v1/analyze/emotion`, {
+      const response = await fetch(`http://localhost:8000/ai-events/api/v1/analyze/emotion`, {
         method: 'POST',
         headers: this.getAuthHeaders(),
-        body: JSON.stringify({ text, user_id: 'current' })
+        body: JSON.stringify({ text, user_id: this.getUserId() })
       });
       
       if (!response.ok) {
@@ -160,7 +174,7 @@ class LiveAIService {
   async getAssistanceSuggestions() {
     try {
       // Use real assistance engine endpoint
-      const response = await fetch(`http://localhost:8004/assistance/suggestions`, {
+      const response = await fetch(`http://localhost:8000/chatbot/assistance/suggestions`, {
         headers: this.getAuthHeaders()
       });
       

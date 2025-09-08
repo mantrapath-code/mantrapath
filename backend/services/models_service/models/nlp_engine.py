@@ -6,6 +6,7 @@ Handles language processing tasks using Microsoft Phi-3 model
 import asyncio
 import json
 import logging
+import os
 from pathlib import Path
 from typing import Dict, List, Optional, Union, Any
 
@@ -20,6 +21,7 @@ class NLPEngine:
         self.model_manager = model_manager
         self.phi3_engine = Phi3Engine()
         self.is_initialized = False
+        self.loaded_models = {}  # Track loaded models
         
         # Supported tasks
         self.supported_tasks = {
@@ -37,6 +39,7 @@ class NLPEngine:
         success = await self.phi3_engine.initialize()
         if success:
             self.is_initialized = True
+            self.loaded_models["phi3"] = self.phi3_engine  # Track the loaded model
             logger.info("✅ NLP Engine with Phi-3 ready")
             return True
         else:
@@ -44,8 +47,24 @@ class NLPEngine:
             return False
     
     async def load_default_models(self):
-        """Load default NLP models (Phi-3)"""
-        return await self.initialize()
+        """Load default NLP models (Phi-3) gracefully"""
+        logger.info("🧠 Attempting to load default NLP models...")
+        
+        # Check if we're in minimal mode
+        if os.environ.get("MODELS_SERVICE_MODE") == "minimal":
+            logger.info("✅ NLP Engine initialized in minimal mode (models will load on-demand)")
+            return True
+        
+        try:
+            success = await self.initialize()
+            if success:
+                logger.info("✅ NLP Engine initialized successfully")
+            else:
+                logger.warning("⚠️ NLP Engine initialization failed - service will continue without NLP")
+            return success
+        except Exception as e:
+            logger.warning(f"⚠️ Could not initialize NLP engine: {e}")
+            return False
     
     async def translate(
         self,

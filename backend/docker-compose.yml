@@ -34,6 +34,29 @@ services:
       retries: 5
       start_period: 30s
 
+  # Phi-4 Agent Service (Dedicated AI Text Generation via Ollama)
+  phi3-agent:
+    build:
+      context: .
+      dockerfile: services/phi3_agent/Dockerfile
+    ports:
+      - "${PHI4_AGENT_PORT}:8000"
+    environment:
+      - OLLAMA_BASE_URL=http://host.docker.internal:11434
+      - LOG_LEVEL=INFO
+      - PHI4_AGENT_PORT=8000
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    networks:
+      - mantrapath-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 60s
+      timeout: 30s
+      retries: 3
+      start_period: 60s
+
   # NATS for real-time messaging and WebSocket clustering with JetStream
   nats:
     image: nats:2.10-alpine
@@ -418,6 +441,7 @@ services:
     build:
       context: ./services/models_service
       dockerfile: Dockerfile
+    command: ["./start_simple.sh"]  # Use simple startup for faster initialization
     ports:
       - "${MODELS_SERVICE_EXTERNAL_PORT}:${MODELS_SERVICE_INTERNAL_PORT}"
     env_file:
@@ -554,29 +578,15 @@ services:
         condition: service_healthy
       models-service:
         condition: service_healthy
-  #   networks:
-  #     - mantrapath-network
-  #   restart: unless-stopped
-  #   # Resource limits for ML model loading
-  #   deploy:
-  #     resources:
-  #       limits:
-  #         memory: 4G
-  #         cpus: '2'
-  #       reservations:
-  #         memory: 2G
-  #         cpus: '1'
-  #   # Re-enable health check with longer start period
-  #   healthcheck:
-  #     test: ["CMD", "curl", "-f", "http://localhost:8010/health"]
-  #     interval: 30s
-  #     timeout: 10s
-  #     retries: 3
-  #     start_period: 300s  # 5 minutes for model download
-    #   interval: 30s
-    #   timeout: 10s
-    #   retries: 3
-    #   start_period: 30s
+    networks:
+      - mantrapath-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8010/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
 
   # Voice Service - Clean Implementation with Indian Language Support
   voice-service:
@@ -692,6 +702,11 @@ services:
       - EVENT_PROCESSING_TIMEOUT=300
       - CONTEXT_CACHE_TTL=3600
       - METRICS_EXPORT_INTERVAL=60
+      # Models Service Integration
+      - MODELS_SERVICE_URL=http://models-service:${MODELS_SERVICE_INTERNAL_PORT}
+      - MODELS_SERVICE_ENABLED=true
+      - USE_MODELS_SERVICE=true
+      - MODELS_SERVICE_TIMEOUT=30
     volumes:
       - ai_models_cache:/app/models_cache
     depends_on:
@@ -700,6 +715,8 @@ services:
       redis:
         condition: service_healthy
       nats:
+        condition: service_healthy
+      models-service:
         condition: service_healthy
     networks:
       - mantrapath-network
@@ -902,6 +919,7 @@ volumes:
   models_data:     # NEW - Models Service model storage
   voice_models:    # NEW - Voice Service Vosk models
   voice_audio:     # NEW - Voice Service audio files
+  phi3_cache:      # NEW - Phi-3 Agent cache
 
 networks:
   mantrapath-network:

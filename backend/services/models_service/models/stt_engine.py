@@ -7,6 +7,7 @@ import asyncio
 import io
 import json
 import logging
+import os
 from pathlib import Path
 from typing import Dict, List, Optional, Union, Any
 import numpy as np
@@ -45,8 +46,13 @@ class STTEngine:
         }
     
     async def load_default_models(self):
-        """Load default STT models"""
-        logger.info("🔊 Loading default STT models...")
+        """Load default STT models gracefully"""
+        logger.info("🔊 Attempting to load default STT models...")
+        
+        # Check if we're in minimal mode
+        if os.environ.get("MODELS_SERVICE_MODE") == "minimal":
+            logger.info("✅ STT Engine initialized in minimal mode (models will load on-demand)")
+            return
         
         # Load primary models
         primary_models = [
@@ -55,12 +61,22 @@ class STTEngine:
             "vosk_hi_small"  # Fast Hindi
         ]
         
+        loaded_count = 0
         for model_name in primary_models:
             try:
-                await self.load_model(model_name)
-                logger.info(f"✅ Loaded STT model: {model_name}")
+                success = await self.load_model(model_name)
+                if success:
+                    loaded_count += 1
+                    logger.info(f"✅ Loaded STT model: {model_name}")
+                else:
+                    logger.warning(f"⚠️ STT model {model_name} not available locally")
             except Exception as e:
                 logger.warning(f"⚠️ Could not load STT model {model_name}: {e}")
+        
+        if loaded_count == 0:
+            logger.warning("⚠️ No STT models loaded - service will attempt to load models on-demand")
+        else:
+            logger.info(f"✅ Loaded {loaded_count}/{len(primary_models)} STT models")
     
     async def load_model(self, model_name: str) -> bool:
         """Load a specific STT model"""

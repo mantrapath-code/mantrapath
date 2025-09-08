@@ -201,7 +201,7 @@ async def lifespan(app: FastAPI):
     
     # Initialize Redis client
     try:
-        redis_url = os.getenv("REDIS_URL", "redis://localhost:6379/3")
+        redis_url = os.getenv("REDIS_URL", "redis://redis:6379/3")
         redis_client = redis.from_url(redis_url)
         await redis_client.ping()
         logger.info("✅ Redis connection established")

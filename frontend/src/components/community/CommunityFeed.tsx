@@ -17,7 +17,7 @@ import { motion, AnimatePresence } from "framer-motion"
 import { toast } from "sonner"
 import { communityApi } from "@/services/api"
 import { useAuth } from "@/hooks/useAuth"
-import { useWebSocket } from "@/hooks/useWebSocket"
+import { useRobustWebSocket } from "@/hooks/useRobustWebSocket"
 import { getUserDisplayName, getUserInitials } from "@/utils/userDisplay"
 import { formatRelativeTime } from "@/utils/timeUtils"
 
@@ -104,7 +104,7 @@ interface CommunityAnalytics {
 
 export function CommunityFeed() {
   const { user } = useAuth()
-  const { isConnected: wsConnected, lastMessage } = useWebSocket()
+  const { isConnected: wsConnected, lastMessage } = useRobustWebSocket()
   
   const [feedItems, setFeedItems] = useState<FeedItem[]>([])
   const [communityScore, setCommunityScore] = useState<CommunityScore | null>(null)

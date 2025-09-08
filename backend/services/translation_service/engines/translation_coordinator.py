@@ -116,7 +116,7 @@ class TranslationCoordinator:
     async def _setup_cache(self):
         """Setup Redis cache connection"""
         try:
-            self.redis_client = redis.from_url("redis://localhost:6379/3")
+            self.redis_client = redis.from_url("redis://redis:6379/3")
             await self.redis_client.ping()
             logger.info("✅ Redis cache connected successfully")
             self.cache_enabled = True

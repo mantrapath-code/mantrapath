@@ -42,9 +42,10 @@ RUN pip install --no-cache-dir -r requirements.txt
 # Copy application code
 COPY . .
 
-# Copy initialization script
-COPY init_with_models.sh ./init_with_models.sh
-RUN chmod +x ./init_with_models.sh
+# Copy startup scripts
+COPY start_simple.sh ./start_simple.sh
+COPY start_full.sh ./start_full.sh
+RUN chmod +x ./start_simple.sh ./start_full.sh
 
 # Create models directory
 RUN mkdir -p models cache logs
@@ -59,8 +60,8 @@ ENV LOGS_DIR=/app/logs
 EXPOSE 8080
 
 # Health check
-HEALTHCHECK --interval=30s --timeout=10s --start-period=120s --retries=3 \
+HEALTHCHECK --interval=30s --timeout=10s --start-period=60s --retries=3 \
     CMD curl -f http://localhost:8080/health || exit 1
 
-# Run with models pre-initialization
-CMD ["./init_with_models.sh"]
+# Run with full startup (loads Phi-3 model)
+CMD ["./start_full.sh"]

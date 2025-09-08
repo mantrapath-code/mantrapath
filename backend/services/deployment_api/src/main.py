@@ -523,3 +523,4 @@ if __name__ == "__main__":
         port=settings.DEPLOYMENT_API_PORT,
         reload=settings.DEBUG
     )
+
