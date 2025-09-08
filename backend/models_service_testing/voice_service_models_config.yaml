@@ -1,0 +1,183 @@
+# Voice Service Models Configuration
+# Optimized for: Vosk (STT) + Coqui TTS + Hugging Face sentiment
+
+voice_service:
+  name: "MantraPath Voice Service"
+  version: "1.0.0"
+  target_port: 8011
+  required_models:
+    
+    # STT Models - Vosk (as requested)
+    stt:
+      primary:
+        - name: "vosk_en_us_small"
+          engine: "vosk"
+          language: "en"
+          size: "40MB"
+          quality: "good"
+          speed: "fast"
+          priority: 1
+          download_url: "https://alphacephei.com/vosk/models/vosk-model-en-us-0.22.zip"
+          
+        - name: "vosk_hi_small"
+          engine: "vosk" 
+          language: "hi"
+          size: "45MB"
+          quality: "good"
+          speed: "fast"
+          priority: 1
+          download_url: "https://alphacephei.com/vosk/models/vosk-model-small-hi-0.22.zip"
+          
+      secondary:
+        - name: "whisper_tiny"
+          engine: "whisper"
+          language: "multilingual"
+          size: "39MB"
+          quality: "good"
+          speed: "medium"
+          priority: 2
+          supports: ["en", "hi", "bn", "te", "ta"]
+    
+    # TTS Models - Coqui (as requested)
+    tts:
+      primary:
+        - name: "coqui_hi"
+          engine: "coqui"
+          language: "hi"
+          size: "500MB"
+          quality: "high"
+          speed: "medium"
+          priority: 1
+          voice_cloning: false
+          
+        - name: "coqui_bn"
+          engine: "coqui"
+          language: "bn"
+          size: "200MB"
+          quality: "high"
+          speed: "medium"
+          priority: 2
+          voice_cloning: false
+          
+      advanced:
+        - name: "coqui_xtts_v2"
+          engine: "coqui"
+          language: "multilingual"
+          size: "6GB"
+          quality: "excellent"
+          speed: "slow"
+          priority: 3
+          voice_cloning: true
+          supports: ["en", "hi", "bn", "te", "ta", "mr", "gu"]
+          
+      fallback:
+        - name: "espeak_hi"
+          engine: "espeak"
+          language: "hi"
+          size: "5MB"
+          quality: "basic"
+          speed: "fast"
+          priority: 10
+    
+    # NLP Models - Hugging Face sentiment (as requested)
+    nlp:
+      sentiment:
+        - name: "sentiment_analysis_en"
+          provider: "huggingface"
+          model_id: "cardiffnlp/twitter-roberta-base-sentiment-latest"
+          language: "en"
+          size: "500MB"
+          priority: 1
+          task: "sentiment-analysis"
+          labels: ["negative", "neutral", "positive"]
+          
+        - name: "sentiment_analysis_multilingual"
+          provider: "huggingface"
+          model_id: "nlptown/bert-base-multilingual-uncased-sentiment"
+          language: "multilingual"
+          size: "700MB"
+          priority: 2
+          task: "sentiment-analysis"
+          supports: ["hi", "bn", "te", "ta"]
+          
+      emotion:
+        - name: "emotion_analysis_en"
+          provider: "huggingface"
+          model_id: "j-hartmann/emotion-english-distilroberta-base"
+          language: "en"
+          size: "300MB"
+          priority: 3
+          task: "emotion-analysis"
+          labels: ["anger", "disgust", "fear", "joy", "neutral", "sadness", "surprise"]
+
+# Integration settings
+integration:
+  models_service:
+    url: "http://localhost:8085"
+    health_check: "/health"
+    models_endpoint: "/models/loaded"
+    download_endpoint: "/api/v1/models/download"
+    
+  voice_service:
+    stt_endpoint: "/api/v1/stt/transcribe"
+    tts_endpoint: "/api/v1/tts/synthesize"
+    sentiment_endpoint: "/api/v1/nlp/sentiment"
+    
+  performance:
+    max_audio_duration: 60  # seconds
+    max_text_length: 1000   # characters
+    timeout_stt: 30         # seconds
+    timeout_tts: 15         # seconds
+    timeout_nlp: 5          # seconds
+
+# Deployment configurations
+deployment:
+  minimal:
+    description: "Fast setup for testing"
+    total_size: "585MB"
+    models:
+      - "vosk_en_us_small"
+      - "vosk_hi_small" 
+      - "sentiment_analysis_en"
+      
+  recommended:
+    description: "Production ready"
+    total_size: "1.2GB"
+    models:
+      - "vosk_en_us_small"
+      - "vosk_hi_small"
+      - "coqui_hi"
+      - "sentiment_analysis_en"
+      - "sentiment_analysis_multilingual"
+      
+  complete:
+    description: "Full capabilities"
+    total_size: "7GB"
+    models:
+      - "vosk_en_us_small"
+      - "vosk_hi_small"
+      - "whisper_tiny"
+      - "coqui_hi"
+      - "coqui_bn"
+      - "coqui_xtts_v2"
+      - "sentiment_analysis_en"
+      - "sentiment_analysis_multilingual"
+      - "emotion_analysis_en"
+
+# Quality expectations
+quality_standards:
+  stt:
+    accuracy_threshold: 0.85
+    latency_max: "3s"
+    supported_formats: ["wav", "mp3", "flac"]
+    
+  tts:
+    naturalness_score: 4.0  # out of 5.0
+    latency_max: "2s"
+    output_format: "wav"
+    sample_rate: 22050
+    
+  sentiment:
+    confidence_threshold: 0.7
+    latency_max: "1s"
+    context_awareness: true

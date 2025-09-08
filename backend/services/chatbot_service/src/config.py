@@ -170,7 +170,7 @@ class ChatbotConfig:
             ai_event_processor=ai_event_processor,
             
             # General settings
-            default_language=os.getenv("CHATBOT_DEFAULT_LANGUAGE", "hi"),
+            default_language=os.getenv("CHATBOT_DEFAULT_LANGUAGE", "en"),  # Changed from "hi" to "en"
             supported_languages=supported_languages,
             response_timeout=int(os.getenv("CHATBOT_RESPONSE_TIMEOUT", "30")),
             max_context_length=int(os.getenv("CHATBOT_MAX_CONTEXT_LENGTH", "4000")),

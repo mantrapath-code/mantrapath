@@ -33,7 +33,16 @@ export function MoodQuickEntry({ onEntryAdded }: MoodQuickEntryProps) {
         mood_score: mood[0],
         energy_level: energy[0],
         stress_level: stress[0],
-        notes: note.trim()
+        sleep_quality: 5, // Default sleep quality
+        notes: note.trim(),
+        context_tags: ['manual_entry'],
+        emotional_granularity: 3, // Default granularity
+        mood_confidence: 1.0, // High confidence for manual entry
+        environmental_context: {
+          source: 'manual',
+          timestamp: new Date().toISOString(),
+          device_type: 'web'
+        }
       }
 
       // E4: Optimistic real-time update

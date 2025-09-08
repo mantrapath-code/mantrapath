@@ -171,31 +171,36 @@ Respond with empathy, understanding, and practical wellness guidance. If user se
       setCurrentSessionId(newSession.id)
       setMessages([])
       
-      // Add comprehensive welcome message
+      // Add personalized welcome message
+      const getPersonalizedWelcome = () => {
+        const hour = new Date().getHours()
+        let timeGreeting = ''
+        
+        if (hour < 12) timeGreeting = 'Good morning'
+        else if (hour < 17) timeGreeting = 'Good afternoon'
+        else timeGreeting = 'Good evening'
+        
+        // Get user name from context if available (you can enhance this)
+        const userName = 'there' // TODO: Get from user profile
+        
+        return `${timeGreeting} ${userName}! 👋 I'm Mantra-Mitra, your wellness companion.
+
+I'm here to listen, support, and help you on your wellness journey. 
+
+💬 **How can I help you today?**
+• Share how you're feeling
+• Get breathing exercises
+• Practice mindfulness
+• Track your mood
+• Or just chat about anything
+
+You can type or speak to me in any language - I'll understand and respond appropriately. 🌸`
+      }
+      
       const welcomeMessage: ChatMessage = {
         id: 'welcome',
         sender: 'assistant',
-        content: `Hello! 💜 I'm Mantra-Mitra, your AI wellness companion. I'm here to provide emotional support, listen to your feelings, and help you on your wellness journey.
-
-🌟 **What I can help you with:**
-• **Emotional Support** - Share how you're feeling and I'll listen with empathy
-• **Mood Tracking** - I automatically analyze your emotions and update your mood
-• **Voice Conversations** - Speak to me naturally, I understand multiple languages
-• **Breathing Exercises** - Get guided breathing exercises when you need to relax
-• **Wellness Insights** - Access personalized insights about your mental health patterns
-• **Crisis Support** - Get immediate help if you're in distress
-
-🗣️ **Voice Features:**
-• Speak in any language - I'll detect and respond appropriately
-• I can speak back to you with natural voice synthesis
-• Your conversations help me understand your emotional state better
-
-💭 **Privacy & Care:**
-• Everything you share is confidential and secure
-• I analyze sentiment to better understand your needs
-• Your mood patterns help provide personalized support
-
-How are you feeling today? You can speak to me or type - whatever feels most comfortable! 🌸`,
+        content: getPersonalizedWelcome(),
         timestamp: new Date().toISOString(),
         messageType: 'greeting'
       }
@@ -211,10 +216,20 @@ How are you feeling today? You can speak to me or type - whatever feels most com
   // Load chat sessions
   const loadSessions = useCallback(async () => {
     try {
+      // Refresh token before making the request
+      apiService.refreshToken()
+      
       const sessionsData = await apiService.getChatSessions()
       setSessions(sessionsData)
-    } catch (err) {
+    } catch (err: any) {
       console.error('Failed to load sessions:', err)
+      
+      // Handle authentication errors gracefully
+      if (err.status === 401) {
+        console.log('User not authenticated, skipping session load')
+      } else if (err.status === 0) {
+        console.log('Chat service unavailable, skipping session load')
+      }
     }
   }, [])
 
@@ -222,6 +237,11 @@ How are you feeling today? You can speak to me or type - whatever feels most com
   const loadChatHistory = useCallback(async (sessionId: string) => {
     try {
       setLoading(true)
+      setError(null)
+      
+      // Refresh token before making the request
+      apiService.refreshToken()
+      
       const history = await apiService.getChatHistory(sessionId)
       
       const formattedMessages: ChatMessage[] = history.map(msg => ({
@@ -235,9 +255,23 @@ How are you feeling today? You can speak to me or type - whatever feels most com
       setMessages(formattedMessages)
       setCurrentSessionId(sessionId)
       
-    } catch (err) {
+    } catch (err: any) {
       console.error('Failed to load chat history:', err)
-      toast.error('Failed to load chat history')
+      
+      // Handle specific error cases
+      if (err.status === 401) {
+        setError('Authentication required. Please log in again.')
+        toast.error('Please log in to access chat history')
+      } else if (err.status === 404) {
+        setError('Chat session not found.')
+        toast.error('Chat session not found')
+      } else if (err.status === 0) {
+        setError('Unable to connect to chat service.')
+        toast.error('Chat service is unavailable')
+      } else {
+        setError('Failed to load chat history.')
+        toast.error('Failed to load chat history')
+      }
     } finally {
       setLoading(false)
     }
@@ -281,7 +315,22 @@ How are you feeling today? You can speak to me or type - whatever feels most com
   // Initialize chatbot - restore session and load history
   const initializeChatbot = useCallback(async () => {
     try {
-      // Load sessions first
+      // First check if user is authenticated
+      const token = localStorage.getItem('mantrapath_token')
+      if (!token) {
+        console.log('No auth token found, starting with welcome message')
+        const welcomeMessage: ChatMessage = {
+          id: 'welcome',
+          sender: 'assistant',
+          content: 'Hello! I\'m Mantra-Mitra, your AI wellness companion. Please log in to access full chat features.',
+          timestamp: new Date().toISOString(),
+          messageType: 'greeting'
+        }
+        setMessages([welcomeMessage])
+        return
+      }
+      
+      // Load sessions first (this will fail gracefully if service is down)
       await loadSessions()
       
       // Try to restore last session from localStorage
@@ -292,9 +341,9 @@ How are you feeling today? You can speak to me or type - whatever feels most com
         try {
           await loadChatHistory(lastSessionId)
           console.log('Restored chat session:', lastSessionId)
-        } catch (err) {
-          console.log('Could not restore last session, starting new one')
-          // If we can't restore, start fresh but don't show error to user
+        } catch (err: any) {
+          console.log('Could not restore last session:', err.message)
+          // If we can't restore, clear the invalid session and start new
           localStorage.removeItem('mantrapath_last_chat_session')
           await startNewSession()
         }
@@ -302,7 +351,7 @@ How are you feeling today? You can speak to me or type - whatever feels most com
         // No previous session, start a new one
         await startNewSession()
       }
-    } catch (err) {
+    } catch (err: any) {
       console.error('Failed to initialize chatbot:', err)
       // Fallback: start with welcome message without session
       const welcomeMessage: ChatMessage = {

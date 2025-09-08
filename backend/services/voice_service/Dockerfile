@@ -1,38 +1,47 @@
-# Voice Service Dockerfile
 FROM python:3.11-slim
 
 # Set working directory
-WORKDIR /app/services/voice_service
+WORKDIR /app
 
 # Install system dependencies for audio processing
 RUN apt-get update && apt-get install -y \
+    # Audio processing
     ffmpeg \
-    libsndfile1 \
+    sox \
+    libsox-fmt-all \
+    # Audio libraries
+    libsndfile1-dev \
     portaudio19-dev \
-    gcc \
-    g++ \
+    libportaudio2 \
+    libasound2-dev \
+    # General utilities
     curl \
+    wget \
     && rm -rf /var/lib/apt/lists/*
 
-# Copy requirements file first
-COPY services/voice_service/requirements.txt .
+# Copy requirements first for better Docker layer caching
+COPY requirements.txt .
 
 # Install Python dependencies
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Copy all backend code to maintain import paths
-COPY . /app/
+# Copy the application code
+COPY . .
 
-# Create non-root user for security
-RUN useradd -m -u 1000 voiceuser && chown -R voiceuser:voiceuser /app
-USER voiceuser
+# Create logs directory
+RUN mkdir -p /app/logs
 
-# Expose port
+# Set environment variables
+ENV PYTHONPATH=/app
+ENV VOICE_SERVICE_PORT=8011
+ENV LOG_LEVEL=INFO
+
+# Expose the port
 EXPOSE 8011
 
 # Health check
-HEALTHCHECK --interval=30s --timeout=30s --start-period=5s --retries=3 \
-  CMD curl -f http://localhost:8011/health || exit 1
+HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
+    CMD curl -f http://localhost:8011/health || exit 1
 
 # Run the application
-CMD ["python", "-m", "uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8011"]
+CMD ["python", "-m", "uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8011", "--reload"]

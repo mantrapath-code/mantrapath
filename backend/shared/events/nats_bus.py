@@ -72,7 +72,7 @@ class NATSEventBus(EventBus):
     
     def __init__(
         self,
-        servers: Union[str, List[str]] = "nats://localhost:4222",
+        servers: Union[str, List[str]] = "nats://nats:4222",
         enable_jetstream: bool = True,
         stream_config: Optional[Dict[str, Any]] = None
     ):
@@ -456,7 +456,7 @@ class NATSEventBus(EventBus):
 # Configuration helper
 def create_nats_event_bus_from_config() -> NATSEventBus:
     """Create NATS event bus from environment configuration"""
-    servers = os.getenv("NATS_SERVERS", "nats://localhost:4222").split(",")
+    servers = os.getenv("NATS_SERVERS", "nats://nats:4222").split(",")
     enable_jetstream = os.getenv("NATS_JETSTREAM", "true").lower() == "true"
     
     stream_config = {}

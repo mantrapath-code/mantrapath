@@ -194,6 +194,17 @@ class RequestRouter:
                 auth_required=True
             ),
             
+            # Voice-enabled Chatbot Routes (must come before general voice routes)
+            RouteRule(
+                path_pattern=r"^/voice/chatbot/.*",
+                methods=[HTTPMethod.GET, HTTPMethod.POST],
+                service_name="chatbot",
+                strip_prefix=True,  # Strip /voice prefix, forward /chatbot/* to chatbot service
+                timeout=60,  # Longer timeout for AI processing
+                retries=1,
+                auth_required=True
+            ),
+            
             # Content Service Routes
             RouteRule(
                 path_pattern=r"^/content/.*",
@@ -258,12 +269,31 @@ class RequestRouter:
                 auth_required=True
             ),
             
-            # Translation Service Routes
+            # Translation Service Routes - API v1 endpoints first
+            RouteRule(
+                path_pattern=r"^/api/v1/translation/.*",
+                methods=[HTTPMethod.GET, HTTPMethod.POST],
+                service_name="translation",
+                strip_prefix=False,  # Keep full path
+                timeout=30,
+                retries=2,
+                auth_required=True
+            ),
+            # Translation Service Routes - Public endpoints
+            RouteRule(
+                path_pattern=r"^/translate/languages/?$",
+                methods=[HTTPMethod.GET],
+                service_name="translation",
+                strip_prefix=True,  # Strip /translate prefix
+                timeout=30,
+                retries=2,
+                auth_required=False  # Public endpoint
+            ),
             RouteRule(
                 path_pattern=r"^/translate/.*",
                 methods=[HTTPMethod.GET, HTTPMethod.POST],
                 service_name="translation",
-                strip_prefix=False,
+                strip_prefix=True,  # Strip /translate prefix
                 timeout=30,
                 retries=2,
                 auth_required=True
@@ -315,6 +345,28 @@ class RequestRouter:
                 strip_prefix=False,
                 timeout=120,  # Longer timeout for NLP processing
                 retries=1,
+                auth_required=True
+            ),
+            
+            # AI Event Processor Routes
+            RouteRule(
+                path_pattern=r"^/ai-events/.*",
+                methods=[HTTPMethod.GET, HTTPMethod.POST, HTTPMethod.PUT, HTTPMethod.DELETE],
+                service_name="ai-events",
+                strip_prefix=True,  # Strip /ai-events prefix
+                timeout=60,
+                retries=2,
+                auth_required=True
+            ),
+            
+            # AI Context Store Routes
+            RouteRule(
+                path_pattern=r"^/ai-context/.*",
+                methods=[HTTPMethod.GET, HTTPMethod.POST, HTTPMethod.PUT, HTTPMethod.DELETE],
+                service_name="ai-context",
+                strip_prefix=True,  # Strip /ai-context prefix
+                timeout=60,
+                retries=2,
                 auth_required=True
             ),
         ]

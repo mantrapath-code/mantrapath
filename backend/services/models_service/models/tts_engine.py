@@ -7,6 +7,7 @@ import asyncio
 import io
 import json
 import logging
+import os
 import subprocess
 import tempfile
 from pathlib import Path
@@ -51,8 +52,13 @@ class TTSEngine:
         }
     
     async def load_default_models(self):
-        """Load default TTS models"""
-        logger.info("🔊 Loading default TTS models...")
+        """Load default TTS models gracefully"""
+        logger.info("🔊 Attempting to load default TTS models...")
+        
+        # Check if we're in minimal mode
+        if os.environ.get("MODELS_SERVICE_MODE") == "minimal":
+            logger.info("✅ TTS Engine initialized in minimal mode (models will load on-demand)")
+            return
         
         # Load primary models
         primary_models = [
@@ -61,12 +67,22 @@ class TTSEngine:
             "espeak_hi"       # Fast Hindi fallback
         ]
         
+        loaded_count = 0
         for model_name in primary_models:
             try:
-                await self.load_model(model_name)
-                logger.info(f"✅ Loaded TTS model: {model_name}")
+                success = await self.load_model(model_name)
+                if success:
+                    loaded_count += 1
+                    logger.info(f"✅ Loaded TTS model: {model_name}")
+                else:
+                    logger.warning(f"⚠️ TTS model {model_name} not available locally")
             except Exception as e:
                 logger.warning(f"⚠️ Could not load TTS model {model_name}: {e}")
+        
+        if loaded_count == 0:
+            logger.warning("⚠️ No TTS models loaded - service will attempt to load models on-demand")
+        else:
+            logger.info(f"✅ Loaded {loaded_count}/{len(primary_models)} TTS models")
     
     async def load_model(self, model_name: str) -> bool:
         """Load a specific TTS model"""

@@ -4,7 +4,7 @@
  */
 
 import React, { createContext, useContext, useReducer, useEffect, useCallback } from 'react'
-import { useEnhancedWebSocket, BACKEND_WEBSOCKET_ENDPOINTS } from '../hooks/useEnhancedWebSocket'
+import { useRobustWebSocket } from '../hooks/useRobustWebSocket'
 import { useAuth } from '../hooks/useAuth'
 import type {
   EmotionData,
@@ -278,19 +278,12 @@ export function RealtimeProvider({ children }: { children: React.ReactNode }) {
   const { user } = useAuth()
   const [state, dispatch] = useReducer(realtimeReducer, initialState)
   
-  // WebSocket URLs for Sprint 2 backend services
-  const wsUrls = user ? [
-    BACKEND_WEBSOCKET_ENDPOINTS.notifications(user.id),
-    BACKEND_WEBSOCKET_ENDPOINTS.voiceStream,
-    // Add other endpoints as they become available
-  ] : []
-  
   const {
     isConnected,
     connectionError,
     addEventHandler,
     reconnectAll
-  } = useEnhancedWebSocket(wsUrls)
+  } = useRobustWebSocket(user?.id)
   
   // Set up event handlers for each backend service
   useEffect(() => {

@@ -25,16 +25,14 @@ from typing import List, Dict, Any, Optional, Iterable
 from datetime import datetime, timedelta, timezone
 import logging
 import uuid
-import json
 import asyncio
 import numpy as np
 from sqlalchemy.orm import Session
 
 from shared.database import get_db
 from shared.auth import get_current_user
-from shared.models import MoodEntry, JournalEntry, Notification
+from shared.models import MoodEntry, JournalEntry
 # Event imports for ML insights
-from shared.events import get_event_bus, EventChannels, Event, publish_insight_delta
 # BK-004: V3 enhanced bus imports
 from shared.events import get_enhanced_event_bus, V3EventChannels
 from shared.feature_flags import get_flag_bool
@@ -1834,7 +1832,7 @@ if __name__ == "__main__":
     }
     
     logger.info("🚀 Starting MantraPath ML Service with Crisis Prediction & Monitoring")
-    logger.info(f"📊 Dashboard available at: http://localhost:{config['port']}/dashboard/")
-    logger.info(f"🚨 Crisis prediction endpoints: http://localhost:{config['port']}/crisis/")
+    logger.info(f"📊 Dashboard available at: http://ml-service:{config['port']}/dashboard/")
+    logger.info(f"🚨 Crisis prediction endpoints: http://ml-service:{config['port']}/crisis/")
     
     uvicorn.run(**config)

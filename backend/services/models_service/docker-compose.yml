@@ -14,11 +14,13 @@ services:
       - MODELS_DIR=/app/models
       - CACHE_DIR=/app/cache
       - LOGS_DIR=/app/logs
-      # Model preferences
-      - DEFAULT_STT_MODEL=whisper_medium
-      - DEFAULT_TTS_MODEL=coqui_xtts_v2
-      - WHISPER_MODEL_SIZE=medium
-      - COQUI_MODEL_NAME=tts_models/multilingual/multi-dataset/xtts_v2
+      # Model preferences for Voice Service
+      - DEFAULT_STT_MODEL=whisper_tiny  # Fast startup
+      - DEFAULT_TTS_MODEL=coqui_hi     # High quality Hindi
+      - WHISPER_MODEL_SIZE=tiny        # Start with small, upgrade later
+      - COQUI_MODEL_NAME=coqui_hi      # Hindi focus
+      - VOSK_ENABLE=true               # Enable Vosk for fast STT
+      - RASA_ENABLE=true               # Enable dialogue management
       # Hardware settings
       - MAX_GPU_MEMORY=0.8
       - MAX_CONCURRENT_REQUESTS=10
@@ -45,8 +47,8 @@ services:
       test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
       interval: 30s
       timeout: 10s
-      retries: 3
-      start_period: 30s
+      retries: 5
+      start_period: 300s  # 5 minutes for model downloads
 
   # Optional: Redis for caching and job queues
   redis:

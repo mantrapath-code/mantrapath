@@ -17,7 +17,7 @@ logger = logging.getLogger(__name__)
 class MemoryEventHandler:
     """Handles incoming and outgoing events for Memory Service"""
     
-    def __init__(self, nats_url: str = "nats://localhost:4222"):
+    def __init__(self, nats_url: str = "nats://nats:4222"):
         self.nats_url = nats_url
         self.nc = None
         self.js = None
@@ -300,7 +300,7 @@ class MemoryEventHandler:
 # Global event handler instance
 event_handler: Optional[MemoryEventHandler] = None
 
-async def initialize_event_handler(nats_url: str = "nats://localhost:4222"):
+async def initialize_event_handler(nats_url: str = "nats://nats:4222"):
     """Initialize the global event handler"""
     global event_handler
     

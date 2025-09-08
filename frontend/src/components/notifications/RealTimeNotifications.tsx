@@ -16,7 +16,7 @@ import {
   Warning
 } from '@phosphor-icons/react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { useWebSocket } from '@/hooks/useWebSocket'
+import { useRobustWebSocket } from '@/hooks/useRobustWebSocket'
 import { notificationApi } from '@/services/api'
 import { SmartNotificationScheduler } from './SmartNotificationScheduler'
 import { formatRelativeTime } from '@/utils/timeUtils'
@@ -56,7 +56,7 @@ export function RealTimeNotifications({ onMoodPatternNotifications }: RealTimeNo
   const [moodPatternNotifications, setMoodPatternNotifications] = useState<MoodPatternNotification[]>([])
   const [simulatedConnection, setSimulatedConnection] = useState(false)
   
-  const { isConnected: wsConnected, lastMessage } = useWebSocket()
+  const { isConnected: wsConnected, lastMessage } = useRobustWebSocket()
   const { isAuthenticated } = useAuth()
   
   // Use simulated connection when WebSocket is unavailable (same as real-time insights)

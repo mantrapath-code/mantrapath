@@ -19,6 +19,8 @@ class TranscriptionRequest(BaseModel):
     model_preference: Optional[str] = None
 
 class TranscriptionResponse(BaseModel):
+    model_config = {"protected_namespaces": ()}
+    
     success: bool
     text: Optional[str] = None
     language_detected: Optional[str] = None
@@ -33,6 +35,8 @@ class SynthesisRequest(BaseModel):
     model_preference: Optional[str] = None
 
 class SynthesisResponse(BaseModel):
+    model_config = {"protected_namespaces": ()}
+    
     success: bool
     audio_url: Optional[str] = None
     duration: Optional[float] = None

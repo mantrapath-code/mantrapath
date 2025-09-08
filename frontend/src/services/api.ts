@@ -7,18 +7,22 @@
 import { processApiError } from '../utils/errorHandling'
 import { notificationService } from './notifications'
 import { getAuthToken } from '../utils/auth'
+import { getServiceUrls } from '../config/api-config'
 
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000'
-const ML_SERVICE_URL = import.meta.env.VITE_ML_SERVICE_URL || 'http://localhost:8008'
+// Get environment-aware service URLs
+const serviceUrls = getServiceUrls();
+
+const API_BASE_URL = serviceUrls.API_BASE_URL;
+const ML_SERVICE_URL = serviceUrls.ML_SERVICE_URL;
 
 // Direct service URLs for specific endpoints
-const COMMUNITY_SERVICE_URL = 'http://localhost:8006'
-const PROFILE_SERVICE_URL = 'http://localhost:8002'
-const AI_CONTEXT_SERVICE_URL = 'http://localhost:8001' 
-const AI_EVENT_PROCESSOR_URL = 'http://localhost:8014'
-const ASSISTANCE_ENGINE_URL = 'http://localhost:8018'
-const MOOD_SERVICE_URL = 'http://localhost:8003'
-const CHATBOT_SERVICE_URL = 'http://localhost:8004'
+const COMMUNITY_SERVICE_URL = serviceUrls.COMMUNITY_SERVICE_URL;
+const PROFILE_SERVICE_URL = serviceUrls.PROFILE_SERVICE_URL;
+const AI_CONTEXT_SERVICE_URL = serviceUrls.AI_CONTEXT_SERVICE_URL;
+const AI_EVENT_PROCESSOR_URL = serviceUrls.AI_EVENT_PROCESSOR_URL;
+const ASSISTANCE_ENGINE_URL = serviceUrls.ASSISTANCE_ENGINE_URL;
+const MOOD_SERVICE_URL = serviceUrls.MOOD_SERVICE_URL;
+const CHATBOT_SERVICE_URL = serviceUrls.CHATBOT_SERVICE_URL;
 
 interface ApiError {
   message: string
@@ -1332,7 +1336,7 @@ class ApiService {
         }>
         cycles: number
       }
-    }>('/api/chatbot/enhanced/chat', {
+    }>('/chat/intelligent', {
       method: 'POST',
       body: JSON.stringify({
         message,
@@ -1505,6 +1509,26 @@ class ApiService {
     })
   }
 
+  async chatbotVoiceInput(audioBlob: Blob, language: string = 'auto', updateMood: boolean = true) {
+    const formData = new FormData()
+    const filename = audioBlob.type.includes('webm') ? 'audio.webm' : 'audio.wav'
+    formData.append('file', audioBlob, filename)
+    formData.append('language', language)
+    formData.append('update_mood', updateMood.toString())
+    
+    // For FormData uploads, we need to exclude Content-Type to let browser set multipart boundary
+    const headers: HeadersInit = {}
+    if (this.token) {
+      headers.Authorization = `Bearer ${this.token}`
+    }
+    
+    return this.request('/voice/chatbot/voice', {
+      method: 'POST',
+      body: formData,
+      headers
+    })
+  }
+
   // Translation Service API Methods
   async detectLanguage(text: string) {
     return this.request('/translate/detect-language', {
@@ -1558,13 +1582,13 @@ class ApiService {
   // Real-time AI Insights from backend services
   async getAIEmotionAnalysis(text: string) {
     try {
-      const response = await fetch(`http://localhost:8014/api/v1/analyze/emotion`, {
+      const response = await fetch(`http://localhost:8000/ai-events/api/v1/analyze/emotion`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${this.token}`
         },
-        body: JSON.stringify({ text, user_id: 'current' })
+        body: JSON.stringify({ text, user_id: this.getUserId() })
       });
 
       if (!response.ok) {
@@ -1593,7 +1617,8 @@ class ApiService {
   async getAIInsights() {
     try {
       // Get predictive intervention analysis
-      const response = await fetch(`http://localhost:8014/api/v1/predict/intervention/current`, {
+      const userId = this.getUserId()
+      const response = await fetch(`http://localhost:8000/ai-events/api/v1/predict/intervention/${userId}`, {
         method: 'GET',
         headers: {
           'Content-Type': 'application/json',

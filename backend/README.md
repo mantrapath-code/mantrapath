@@ -34,9 +34,13 @@
 | **🎯 Action Orchestrator** | 8012 | PostgreSQL | Redis | Workflow Management, Intent Classification, Cultural Processing | ✅ Production | V1.5 |
 | **🏆 Achievement Engine** | 8013 | PostgreSQL | Redis | Gamification, Progress Tracking, Milestone Recognition | ✅ Production | V1.0 |
 | **📊 Analytics Service** | 8014 | PostgreSQL | Redis | Advanced Analytics, User Insights, Performance Metrics | ✅ Production | V1.0 |
-| **🤖 AI Context Store** | 8015 | PostgreSQL | Redis | Cross-Service Intelligence, User Context Aggregation, AI Insights | ✅ Production | V1.0 |
-| **🎵 Voice Event Processor** | 8016 | PostgreSQL | Redis | Voice Event Processing, Audio Analysis, Speech Pattern Detection | ✅ Production | V1.0 |
-| **🤖 Models Service** | 8085 | - | Redis | Self-hosted STT/TTS, Voice Models, Indian Language Support | ✅ Production | V1.0 |
+| **🤖 AI Context Store** | 8013 | PostgreSQL | Redis | Cross-Service Intelligence, User Context Aggregation, AI Insights | ✅ Production | V1.0 |
+| **🧠 AI Event Processor** | 8014 | PostgreSQL | Redis | Real-time Emotion Analysis, Cultural Processing, Predictive Intelligence | ✅ Production | V3.0 |
+| **� Proactive Assistance Engine** | 8018 | PostgreSQL | Redis | Assistance Orchestration, Timing Prediction, Cultural Sensitivity | ⚠️ Limited API | V1.0 |
+| **🧠 Memory Service** | 8017 | PostgreSQL | Redis | Pattern Analysis, Behavioral Insights, Cultural Context Integration | ⚠️ Limited API | V1.0 |
+| **🎭 Phi-3 Agent** | 8016 | - | - | AI Text Generation via Ollama, Local LLM Processing | ❌ Network Issue | V1.0 |
+| **�🎵 Voice Event Processor** | 8015 | PostgreSQL | Redis | Voice Event Processing, Audio Analysis, Speech Pattern Detection | ✅ Production | V1.0 |
+| **🤖 Models Service** | 8080 | - | Redis | Self-hosted STT/TTS, Voice Models, Indian Language Support | ✅ Production | V1.0 |
 
 ---
 
@@ -594,6 +598,277 @@ cd backend/services/models_service
 **🔗 Integration with Other Services:**
 - **Voice Service**: Direct integration for STT/TTS processing
 - **Translation Service**: Language detection and voice output
+
+---
+
+## 🧠 **AI Services Architecture - Deep Analysis**
+
+**MantraPath V3** features a comprehensive AI services ecosystem designed for intelligent, context-aware assistance. These services work together to provide real-time emotion analysis, proactive assistance, behavioral pattern recognition, and cultural intelligence.
+
+### **🤖 AI Context Store Service (Port 8013) - Intelligence Hub**
+```
+📁 ai_context_store/
+├── main.py                      # FastAPI application with lifespan management
+├── services/
+│   ├── context_aggregator.py   # Multi-service data aggregation
+│   ├── intelligence_engine.py   # AI insights generation
+│   └── event_processor.py      # Real-time event handling
+├── models/
+│   └── context_models.py       # User context data models
+├── data_collectors/
+│   ├── mood_data_collector.py  # Mood service integration
+│   ├── journal_data_collector.py # Content service integration
+│   └── community_data_collector.py # Community engagement data
+└── api/                        # REST API endpoints
+```
+
+**🎯 Core Functions:**
+- **Cross-Service Intelligence**: Aggregates data from mood, journal, and community services
+- **User Context Profiling**: Builds comprehensive user behavioral profiles
+- **Real-time Context Updates**: Event-driven context updates via NATS
+- **Behavioral Pattern Analysis**: Identifies user patterns and preferences
+- **Redis Performance Caching**: Sub-300ms response times for context retrieval
+
+**📊 Status: ✅ Production Ready**
+- All core components operational
+- Context aggregation working across services
+- Real-time event processing via NATS
+- Comprehensive error handling and fallbacks
+
+**🔗 Key Endpoints:**
+- `GET /health` - Service health with component status
+- `GET /api/v1/context/user/{user_id}` - Comprehensive user context
+- `POST /api/v1/context/user/{user_id}/refresh` - Trigger data collection
+
+---
+
+### **🧠 AI Event Processor Service (Port 8014) - Real-time Intelligence**
+```
+📁 ai_event_processor/
+├── main.py                      # Service orchestration
+├── app.py                      # FastAPI application
+├── core/
+│   ├── ai_processor.py         # Main AI processing engine
+│   ├── emotion_analyzer.py     # Transformer-based emotion analysis
+│   ├── cultural_intelligence.py # Cultural context processing
+│   └── predictive_engine.py    # Predictive intervention engine
+└── models/
+    └── ai_models.py            # AI processing data models
+```
+
+**🎯 Core Functions:**
+- **Real-time Emotion Analysis**: Uses `j-hartmann/emotion-english-distilroberta-base`
+- **Cultural Intelligence Processing**: Adapts responses to cultural context
+- **Predictive Intervention Engine**: Identifies intervention opportunities
+- **Multi-language Support**: Emotion analysis across supported languages
+- **Performance Optimized**: ~1.7s response time for emotion analysis
+
+**📊 Status: ✅ Production Ready**
+- Advanced transformer models operational
+- Cultural intelligence integration working
+- Event-driven architecture with NATS
+- Comprehensive health monitoring
+
+**🔗 Key Endpoints:**
+- `GET /health` - Service health with component status
+- `POST /api/v1/analyze/emotion` - Real-time emotion analysis
+- `GET /health/live` - Kubernetes liveness probe
+- `GET /health/ready` - Kubernetes readiness probe
+
+**💡 Example Response:**
+```json
+{
+  "emotion": "anger",
+  "confidence": 0.76,
+  "processing_time_ms": 1759,
+  "language": "en",
+  "cultural_adaptation": null
+}
+```
+
+---
+
+### **🎯 Proactive Assistance Engine (Port 8018) - Intelligent Orchestration**
+```
+📁 proactive_assistance_engine/
+├── main.py                      # Service entry point
+├── src/core/
+│   ├── assistance_orchestrator.py # Main orchestration engine
+│   ├── timing_predictor.py     # Optimal intervention timing
+│   ├── contextual_help_engine.py # Context-aware assistance
+│   └── cultural_sensitivity_engine.py # Cultural adaptation
+├── config/
+│   └── assistance.yaml         # Assistance configuration
+└── tests/                      # Comprehensive test suite
+```
+
+**🎯 Core Functions:**
+- **Assistance Orchestration**: Coordinates assistance across services
+- **Timing Prediction**: Determines optimal intervention moments
+- **Cultural Sensitivity**: Adapts assistance to cultural context
+- **Models Service Integration**: Voice and multilingual support
+- **Demo Mode**: Sample assistance content for testing
+
+**📊 Status: ⚠️ Limited API Exposure**
+- Core orchestration engine healthy
+- Service integrations working (AI Event Processor, AI Context Store, Memory Service)
+- Missing user-facing assistance endpoints
+- Limited API documentation
+
+**🔧 Recommendations:**
+- Expose assistance evaluation endpoints
+- Add assistance delivery mechanisms
+- Document available assistance types
+- Implement user-facing assistance APIs
+
+---
+
+### **🧠 Memory Service (Port 8017) - Behavioral Intelligence**
+```
+📁 memory_service/
+├── main.py                      # Service implementation
+├── services/
+│   ├── memory_engine.py        # Pattern analysis engine
+│   └── event_handler.py        # Event processing
+├── models/
+│   └── memory_models.py        # Memory data models
+└── api/                        # API endpoints
+```
+
+**🎯 Core Functions:**
+- **Behavioral Pattern Analysis**: Identifies user behavior patterns
+- **Cultural Context Integration**: Culturally-aware pattern recognition
+- **Event-driven Memory Updates**: Real-time pattern updates
+- **Statistics Tracking**: User interaction and pattern metrics
+- **Insight Generation**: Behavioral insights and recommendations
+
+**📊 Status: ⚠️ Basic Implementation**
+- Memory engine initialized and tracking stats
+- Basic pattern analysis operational
+- Limited API endpoints exposed
+- Missing advanced pattern recognition
+
+**🔧 Recommendations:**
+- Implement full pattern analysis endpoints
+- Add user memory retrieval APIs
+- Connect to AI Context Store for richer data
+- Enhance behavioral pattern detection algorithms
+
+---
+
+### **🎭 Phi-3 Agent Service (Port 8016) - Local AI Generation**
+```
+📁 phi3_agent/
+├── main.py                      # FastAPI application
+├── Dockerfile                   # Container configuration
+└── requirements.txt            # Dependencies
+```
+
+**🎯 Core Functions:**
+- **Local AI Text Generation**: Phi-4 model via Ollama
+- **Translation Support**: Multi-language text processing
+- **Cultural Adaptation**: Context-aware text generation
+- **Fallback Integration**: Backup processing when available
+
+**📊 Status: ❌ Network Configuration Issue**
+- Cannot connect to Ollama via `host.docker.internal`
+- Docker networking configuration problem
+- Service fails during startup due to model initialization
+- Ollama available on host but inaccessible from container
+
+**🚨 Critical Fix Needed:**
+```bash
+# Immediate actions required:
+1. Fix Docker networking for Ollama connection
+2. Consider running Ollama in Docker container  
+3. Implement fallback when Ollama unavailable
+4. Add proper error handling for startup failures
+```
+
+**🔧 Error Details:**
+```
+ERROR: Failed to initialize Phi-4 agent: All connection attempts failed
+ERROR: Application startup failed. Exiting.
+```
+
+---
+
+### **🎵 Voice Event Processor Service (Port 8015) - Audio Intelligence**
+```
+📁 voice_event_processor/
+├── main.py                      # Service implementation
+└── Dockerfile                  # Container configuration
+```
+
+**🎯 Core Functions:**
+- **Voice Event Processing**: Real-time voice stream analysis
+- **Audio Analysis**: Voice pattern and emotion detection
+- **Speech Pattern Detection**: User speech behavior analysis
+- **Event Integration**: Voice events to NATS messaging
+
+**📊 Status: ✅ Production Ready**
+- Voice streaming capabilities operational
+- Audio analysis working
+- Event-driven architecture integrated
+
+---
+
+## 🔄 **AI Services Integration Flow**
+
+```mermaid
+graph TD
+    A[User Interaction] --> B[AI Event Processor]
+    B --> C[Emotion Analysis]
+    C --> D[AI Context Store]
+    D --> E[Context Aggregation]
+    E --> F[Memory Service]
+    F --> G[Pattern Analysis]
+    G --> H[Proactive Assistance Engine]
+    H --> I[Assistance Orchestration]
+    I --> J[Action Delivery]
+    
+    K[Voice Input] --> L[Voice Event Processor]
+    L --> M[Speech Analysis]
+    M --> N[Phi-3 Agent]
+    N --> O[AI Generation]
+    O --> P[Cultural Adaptation]
+```
+
+### **🎯 AI Services Performance Metrics**
+
+| Service | Response Time | Status | Integration Score |
+|---------|---------------|--------|-------------------|
+| AI Context Store | ~100ms | ✅ Healthy | 100% |
+| AI Event Processor | ~1.7s | ✅ Healthy | 100% |
+| Proactive Assistance Engine | ~50ms | ⚠️ Limited API | 75% |
+| Memory Service | ~20ms | ⚠️ Basic | 60% |
+| Phi-3 Agent | N/A | ❌ Broken | 0% |
+| Voice Event Processor | ~30ms | ✅ Healthy | 95% |
+
+### **🚀 Quick AI Services Test**
+
+```bash
+# Generate authentication token
+TOKEN=$(curl -s http://localhost:8000/auth/login \
+  -H "Content-Type: application/json" \
+  -d '{"email_or_username": "sa@gmail.com", "password": "Dev@#123"}' | \
+  jq -r '.body.access_token')
+
+# Test AI Context Store
+curl -H "Authorization: Bearer $TOKEN" \
+  http://localhost:8013/api/v1/context/user/USER_ID
+
+# Test AI Event Processor  
+curl -X POST http://localhost:8014/api/v1/analyze/emotion \
+  -H "Content-Type: application/json" \
+  -d '{"text": "I am feeling stressed", "language": "en", "user_id": "USER_ID"}'
+
+# Test service health
+curl http://localhost:8018/health  # Proactive Assistance Engine
+curl http://localhost:8017/health  # Memory Service
+```
+
+---
 - **Chatbot Service**: Voice interaction and response synthesis
 - **API Gateway**: Smart routing for voice requests
 

@@ -368,6 +368,67 @@ async def voice_streaming_websocket(websocket: WebSocket):
         await websocket_manager.unregister_connection(connection_id)
 
 
+# WebSocket Proxy Endpoints for Backend Services
+@app.websocket("/api/notifications/ws/{user_id}")
+async def notifications_websocket_proxy(websocket: WebSocket, user_id: str):
+    """Proxy WebSocket connections to notification service"""
+    import websockets
+    
+    try:
+        await websocket.accept()
+        logger.info("Notifications WebSocket proxy connection established", user_id=user_id)
+        
+        # Connect to notification service
+        backend_url = f"ws://notification-service:8007/ws/{user_id}"
+        async with websockets.connect(backend_url) as backend_ws:
+            # Proxy messages between frontend and backend
+            async def forward_to_backend():
+                async for message in websocket.iter_text():
+                    await backend_ws.send(message)
+            
+            async def forward_to_frontend():
+                async for message in backend_ws:
+                    await websocket.send_text(message)
+            
+            # Run both forwarding tasks concurrently
+            await asyncio.gather(forward_to_backend(), forward_to_frontend())
+            
+    except WebSocketDisconnect:
+        logger.info("Notifications WebSocket proxy connection closed", user_id=user_id)
+    except Exception as e:
+        logger.exception("Notifications WebSocket proxy error", user_id=user_id, error=str(e))
+
+
+@app.websocket("/api/assistance/ws/{user_id}")
+async def assistance_websocket_proxy(websocket: WebSocket, user_id: str):
+    """Proxy WebSocket connections to assistance service"""
+    import websockets
+    
+    try:
+        await websocket.accept()
+        logger.info("Assistance WebSocket proxy connection established", user_id=user_id)
+        
+        # Connect to assistance service
+        backend_url = f"ws://proactive-assistance-engine:8018/ws/{user_id}"
+        async with websockets.connect(backend_url) as backend_ws:
+            # Proxy messages between frontend and backend
+            async def forward_to_backend():
+                async for message in websocket.iter_text():
+                    await backend_ws.send(message)
+            
+            async def forward_to_frontend():
+                async for message in backend_ws:
+                    await websocket.send_text(message)
+            
+            # Run both forwarding tasks concurrently
+            await asyncio.gather(forward_to_backend(), forward_to_frontend())
+            
+    except WebSocketDisconnect:
+        logger.info("Assistance WebSocket proxy connection closed", user_id=user_id)
+    except Exception as e:
+        logger.exception("Assistance WebSocket proxy error", user_id=user_id, error=str(e))
+
+
 # V3 Enhanced Metrics Endpoints
 @app.get("/api/v3/metrics/performance")
 async def performance_metrics():
@@ -698,9 +759,10 @@ async def route_request(
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run(
-        "main_v3_enhanced:app",
-        host="0.0.0.0",
-        port=8000,
-        reload=True,
-        access_log=True
+        "src.main:app",
+        host="0.0.0.0", 
+        port=gateway_config.port,
+        reload=gateway_config.debug,
+        access_log=True,
+        log_level=gateway_config.log_level.lower()
     )

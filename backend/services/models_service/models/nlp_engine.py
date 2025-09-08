@@ -1,36 +1,70 @@
 """
 NLP Engine
-Handles language processing tasks like translation, sentiment analysis, etc.
+Handles language processing tasks using Microsoft Phi-3 model
 """
 
 import asyncio
 import json
 import logging
+import os
 from pathlib import Path
 from typing import Dict, List, Optional, Union, Any
+
+from .phi3_engine import Phi3Engine
 
 logger = logging.getLogger(__name__)
 
 class NLPEngine:
-    """Natural Language Processing engine"""
+    """Natural Language Processing engine powered by Microsoft Phi-3"""
     
     def __init__(self, model_manager):
         self.model_manager = model_manager
-        self.loaded_models: Dict[str, Any] = {}
+        self.phi3_engine = Phi3Engine()
+        self.is_initialized = False
+        self.loaded_models = {}  # Track loaded models
         
-        # Language support
+        # Supported tasks
         self.supported_tasks = {
-            "translation": ["marian", "opus", "nllb"],
-            "sentiment": ["roberta", "distilbert"],
-            "embeddings": ["sentence_transformers", "all_mpnet"]
+            "translation": ["phi3"],
+            "sentiment": ["phi3"],
+            "language_detection": ["phi3"],
+            "text_generation": ["phi3"]
         }
     
-    async def load_default_models(self):
-        """Load default NLP models"""
-        logger.info("🧠 Loading default NLP models...")
+    async def initialize(self):
+        """Initialize the NLP engine with Phi-3"""
+        logger.info("🧠 Initializing NLP Engine with Phi-3...")
         
-        # For now, just log that NLP models would be loaded
-        logger.info("✅ NLP Engine ready (models loaded on demand)")
+        # Initialize Phi-3 engine
+        success = await self.phi3_engine.initialize()
+        if success:
+            self.is_initialized = True
+            self.loaded_models["phi3"] = self.phi3_engine  # Track the loaded model
+            logger.info("✅ NLP Engine with Phi-3 ready")
+            return True
+        else:
+            logger.error("❌ Failed to initialize Phi-3 engine")
+            return False
+    
+    async def load_default_models(self):
+        """Load default NLP models (Phi-3) gracefully"""
+        logger.info("🧠 Attempting to load default NLP models...")
+        
+        # Check if we're in minimal mode
+        if os.environ.get("MODELS_SERVICE_MODE") == "minimal":
+            logger.info("✅ NLP Engine initialized in minimal mode (models will load on-demand)")
+            return True
+        
+        try:
+            success = await self.initialize()
+            if success:
+                logger.info("✅ NLP Engine initialized successfully")
+            else:
+                logger.warning("⚠️ NLP Engine initialization failed - service will continue without NLP")
+            return success
+        except Exception as e:
+            logger.warning(f"⚠️ Could not initialize NLP engine: {e}")
+            return False
     
     async def translate(
         self,
@@ -39,72 +73,98 @@ class NLPEngine:
         target_lang: str,
         model_preference: Optional[str] = None
     ) -> Dict[str, Any]:
-        """Translate text between languages"""
-        try:
-            # This would integrate with translation models
-            # For now, return a placeholder
+        """Translate text between languages using Phi-3"""
+        if not self.is_initialized:
             return {
-                "success": True,
-                "translated_text": f"[Translated from {source_lang} to {target_lang}]: {text}",
+                "success": False,
+                "error": "NLP Engine not initialized",
+                "translated_text": text,
                 "source_language": source_lang,
                 "target_language": target_lang,
-                "confidence": 0.95
+                "confidence_score": 0.0
             }
+        
+        try:
+            result = await self.phi3_engine.translate(
+                text=text,
+                source_language=source_lang,
+                target_language=target_lang
+            )
+            return result
+            
         except Exception as e:
             logger.error(f"Translation error: {e}")
             return {
                 "success": False,
-                "error": str(e)
+                "error": str(e),
+                "translated_text": text,
+                "source_language": source_lang,
+                "target_language": target_lang,
+                "confidence_score": 0.0
             }
     
-    async def analyze_sentiment(
-        self,
-        text: str,
-        language: str = "en"
-    ) -> Dict[str, Any]:
-        """Analyze sentiment of text"""
+    async def detect_language(self, text: str) -> Dict[str, Any]:
+        """Detect language of text using Phi-3"""
+        if not self.is_initialized:
+            return {"language": "en", "confidence": 0.0}
+        
         try:
-            # Placeholder sentiment analysis
+            detected_lang = await self.phi3_engine.detect_language(text)
             return {
-                "success": True,
-                "sentiment": "positive",
-                "confidence": 0.85,
-                "scores": {
-                    "positive": 0.85,
-                    "negative": 0.10,
-                    "neutral": 0.05
-                }
+                "language": detected_lang,
+                "confidence": 0.9
             }
+        except Exception as e:
+            logger.error(f"Language detection error: {e}")
+            return {"language": "en", "confidence": 0.0}
+    
+    async def analyze_sentiment(self, text: str, language: str = "en") -> Dict[str, Any]:
+        """Analyze sentiment using Phi-3"""
+        if not self.is_initialized:
+            return {"sentiment": "neutral", "confidence": 0.0}
+        
+        try:
+            result = await self.phi3_engine.analyze_sentiment(text, language)
+            return result
         except Exception as e:
             logger.error(f"Sentiment analysis error: {e}")
-            return {
-                "success": False,
-                "error": str(e)
-            }
+            return {"sentiment": "neutral", "confidence": 0.0}
     
-    async def get_embeddings(
-        self,
-        text: str,
-        model_name: str = "sentence_transformers"
+    async def generate_text(
+        self, 
+        prompt: str, 
+        max_tokens: int = 512,
+        temperature: float = 0.7
     ) -> Dict[str, Any]:
-        """Get text embeddings"""
+        """Generate text using Phi-3"""
+        if not self.is_initialized:
+            return {"success": False, "error": "NLP Engine not initialized"}
+        
         try:
-            # Placeholder embeddings
+            generated_text = await self.phi3_engine.generate_response(
+                prompt, max_tokens, temperature
+            )
             return {
                 "success": True,
-                "embeddings": [0.1] * 768,  # Placeholder vector
-                "model_used": model_name,
-                "dimension": 768
+                "generated_text": generated_text
             }
         except Exception as e:
-            logger.error(f"Embeddings error: {e}")
-            return {
-                "success": False,
-                "error": str(e)
-            }
+            logger.error(f"Text generation error: {e}")
+            return {"success": False, "error": str(e)}
+    
+    def get_supported_languages(self) -> List[str]:
+        """Get list of supported languages"""
+        if self.is_initialized:
+            return list(self.phi3_engine.supported_languages.keys())
+        return []
+    
+    def get_model_info(self) -> Dict[str, Any]:
+        """Get information about loaded models"""
+        if self.is_initialized:
+            return self.phi3_engine.get_model_info()
+        return {"error": "NLP Engine not initialized"}
     
     async def cleanup(self):
         """Cleanup resources"""
         logger.info("🧹 Cleaning up NLP Engine...")
-        self.loaded_models.clear()
-        logger.info("✅ NLP Engine cleanup complete")
+        self.is_initialized = False

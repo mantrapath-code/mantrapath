@@ -122,7 +122,7 @@ class EnhancedEventBus(InMemoryEventBus):
     def __init__(
         self,
         use_nats: bool = True,
-        nats_servers: Union[str, List[str]] = "nats://localhost:4222",
+        nats_servers: Union[str, List[str]] = "nats://nats:4222",
         enable_performance_tracking: bool = True
     ):
         super().__init__()
@@ -679,14 +679,14 @@ def get_enhanced_event_bus() -> EnhancedEventBus:
         # Environment-aware configuration
         env = os.getenv("ENV", "development").lower()
         use_nats = os.getenv("USE_NATS_EVENT_BUS", "true").lower() == "true"
-        nats_servers = os.getenv("NATS_SERVERS") or os.getenv("NATS_URL", "nats://localhost:4222")
+        nats_servers = os.getenv("NATS_SERVERS") or os.getenv("NATS_URL", "nats://nats:4222")
         
         # If we're in a test environment, check if NATS is actually available
         if env in ["test", "testing"] and use_nats:
             # Quick connectivity check for tests
             try:
                 import socket
-                host, port = "localhost", 4222
+                host, port = "nats", 4222
                 if "://" in nats_servers:
                     # Parse NATS URL
                     parts = nats_servers.split("://")[1].split(":")

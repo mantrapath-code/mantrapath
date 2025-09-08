@@ -1,5 +1,9 @@
 # Translation Service Dependencies
 
+# HTTP clients for API calls
+aiohttp==3.9.1
+httpx==0.25.2
+
 # Core Framework
 fastapi==0.104.1
 uvicorn[standard]==0.24.0
@@ -11,6 +15,9 @@ sqlalchemy==2.0.23
 redis==5.0.1
 alembic==1.13.1
 
+# System Monitoring
+psutil==5.9.8
+
 # Authentication & Security
 python-jose[cryptography]==3.3.0
 python-multipart==0.0.6
@@ -18,40 +25,25 @@ passlib[bcrypt]==1.7.4
 
 # Translation Services
 requests==2.31.0
-googletrans==4.0.0rc1
-argostranslate==1.9.6
-googletrans==4.0.0rc1
-argostranslate==1.9.6
+# googletrans==4.0.0rc1  # Commented out due to httpx version conflict
 
-# AI Translation Models
-transformers==4.35.0
-torch==2.1.0
-sentencepiece==0.1.99
-openai==1.3.8
+# AI Translation Models - IndicTrans2 Distilled
 transformers==4.36.2
 torch==2.1.1
 sentencepiece==0.1.99
+sacremoses==0.0.53
 
-# Language Detection
+# Language Processing & Detection
 langdetect==1.0.9
-polyglot==16.7.4
-fasttext==0.9.2
-
-# Audio Processing for Voice Translation
-librosa==0.10.1
-soundfile==0.12.1
-speechrecognition==3.10.0
-pydub==0.25.1
+# polyglot==16.7.4  # Commented out - has dependency issues
 
 # Text Processing
 spacy==3.7.2
 nltk==3.8.1
-jieba==0.42.1  # Chinese text processing
-indicnlp==0.62  # Indian languages
+# indicnlp==0.62  # Commented out - not available, using alternative approaches
 
 # Quality & Performance
 textstat==0.7.3
-bleu==0.1.2
 sacrebleu==2.3.1
 
 # Background Tasks & Async
@@ -65,11 +57,14 @@ structlog==23.2.0
 # Development & Testing
 pytest==7.4.3
 pytest-asyncio==0.21.1
-pytest-mock==3.12.0
 pytest-cov==4.1.0
+pytest-mock==3.12.0
+
+# HTTP & I/O
 httpx==0.25.2
+aiohttp==3.9.1
 
 # Utilities
 aiofiles==23.2.1
 python-dotenv==1.0.0
-pycountry==22.3.13
+pycountry==24.6.1

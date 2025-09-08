@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react'
-import { useWebSocket } from './useWebSocket'
+import { useRobustWebSocket } from './useRobustWebSocket'
 
 interface InsightDelta {
   type: 'mood_update' | 'journal_update' | 'challenge_update'
@@ -44,7 +44,7 @@ interface UseRealtimeInsightsReturn {
  * Subscribes to insight delta events and optimistically updates UI
  */
 export function useRealtimeInsights(): UseRealtimeInsightsReturn {
-  const { isConnected: wsConnected, connectionError, lastMessage } = useWebSocket()
+  const { isConnected: wsConnected, connectionError, lastMessage } = useRobustWebSocket()
   
   // Provide fallback connection status when WebSocket is unavailable
   // This allows the app to function in "demo mode" even without real WebSocket
@@ -68,7 +68,7 @@ export function useRealtimeInsights(): UseRealtimeInsightsReturn {
   useEffect(() => {
     if (!wsConnected && !simulatedConnection) {
       const timer = setTimeout(() => {
-        console.log('🔗 WebSocket unavailable, enabling stable demo connection mode')
+        console.log('🔗 WebSocket unavailable, enabling demo mode (user not authenticated)')
         setSimulatedConnection(true)
       }, 3000)
       
@@ -147,7 +147,7 @@ export function useRealtimeInsights(): UseRealtimeInsightsReturn {
   const retryConnection = useCallback(() => {
     console.log('🔄 Retrying WebSocket connection...')
     setSimulatedConnection(false)
-    // The useWebSocket hook will automatically attempt to reconnect
+    // The useRobustWebSocket hook will automatically attempt to reconnect
     // After 3 seconds, if still not connected, we'll re-enable demo mode
     setTimeout(() => {
       if (!wsConnected) {

@@ -14,11 +14,21 @@ RUN apt-get update && apt-get install -y \
     espeak \
     espeak-data \
     libespeak-ng-dev \
+    # Coqui TTS dependencies
+    libsndfile1-dev \
+    portaudio19-dev \
+    libportaudio2 \
     # Build tools
     gcc \
     g++ \
     cmake \
     pkg-config \
+    make \
+    # Python development headers
+    python3-dev \
+    # Rust compiler for some dependencies
+    rustc \
+    cargo \
     # Other utilities
     curl \
     wget \
@@ -31,6 +41,11 @@ RUN pip install --no-cache-dir -r requirements.txt
 
 # Copy application code
 COPY . .
+
+# Copy startup scripts
+COPY start_simple.sh ./start_simple.sh
+COPY start_full.sh ./start_full.sh
+RUN chmod +x ./start_simple.sh ./start_full.sh
 
 # Create models directory
 RUN mkdir -p models cache logs
@@ -45,8 +60,8 @@ ENV LOGS_DIR=/app/logs
 EXPOSE 8080
 
 # Health check
-HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
+HEALTHCHECK --interval=30s --timeout=10s --start-period=60s --retries=3 \
     CMD curl -f http://localhost:8080/health || exit 1
 
-# Run the application
-CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8080", "--workers", "1"]
+# Run with full startup (loads Phi-3 model)
+CMD ["./start_full.sh"]

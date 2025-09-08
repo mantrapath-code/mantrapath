@@ -17,7 +17,7 @@ import {
 import { motion, AnimatePresence } from 'framer-motion'
 import { toast } from 'sonner'
 import { useRealtimeInsights } from '@/hooks/useRealtimeInsights'
-import { useWebSocket } from '@/hooks/useWebSocket'
+import { useRobustWebSocket } from '@/hooks/useRobustWebSocket'
 import { MoodQuickEntry } from '@/components/mood/MoodQuickEntry'
 
 interface CrossPlatformMoodState {
@@ -48,7 +48,7 @@ export function E4RealtimeMoodDemo() {
   
   // E4: Real-time insights and WebSocket integration
   const { insights, isConnected, connectionError } = useRealtimeInsights()
-  const { lastMessage } = useWebSocket()
+  const { lastMessage } = useRobustWebSocket()
 
   // Load cross-platform mood state
   const loadCrossPlatformMood = async () => {

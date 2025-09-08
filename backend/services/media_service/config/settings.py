@@ -19,9 +19,9 @@ class MediaServiceSettings(BaseSettings):
     database_url: str = ""
     
     # Redis Configuration
-    redis_url: str = "redis://localhost:6379"
-    celery_broker_url: str = "redis://localhost:6379"
-    celery_result_backend: str = "redis://localhost:6379"
+    redis_url: str = "redis://redis:6379"
+    celery_broker_url: str = "redis://redis:6379"
+    celery_result_backend: str = "redis://redis:6379"
     
     # Storage Configuration
     primary_storage_provider: str = "local"
@@ -35,7 +35,7 @@ class MediaServiceSettings(BaseSettings):
     aws_secret_key: str = ""
     
     # MinIO Configuration
-    minio_endpoint: str = "localhost:9000"
+    minio_endpoint: str = "minio:9000"
     minio_access_key: str = "minioadmin"
     minio_secret_key: str = "minioadmin"
     minio_bucket: str = "mantrapath-media-dev"
@@ -49,7 +49,7 @@ class MediaServiceSettings(BaseSettings):
     
     # Security Configuration
     upload_virus_scanning: bool = False
-    clamav_host: str = "localhost"
+    clamav_host: str = "clamav"
     clamav_port: int = 3310
     max_upload_size: str = "500MB"
     allowed_domains: List[str] = ["localhost"]
