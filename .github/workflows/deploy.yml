@@ -20,7 +20,7 @@ env:
 
 jobs:
   deploy:
-    runs-on: ubuntu-latest-m  # Your self-hosted runner label
+    runs-on: [self-hosted, Linux, X64]
     
     steps:
     - name: Checkout code
