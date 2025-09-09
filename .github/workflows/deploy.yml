@@ -1,0 +1,269 @@
+name: Deploy MantraPath to Self-Hosted Runner
+
+on:
+  push:
+    branches: [ main ]
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: 'Deployment environment'
+        required: true
+        default: 'production'
+        type: choice
+        options:
+        - production
+        - staging
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_NAME: ${{ github.repository }}
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest-m  # Your self-hosted runner label
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      
+    - name: Set up Docker Buildx
+      uses: docker/setup-buildx-action@v3
+      
+    - name: Log in to Container Registry
+      uses: docker/login-action@v3
+      with:
+        registry: ${{ env.REGISTRY }}
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
+        
+    - name: Extract metadata
+      id: meta
+      uses: docker/metadata-action@v5
+      with:
+        images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+        tags: |
+          type=ref,event=branch
+          type=ref,event=pr
+          type=sha,prefix={{branch}}-
+          type=raw,value=latest,enable={{is_default_branch}}
+          
+    - name: Create environment file
+      run: |
+        cat > backend/.env << EOF
+        # Database Configuration
+        POSTGRES_DB=mantrapath
+        POSTGRES_USER=mantrapath
+        POSTGRES_PASSWORD=${{ secrets.POSTGRES_PASSWORD }}
+        POSTGRES_PORT=5432
+        
+        # Redis Configuration
+        REDIS_PORT=6379
+        
+        # JWT Configuration
+        JWT_SECRET_KEY=${{ secrets.JWT_SECRET_KEY }}
+        JWT_ALGORITHM=HS256
+        JWT_ACCESS_TOKEN_EXPIRE_MINUTES=30
+        
+        # Service Ports
+        API_GATEWAY_PORT=8000
+        API_GATEWAY_WEBSOCKET_PORT=8080
+        API_GATEWAY_METRICS_PORT=9090
+        AUTH_SERVICE_PORT=8001
+        PROFILE_SERVICE_PORT=8002
+        MOOD_SERVICE_PORT=8003
+        CHATBOT_SERVICE_PORT=8004
+        CONTENT_SERVICE_PORT=8005
+        COMMUNITY_SERVICE_PORT=8006
+        NOTIFICATION_SERVICE_PORT=8007
+        ML_SERVICE_PORT=8008
+        MEDIA_SERVICE_PORT=8009
+        TRANSLATION_SERVICE_PORT=8010
+        VOICE_SERVICE_PORT=8011
+        ACTION_ORCHESTRATOR_PORT=8012
+        AI_CONTEXT_STORE_PORT=8013
+        AI_EVENT_PROCESSOR_PORT=8014
+        VOICE_EVENT_PROCESSOR_PORT=8015
+        MEMORY_SERVICE_PORT=8017
+        PROACTIVE_ASSISTANCE_PORT=8018
+        MODELS_SERVICE_INTERNAL_PORT=8080
+        MODELS_SERVICE_EXTERNAL_PORT=8081
+        PHI4_AGENT_PORT=8000
+        
+        # Environment Configuration
+        ENVIRONMENT=production
+        DEBUG=false
+        DOMAIN=${{ secrets.DOMAIN || 'localhost' }}
+        PROTOCOL=${{ secrets.PROTOCOL || 'https' }}
+        FRONTEND_PORT=5173
+        
+        # Database URLs
+        DATABASE_URL=postgresql://mantrapath:${{ secrets.POSTGRES_PASSWORD }}@postgres:5432/mantrapath
+        REDIS_URL=redis://redis:6379/0
+        
+        # External API Keys (only if needed)
+        OPENAI_API_KEY=${{ secrets.OPENAI_API_KEY }}
+        
+        # SMTP Configuration
+        SMTP_SERVER=${{ secrets.SMTP_SERVER }}
+        SMTP_PORT=${{ secrets.SMTP_PORT }}
+        SMTP_USERNAME=${{ secrets.SMTP_USERNAME }}
+        SMTP_PASSWORD=${{ secrets.SMTP_PASSWORD }}
+        FROM_EMAIL=${{ secrets.FROM_EMAIL }}
+        APP_URL=${{ secrets.APP_URL }}
+        EOF
+        
+    - name: Create frontend environment file
+      run: |
+        cat > frontend/.env << EOF
+        VITE_API_BASE_URL=${{ secrets.PROTOCOL || 'https' }}://${{ secrets.DOMAIN || 'localhost' }}:8000
+        VITE_WS_URL=ws://${{ secrets.DOMAIN || 'localhost' }}:8080
+        VITE_ENVIRONMENT=production
+        EOF
+        
+    - name: Build and push Docker images
+      uses: docker/build-push-action@v5
+      with:
+        # Point build context at backend directory which contains the Dockerfile
+        context: ./backend
+        push: true
+        tags: ${{ steps.meta.outputs.tags }}
+        labels: ${{ steps.meta.outputs.labels }}
+        cache-from: type=gha
+        cache-to: type=gha,mode=max
+        
+    - name: Stop existing containers
+      run: |
+        cd backend
+        docker-compose down --remove-orphans || true
+        
+    - name: Pull latest images
+      run: |
+        cd backend
+        docker-compose pull
+        
+    - name: Start services
+      run: |
+        cd backend
+        docker-compose up -d --build
+        
+    - name: Wait for services to be ready
+      run: |
+        echo "Waiting for services to start..."
+        sleep 30
+        
+        # Check API Gateway health
+        for i in {1..30}; do
+          if curl -f http://localhost:8000/health; then
+            echo "API Gateway is ready!"
+            break
+          fi
+          echo "Waiting for API Gateway... ($i/30)"
+          sleep 10
+        done
+        
+    - name: Run health checks
+      run: |
+        echo "Running health checks..."
+        
+        # Check API Gateway
+        curl -f http://localhost:8000/health || exit 1
+        
+        # Check database
+        docker-compose -f backend/docker-compose.yml exec -T postgres pg_isready -U mantrapath -d mantrapath || exit 1
+        
+        # Check Redis
+        docker-compose -f backend/docker-compose.yml exec -T redis redis-cli ping || exit 1
+        
+        echo "All health checks passed!"
+        
+    - name: Show service status
+      run: |
+        cd backend
+        docker-compose ps
+        
+    - name: Setup Nginx (if needed)
+      run: |
+        # Install nginx if not present
+        if ! command -v nginx &> /dev/null; then
+          sudo apt-get update
+          sudo apt-get install -y nginx
+        fi
+        
+        # Create nginx configuration
+        sudo tee /etc/nginx/sites-available/mantrapath << 'EOF'
+        server {
+            listen 80;
+            server_name ${{ secrets.DOMAIN || 'localhost' }};
+            
+            # Frontend
+            location / {
+                proxy_pass http://localhost:5173;
+                proxy_set_header Host $host;
+                proxy_set_header X-Real-IP $remote_addr;
+                proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+                proxy_set_header X-Forwarded-Proto $scheme;
+            }
+            
+            # API Gateway
+            location /api/ {
+                proxy_pass http://localhost:8000/;
+                proxy_set_header Host $host;
+                proxy_set_header X-Real-IP $remote_addr;
+                proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+                proxy_set_header X-Forwarded-Proto $scheme;
+            }
+            
+            # WebSocket
+            location /ws/ {
+                proxy_pass http://localhost:8080/;
+                proxy_http_version 1.1;
+                proxy_set_header Upgrade $http_upgrade;
+                proxy_set_header Connection "upgrade";
+                proxy_set_header Host $host;
+                proxy_set_header X-Real-IP $remote_addr;
+                proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+                proxy_set_header X-Forwarded-Proto $scheme;
+            }
+        }
+        EOF
+        
+        # Enable site
+        sudo ln -sf /etc/nginx/sites-available/mantrapath /etc/nginx/sites-enabled/
+        sudo nginx -t && sudo systemctl reload nginx
+        
+    - name: Deploy Frontend
+      run: |
+        cd frontend
+        
+        # Install dependencies
+        npm ci
+        
+        # Build frontend
+        npm run build
+        
+        # Serve with nginx or simple server
+        if command -v nginx &> /dev/null; then
+          sudo cp -r dist/* /var/www/html/
+        else
+          # Fallback: serve with Python
+          cd dist
+          python3 -m http.server 5173 &
+        fi
+        
+    - name: Create deployment summary
+      run: |
+        echo "## 🚀 MantraPath Deployment Summary" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "**Status:** ✅ Successfully deployed" >> $GITHUB_STEP_SUMMARY
+        echo "**Environment:** ${{ github.event.inputs.environment || 'production' }}" >> $GITHUB_STEP_SUMMARY
+        echo "**Runner:** ubuntu-latest-m" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "### 🌐 Access URLs" >> $GITHUB_STEP_SUMMARY
+        echo "- **Frontend:** http://${{ secrets.DOMAIN || 'localhost' }}:5173" >> $GITHUB_STEP_SUMMARY
+        echo "- **API Gateway:** http://${{ secrets.DOMAIN || 'localhost' }}:8000" >> $GITHUB_STEP_SUMMARY
+        echo "- **API Docs:** http://${{ secrets.DOMAIN || 'localhost' }}:8000/docs" >> $GITHUB_STEP_SUMMARY
+        echo "- **Health Check:** http://${{ secrets.DOMAIN || 'localhost' }}:8000/health" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "### 🐳 Running Services" >> $GITHUB_STEP_SUMMARY
+        cd backend
+        docker-compose ps >> $GITHUB_STEP_SUMMARY
