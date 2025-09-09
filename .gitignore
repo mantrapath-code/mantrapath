@@ -155,6 +155,9 @@ logs/
 *.log
 access.log
 error.log
+mantrapath-deploy.log
+mantrapath-health.log
+mantrapath-health-report-*.txt
 
 # SSL certificates
 ssl/
@@ -162,3 +165,83 @@ certs/
 *.crt
 *.key
 *.pem
+
+# Deployment specific
+deployment-logs/
+health-reports/
+*.deployment.log
+
+# IDE and editor files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS generated files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# Python virtual environments
+venv*/
+env*/
+ENV*/
+.venv/
+.env/
+
+# Node.js
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.npm
+.yarn-integrity
+
+# Build artifacts
+build/
+dist/
+*.tgz
+*.tar.gz
+
+# Database files
+*.db
+*.sqlite
+*.sqlite3
+postgres_data/
+redis_data/
+
+# Docker volumes
+postgres_data/
+redis_data/
+nats_data/
+models_cache/
+models_data/
+voice_models/
+voice_audio/
+phi3_cache/
+ai_models_cache/
+
+# Temporary files
+tmp/
+temp/
+.tmp/
+.cache/
+.parcel-cache/
+
+# Model files and caches
+*.model
+*.bin
+*.safetensors
+models/
+cache/
+.cache/
+
+# API keys and secrets (backup)
+*.env.backup
+*.env.old
+secrets/

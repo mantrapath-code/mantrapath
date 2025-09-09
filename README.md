@@ -26,6 +26,7 @@
 - [Configuration](#configuration)
 - [Architecture](#architecture)
 - [API Documentation](#api-documentation)
+- [Deployment](#deployment)
 - [Contributing](#contributing)
 - [License](#license)
 - [FAQ](#faq)
@@ -39,7 +40,7 @@
 - **Node.js 18+** (for frontend development)
 - **Git** (for version control)
 
-### Quick Start
+### Quick Start (Development)
 ```bash
 # 1. Clone the repository
 git clone https://github.com/ssharmasachin/mantrapath.git
@@ -56,6 +57,22 @@ cp frontend/.env.example frontend/.env
 # Frontend: http://localhost:5173
 # API Docs: http://localhost:8000/docs
 ```
+
+### Production Deployment
+For production deployment on a self-hosted GitHub Actions runner, see our comprehensive [Deployment Guide](DEPLOYMENT.md).
+
+**Quick Production Setup:**
+1. Configure GitHub secrets (see [DEPLOYMENT.md](DEPLOYMENT.md#-github-secrets-configuration))
+2. Set up self-hosted runner with label `ubuntu-latest-m`
+3. Push to `main` branch to trigger automatic deployment
+4. Access your deployed application at your domain
+
+**Required GitHub Secrets:**
+- `POSTGRES_PASSWORD` - Database password
+- `JWT_SECRET_KEY` - JWT authentication secret
+- `OPENAI_API_KEY` - OpenAI API key (optional)
+- `SMTP_*` - Email configuration
+- `DOMAIN` - Your domain name
 
 ### Alternative Installation Methods
 ```bash
@@ -206,6 +223,75 @@ src/
 - **Swagger UI**: http://localhost:8000/docs
 - **ReDoc**: http://localhost:8000/redoc
 - **Health Check**: http://localhost:8000/health
+
+## Deployment
+
+### 🚀 Self-Hosted Runner Deployment
+
+MantraPath includes comprehensive deployment automation for self-hosted GitHub Actions runners.
+
+#### Quick Deployment
+1. **Setup Runner**: Register self-hosted runner with label `ubuntu-latest-m`
+2. **Configure Secrets**: Set required GitHub secrets (see [Deployment Guide](DEPLOYMENT.md))
+3. **Deploy**: Push to `main` branch for automatic deployment
+4. **Access**: Your application will be available at your domain
+
+#### Deployment Features
+- **Automated CI/CD**: GitHub Actions workflow for seamless deployment
+- **Docker Compose**: Production-ready multi-service orchestration
+- **Health Monitoring**: Comprehensive health checks and monitoring
+- **Nginx Integration**: Reverse proxy with security headers and optimization
+- **Environment Management**: Automatic environment configuration
+- **Rollback Support**: Easy rollback and recovery procedures
+
+#### Production Architecture
+```
+┌─────────────────┐    ┌─────────────────┐    ┌─────────────────┐
+│     Nginx       │    │   API Gateway   │    │   PostgreSQL    │
+│   (Port 80)     │────│   (Port 8000)   │────│   (Port 5432)   │
+└─────────────────┘    └─────────────────┘    └─────────────────┘
+         │                       │                       │
+         │              ┌────────┴────────┐              │
+         │              │                 │              │
+         │         ┌────▼────┐      ┌────▼────┐         │
+         │         │  Redis  │      │  NATS   │         │
+         │         │(Port6379)│      │(Port4222)│         │
+         │         └─────────┘      └─────────┘         │
+         │                                               │
+         │              ┌───────────────────────────────┘
+         │              │
+    ┌────▼────┐    ┌────▼──────────────────────────────┐
+    │Frontend │    │        18 Microservices           │
+    │(Port5173)│    │  • Auth, Profile, Mood Services  │
+    └─────────┘    │  • AI, ML, Voice Services        │
+                   │  • Community, Notification        │
+                   │  • Translation, Memory Services   │
+                   └───────────────────────────────────┘
+```
+
+#### Management Commands
+```bash
+# Deploy application
+sudo ./scripts/deploy.sh
+
+# Check health status
+./scripts/health-check.sh
+
+# View service logs
+./scripts/deploy.sh logs
+
+# Restart services
+./scripts/deploy.sh restart
+```
+
+#### Monitoring & Health Checks
+- **Real-time Monitoring**: Automated health checks every 5 minutes
+- **Service Status**: All 18 microservices health monitoring
+- **Resource Monitoring**: CPU, memory, and disk usage tracking
+- **Log Management**: Centralized logging with rotation
+- **Alert System**: Automated alerts for service failures
+
+For detailed deployment instructions, configuration options, and troubleshooting, see our comprehensive [Deployment Guide](DEPLOYMENT.md).
 
 ## Contributing
 

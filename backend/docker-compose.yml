@@ -562,12 +562,6 @@ services:
       - REDIS_URL=redis://redis:6379/2
       - MODELS_SERVICE_URL=http://models-service:${MODELS_SERVICE_INTERNAL_PORT}
       - JWT_SECRET_KEY=${JWT_SECRET_KEY:-your-super-secret-jwt-key-change-in-production}
-      # Bhashini API Configuration
-      - BHASHINI_API_KEY=${BHASHINI_API_KEY}
-      - BHASHINI_USER_ID=${BHASHINI_USER_ID}
-      - BHASHINI_BASE_URL=${BHASHINI_BASE_URL:-https://meity-auth.ulcacontrib.org}
-      - BHASHINI_COMPUTE_URL=${BHASHINI_COMPUTE_URL:-https://dhruva-api.bhashini.gov.in/services/inference}
-      - BHASHINI_API_VERSION=${BHASHINI_API_VERSION:-v1}
       # Translation Service Configuration
       - TRANSLATION_PORT=${TRANSLATION_SERVICE_PORT}
       - TRANSLATION_DEBUG=true
