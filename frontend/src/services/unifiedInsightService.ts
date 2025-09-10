@@ -909,7 +909,7 @@ export class UnifiedInsightService {
    */
   private getDemoInsights(): UnifiedInsightsResponse {
     return {
-      user_id: 'demo-user',
+      user_id: 'anonymous-user',
       timestamp: new Date().toISOString(),
       version: '1.0.0',
       aggregated_insights: {

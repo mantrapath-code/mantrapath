@@ -20,15 +20,22 @@ export function EmailVerification({ onClose, onLoginRedirect }: EmailVerificatio
 
   useEffect(() => {
     // Get token from URL parameters
+    console.log('🔍 EmailVerification: Checking for token in URL...')
+    console.log('🔍 EmailVerification: Current URL:', window.location.href)
+    console.log('🔍 EmailVerification: Search params:', window.location.search)
+    
     const urlParams = new URLSearchParams(window.location.search)
     const tokenFromUrl = urlParams.get('token')
+    console.log('🔍 EmailVerification: Extracted token:', tokenFromUrl)
     
     if (!tokenFromUrl) {
+      console.log('❌ EmailVerification: No token found in URL')
       setStatus('error')
       setErrorMessage('Invalid verification link. No token provided.')
       return
     }
 
+    console.log('✅ EmailVerification: Token found, proceeding with verification...')
     setToken(tokenFromUrl)
 
     const handleVerification = async () => {

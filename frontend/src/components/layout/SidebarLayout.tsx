@@ -274,9 +274,9 @@ export function SidebarLayout({
               exit={{ x: -300 }}
               className="fixed inset-y-0 left-0 w-80 bg-background border-r z-50 lg:hidden"
             >
-              <div className="flex h-full flex-col">
+              <Sidebar defaultCollapsed={false}>
                 <SidebarContentComponent />
-              </div>
+              </Sidebar>
             </motion.div>
           </>
         )}

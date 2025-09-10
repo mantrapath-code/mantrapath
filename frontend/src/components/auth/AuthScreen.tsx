@@ -219,16 +219,7 @@ export function AuthScreen() {
     }
   }
 
-  // Check for verification token in URL
-  useEffect(() => {
-    const urlParams = new URLSearchParams(window.location.search)
-    const token = urlParams.get('token')
-    if (token) {
-      handleVerifyEmail(token)
-      // Clean the URL
-      window.history.replaceState({}, document.title, window.location.pathname)
-    }
-  }, [handleVerifyEmail]) // Add handleVerifyEmail to dependencies
+  // Note: Token verification is now handled in App.tsx
 
 
 

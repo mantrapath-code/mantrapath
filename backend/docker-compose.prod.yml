@@ -1,4 +1,4 @@
-
+version: "3.9"
 services:
   # Database
   postgres:
@@ -67,7 +67,8 @@ services:
 
   # API Gateway - Main service (V3 Enhanced)
   api-gateway:
-    image: ${REGISTRY:-ghcr.io}/${IMAGE_NAME:-mantrapath}:${TAG:-latest}
+    # Unique image (avoid single shared tag across all services)
+    image: mantrapath-api-gateway:${TAG:-latest}
     build:
       context: .
       dockerfile: services/api_gateway/Dockerfile
@@ -153,7 +154,7 @@ services:
 
   # Auth Service
   auth-service:
-    image: ${REGISTRY:-ghcr.io}/${IMAGE_NAME:-mantrapath}:${TAG:-latest}
+    image: mantrapath-auth-service:${TAG:-latest}
     build:
       context: .
       dockerfile: services/auth_service/Dockerfile
@@ -180,7 +181,7 @@ services:
 
   # Profile Service
   profile-service:
-    image: ${REGISTRY:-ghcr.io}/${IMAGE_NAME:-mantrapath}:${TAG:-latest}
+    image: mantrapath-profile-service:${TAG:-latest}
     build:
       context: .
       dockerfile: services/profile_service/Dockerfile
@@ -201,7 +202,7 @@ services:
 
   # Mood Service
   mood-service:
-    image: ${REGISTRY:-ghcr.io}/${IMAGE_NAME:-mantrapath}:${TAG:-latest}
+    image: mantrapath-mood-service:${TAG:-latest}
     build:
       context: .
       dockerfile: services/mood_service/Dockerfile
@@ -222,7 +223,7 @@ services:
 
   # Chatbot Service (Enhanced)
   chatbot-service:
-    image: ${REGISTRY:-ghcr.io}/${IMAGE_NAME:-mantrapath}:${TAG:-latest}
+    image: mantrapath-chatbot-service:${TAG:-latest}
     build:
       context: .
       dockerfile: services/chatbot_service/Dockerfile
@@ -285,9 +286,36 @@ services:
       retries: 5
       start_period: 60s
 
+  # Content Service (added for production parity)
+  content-service:
+    image: mantrapath-content-service:${TAG:-latest}
+    build:
+      context: .
+      dockerfile: services/content_service/Dockerfile
+    ports:
+      - "${CONTENT_SERVICE_PORT}:${CONTENT_SERVICE_PORT}"
+    environment:
+      - DATABASE_URL=${DATABASE_URL}
+      - REDIS_URL=${REDIS_URL}
+      - JWT_SECRET_KEY=${JWT_SECRET_KEY}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - mantrapath-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:${CONTENT_SERVICE_PORT}/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+
   # Community Service
   community-service:
-    image: ${REGISTRY:-ghcr.io}/${IMAGE_NAME:-mantrapath}:${TAG:-latest}
+    image: mantrapath-community-service:${TAG:-latest}
     build:
       context: .
       dockerfile: services/community_service/Dockerfile
@@ -308,7 +336,7 @@ services:
 
   # Notification Service
   notification-service:
-    image: ${REGISTRY:-ghcr.io}/${IMAGE_NAME:-mantrapath}:${TAG:-latest}
+    image: mantrapath-notification-service:${TAG:-latest}
     build:
       context: .
       dockerfile: services/notification_service/Dockerfile
@@ -329,7 +357,7 @@ services:
 
   # ML Service
   ml-service:
-    image: ${REGISTRY:-ghcr.io}/${IMAGE_NAME:-mantrapath}:${TAG:-latest}
+    image: mantrapath-ml-service:${TAG:-latest}
     build:
       context: .
       dockerfile: services/ml_service/Dockerfile
@@ -361,13 +389,13 @@ services:
 
   # Models Service
   models-service:
-    image: ${REGISTRY:-ghcr.io}/${IMAGE_NAME:-mantrapath}:${TAG:-latest}
+    image: mantrapath-models-service:${TAG:-latest}
     build:
       context: ./services/models_service
       dockerfile: Dockerfile
     command: ["./start_simple.sh"]
     ports:
-      - "${MODELS_SERVICE_EXTERNAL_PORT}:${MODELS_SERVICE_INTERNAL_PORT}"
+      - "${MODELS_SERVICE_EXTERNAL_PORT}:${MODELS_SERVICE_INTERNAL_PORT}"  # 8081 -> 8080
     environment:
       - MODELS_SERVICE_HOST=0.0.0.0
       - MODELS_SERVICE_PORT=${MODELS_SERVICE_INTERNAL_PORT}
@@ -391,7 +419,12 @@ services:
       # NLP Configuration
       - NLP_DEFAULT_ENGINE=transformers
       - TRANSLATION_DEFAULT_ENGINE=marian
-      - SENTIMENT_DEFAULT_MODEL=cardiffnlp/twitter-roberta-base-sentiment-latest
+  - SENTIMENT_DEFAULT_MODEL=cardiffnlp/twitter-roberta-base-sentiment-latest
+  # Preload (download) specific models in background without blocking startup (comma separated)
+  - MODELS_PRELOAD_LIST=${MODELS_PRELOAD_LIST:-whisper_base,vosk_hi_small}
+  - MODELS_PRELOAD_BACKGROUND=${MODELS_PRELOAD_BACKGROUND:-true}
+  # When running in non-minimal mode you can skip default loads if providing custom preload list
+  - MODELS_SERVICE_SKIP_DEFAULTS=${MODELS_SERVICE_SKIP_DEFAULTS:-false}
     volumes:
       - models_cache:/app/cache
       - models_data:/app/models
@@ -400,7 +433,8 @@ services:
       - mantrapath-network
     restart: unless-stopped
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
+      # Use internal port variable instead of hard-coded 8080
+      test: ["CMD", "sh", "-c", "curl -f http://localhost:${MODELS_SERVICE_INTERNAL_PORT}/health"]
       interval: 45s
       timeout: 15s
       retries: 3
@@ -414,7 +448,7 @@ services:
 
   # Translation Service
   translation-service:
-    image: ${REGISTRY:-ghcr.io}/${IMAGE_NAME:-mantrapath}:${TAG:-latest}
+    image: mantrapath-translation-service:${TAG:-latest}
     build:
       context: .
       dockerfile: services/translation_service/Dockerfile
@@ -447,22 +481,22 @@ services:
 
   # Voice Service
   voice-service:
-    image: ${REGISTRY:-ghcr.io}/${IMAGE_NAME:-mantrapath}:${TAG:-latest}
+    image: mantrapath-voice-service:${TAG:-latest}
     build:
       context: ./services/voice_service
       dockerfile: Dockerfile
     ports:
-      - "${VOICE_SERVICE_PORT:-8011}:8011"
+      - "${VOICE_SERVICE_PORT}:${VOICE_SERVICE_PORT}"
     environment:
       - DATABASE_URL=${DATABASE_URL}
       - REDIS_URL=${REDIS_URL}
       - JWT_SECRET_KEY=${JWT_SECRET_KEY}
-      - VOICE_PORT=8011
+      - VOICE_PORT=${VOICE_SERVICE_PORT}
       - LOG_LEVEL=INFO
       - ENVIRONMENT=production
       # Service Integration URLs
-      - CHATBOT_SERVICE_URL=http://chatbot-service:${CHATBOT_SERVICE_PORT:-8003}
-      - MOOD_SERVICE_URL=http://mood-service:${MOOD_SERVICE_PORT:-8004}
+      - CHATBOT_SERVICE_URL=http://chatbot-service:${CHATBOT_SERVICE_PORT:-8004}
+      - MOOD_SERVICE_URL=http://mood-service:${MOOD_SERVICE_PORT:-8003}
       - ANALYTICS_SERVICE_URL=http://analytics-service:${ANALYTICS_SERVICE_PORT:-8008}
       # Indian Language Support
       - DEFAULT_LANGUAGE=hi
@@ -489,7 +523,7 @@ services:
 
   # AI Context Store Service
   ai-context-store:
-    image: ${REGISTRY:-ghcr.io}/${IMAGE_NAME:-mantrapath}:${TAG:-latest}
+    image: mantrapath-ai-context-store:${TAG:-latest}
     build:
       context: .
       dockerfile: services/ai_context_store/Dockerfile
@@ -524,7 +558,7 @@ services:
 
   # Action Orchestrator Service
   action-orchestrator:
-    image: ${REGISTRY:-ghcr.io}/${IMAGE_NAME:-mantrapath}:${TAG:-latest}
+    image: mantrapath-action-orchestrator:${TAG:-latest}
     build:
       context: .
       dockerfile: services/action_orchestrator/Dockerfile
@@ -565,7 +599,7 @@ services:
 
   # Memory Service
   memory-service:
-    image: ${REGISTRY:-ghcr.io}/${IMAGE_NAME:-mantrapath}:${TAG:-latest}
+    image: mantrapath-memory-service:${TAG:-latest}
     build:
       context: .
       dockerfile: services/memory_service/Dockerfile
@@ -637,12 +671,148 @@ services:
       retries: 3
       start_period: 60s
 
+  # AI Event Processor Service (added for production parity)
+  ai-event-processor:
+    image: mantrapath-ai-event-processor:${TAG:-latest}
+    build:
+      context: .
+      dockerfile: services/ai_event_processor/Dockerfile
+    ports:
+      - "${AI_EVENT_PROCESSOR_PORT}:${AI_EVENT_PROCESSOR_PORT}"
+    environment:
+      - AI_EVENT_PROCESSOR_HOST=0.0.0.0
+      - AI_EVENT_PROCESSOR_PORT=${AI_EVENT_PROCESSOR_PORT}
+      - DATABASE_URL=${DATABASE_URL}
+      - REDIS_URL=${REDIS_URL}
+      - NATS_URL=nats://nats:4222
+      - NATS_SERVERS=nats://nats:4222
+      - JWT_SECRET_KEY=${JWT_SECRET_KEY}
+      - LOG_LEVEL=INFO
+      - ENVIRONMENT=production
+      - AI_MODELS_CACHE_DIR=/app/models_cache
+      - EMOTION_MODEL_NAME=j-hartmann/emotion-english-distilroberta-base
+      - SENTIMENT_MODEL_NAME=cardiffnlp/twitter-roberta-base-sentiment-latest
+      - DEVICE=cpu
+      - MAX_CONCURRENT_EVENTS=100
+      - EVENT_PROCESSING_TIMEOUT=300
+      - CONTEXT_CACHE_TTL=3600
+      - METRICS_EXPORT_INTERVAL=60
+      - MODELS_SERVICE_URL=http://models-service:${MODELS_SERVICE_INTERNAL_PORT}
+      - MODELS_SERVICE_ENABLED=true
+      - USE_MODELS_SERVICE=true
+      - MODELS_SERVICE_TIMEOUT=30
+    volumes:
+      - ai_models_cache:/app/models_cache
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      nats:
+        condition: service_healthy
+      models-service:
+        condition: service_healthy
+    networks:
+      - mantrapath-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:${AI_EVENT_PROCESSOR_PORT}/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+
+  # Media Service (added for production parity)
+  media-service:
+    image: mantrapath-media-service:${TAG:-latest}
+    build:
+      context: .
+      dockerfile: services/media_service/Dockerfile
+    ports:
+      - "${MEDIA_SERVICE_PORT}:${MEDIA_SERVICE_PORT}"  # host -> container (e.g. 8021)
+    environment:
+      - DATABASE_URL=${DATABASE_URL}
+      - REDIS_URL=${REDIS_URL}
+      - JWT_SECRET_KEY=${JWT_SECRET_KEY}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - mantrapath-network
+    restart: unless-stopped
+
+  # Proactive Assistance Engine (optional)
+  proactive-assistance:
+    image: mantrapath-proactive-assistance:${TAG:-latest}
+    build:
+      context: .
+      dockerfile: services/proactive_assistance_engine/Dockerfile
+    ports:
+      - "${PROACTIVE_ASSISTANCE_PORT}:${PROACTIVE_ASSISTANCE_PORT}"
+    environment:
+      - PROACTIVE_ASSISTANCE_PORT=${PROACTIVE_ASSISTANCE_PORT}
+      - DATABASE_URL=${DATABASE_URL}
+      - REDIS_URL=${REDIS_URL}
+      - JWT_SECRET_KEY=${JWT_SECRET_KEY}
+      - LOG_LEVEL=INFO
+      - ENVIRONMENT=production
+      - NATS_URL=nats://nats:4222
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      nats:
+        condition: service_healthy
+    networks:
+      - mantrapath-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:${PROACTIVE_ASSISTANCE_PORT}/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+
+  # PHI4 Agent (legacy / experimental)
+  phi4-agent:
+    image: mantrapath-phi4-agent:${TAG:-latest}
+    build:
+      context: .
+      dockerfile: services/phi3_agent/Dockerfile
+    ports:
+      - "${PHI4_AGENT_PORT}:8000"  # 8016 -> 8000 internal
+    environment:
+      - PHI4_AGENT_PORT=${PHI4_AGENT_PORT}
+      - DATABASE_URL=${DATABASE_URL}
+      - REDIS_URL=${REDIS_URL}
+      - JWT_SECRET_KEY=${JWT_SECRET_KEY}
+      - LOG_LEVEL=INFO
+      - ENVIRONMENT=production
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - mantrapath-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+
 volumes:
   postgres_data:
   nats_data:
   models_cache:
   models_data:
   voice_models:
+  ai_models_cache:
 
 networks:
   mantrapath-network:

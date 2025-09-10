@@ -191,8 +191,8 @@ export function EnhancedCommunitySection() {
 
   // Load initial data
   useEffect(() => {
-    loadForums()
     if (isAuthenticated) {
+      loadForums()
       loadUserStats() // Only load stats if user is authenticated
     }
     loadEvents()
@@ -223,7 +223,12 @@ export function EnhancedCommunitySection() {
   const loadEvents = async () => {
     try {
       const eventsData = await communityApi.getEvents()
-      setEvents(eventsData)
+      if (Array.isArray(eventsData)) {
+        setEvents(eventsData)
+      } else {
+        console.warn('Received non-array data for events:', eventsData)
+        setEvents([])
+      }
     } catch (error) {
       console.error('Failed to load events:', error)
       toast.error('Failed to load events')
@@ -234,7 +239,12 @@ export function EnhancedCommunitySection() {
   const loadChallenges = async () => {
     try {
       const challengesData = await communityApi.getChallenges()
-      setChallenges(challengesData)
+      if (Array.isArray(challengesData)) {
+        setChallenges(challengesData)
+      } else {
+        console.warn('Received non-array data for challenges:', challengesData)
+        setChallenges([])
+      }
     } catch (error) {
       console.error('Failed to load challenges:', error)
       toast.error('Failed to load challenges')
@@ -595,9 +605,12 @@ export function EnhancedCommunitySection() {
                   <ScrollArea className="h-[600px]">
                     <div className="space-y-3">
                       {(() => {
+                        // Ensure forums is always an array
+                        const safeForums = Array.isArray(forums) ? forums : []
+                        
                         const filteredForums = forumFilter === 'joined' 
-                          ? forums.filter(forum => joinedForums.includes(forum.id))
-                          : forums
+                          ? safeForums.filter(forum => joinedForums.includes(forum.id))
+                          : safeForums
                         
                         const searchFilteredForums = searchQuery 
                           ? filteredForums.filter(forum => 
@@ -634,7 +647,7 @@ export function EnhancedCommunitySection() {
                           )
                         }
 
-                        return searchFilteredForums.map((forum) => (
+                        return Array.isArray(searchFilteredForums) ? searchFilteredForums.map((forum) => (
                         <motion.div
                           key={forum.id}
                           initial={{ opacity: 0, y: 20 }}
@@ -695,7 +708,7 @@ export function EnhancedCommunitySection() {
                             </div>
                           </div>
                         </motion.div>
-                        ))
+                        )) : []
                       })()}
                     </div>
                   </ScrollArea>

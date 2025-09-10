@@ -6,11 +6,13 @@
  */
 
 import { apiService } from './api'
+import { getServiceUrls } from '../config/api-config'
 
-// Service URLs for real backend integration
-const ML_SERVICE_URL = 'http://localhost:8008'
-const MOOD_SERVICE_URL = 'http://localhost:8003' 
-const MEMORY_SERVICE_URL = 'http://localhost:8017'
+// Get environment-aware service URLs
+const serviceUrls = getServiceUrls()
+const ML_SERVICE_URL = serviceUrls.ML_SERVICE_URL
+const MOOD_SERVICE_URL = serviceUrls.MOOD_SERVICE_URL
+const MEMORY_SERVICE_URL = serviceUrls.AI_CONTEXT_SERVICE_URL // Memory service is part of AI context
 
 export interface CrisisIndicator {
   type: 'mood' | 'sleep' | 'activity' | 'social' | 'behavioral'

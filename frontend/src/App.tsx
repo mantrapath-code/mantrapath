@@ -38,6 +38,15 @@ function AppContent() {
   const [showProfile, setShowProfile] = useState(false)
   const [showEmailVerification, setShowEmailVerification] = useState(false)
   
+  // Check for verification token in URL on mount
+  useEffect(() => {
+    const urlParams = new URLSearchParams(window.location.search)
+    const token = urlParams.get('token')
+    if (token) {
+      setShowEmailVerification(true)
+    }
+  }, [])
+  
   // Enhanced device capabilities
   const deviceCapabilities = useDeviceCapabilities()
   

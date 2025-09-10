@@ -49,7 +49,7 @@ class RequestRouter:
                 path_pattern=r"^/profile/.*",
                 methods=[HTTPMethod.GET, HTTPMethod.POST, HTTPMethod.PUT, HTTPMethod.DELETE],
                 service_name="profile",
-                strip_prefix=False,
+                strip_prefix=True,
                 timeout=30,
                 retries=2,
                 auth_required=True
@@ -137,7 +137,7 @@ class RequestRouter:
                 path_pattern=r"^/mood/.*",
                 methods=[HTTPMethod.GET, HTTPMethod.POST, HTTPMethod.PUT, HTTPMethod.DELETE],
                 service_name="mood",
-                strip_prefix=False,
+                strip_prefix=True,
                 timeout=30,
                 retries=2,
                 auth_required=True
@@ -210,7 +210,7 @@ class RequestRouter:
                 path_pattern=r"^/content/.*",
                 methods=[HTTPMethod.GET, HTTPMethod.POST, HTTPMethod.PUT, HTTPMethod.DELETE],
                 service_name="content",
-                strip_prefix=False,
+                strip_prefix=True,
                 timeout=30,
                 retries=2,
                 auth_required=True
@@ -230,7 +230,7 @@ class RequestRouter:
                 path_pattern=r"^/community/.*",
                 methods=[HTTPMethod.GET, HTTPMethod.POST, HTTPMethod.PUT, HTTPMethod.DELETE],
                 service_name="community",
-                strip_prefix=False,
+                strip_prefix=True,
                 timeout=30,
                 retries=2,
                 auth_required=True
@@ -252,7 +252,7 @@ class RequestRouter:
                 path_pattern=r"^/ml/.*",
                 methods=[HTTPMethod.GET, HTTPMethod.POST],
                 service_name="ml",
-                strip_prefix=False,
+                strip_prefix=True,
                 timeout=120,  # Longer timeout for ML processing
                 retries=1,
                 auth_required=True
@@ -263,7 +263,7 @@ class RequestRouter:
                 path_pattern=r"^/media/.*",
                 methods=[HTTPMethod.GET, HTTPMethod.POST, HTTPMethod.PUT, HTTPMethod.DELETE],
                 service_name="media",
-                strip_prefix=False,
+                strip_prefix=True,
                 timeout=60,  # Longer timeout for media uploads
                 retries=2,
                 auth_required=True

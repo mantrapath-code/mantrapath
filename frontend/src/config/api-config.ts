@@ -36,21 +36,26 @@ export const getServiceUrls = () => {
       AI_EVENT_PROCESSOR_URL: `${baseUrl}/ai-events`,
       ASSISTANCE_ENGINE_URL: `${baseUrl}/assistance`,
       MOOD_SERVICE_URL: `${baseUrl}/mood`,
-      CHATBOT_SERVICE_URL: `${baseUrl}/chatbot`,
+  // IMPORTANT: Do NOT append /chatbot here. Frontend request helpers already
+  // include paths like /chat/intelligent or /api/chatbot/chat/session.
+  // Previously this produced URLs like /chatbot/api/chatbot/chat/session (404).
+  // Using the gateway base fixes routing via existing rules (^/chat/ and ^/api/chatbot/).
+  CHATBOT_SERVICE_URL: `${baseUrl}`,
     };
   }
   
-  // Local development - direct service URLs
+  // Local development - use API Gateway for consistency
   return {
     API_BASE_URL: baseUrl,
-    ML_SERVICE_URL: import.meta.env.VITE_ML_SERVICE_URL || 'http://localhost:8008',
-    COMMUNITY_SERVICE_URL: 'http://localhost:8006',
-    PROFILE_SERVICE_URL: 'http://localhost:8002',
-    AI_CONTEXT_SERVICE_URL: 'http://localhost:8001',
-    AI_EVENT_PROCESSOR_URL: 'http://localhost:8014',
-    ASSISTANCE_ENGINE_URL: 'http://localhost:8018',
-    MOOD_SERVICE_URL: 'http://localhost:8003',
-    CHATBOT_SERVICE_URL: 'http://localhost:8004',
+    ML_SERVICE_URL: `${baseUrl}/ml`,
+    COMMUNITY_SERVICE_URL: `${baseUrl}/community`,
+    PROFILE_SERVICE_URL: `${baseUrl}/profile`,
+    AI_CONTEXT_SERVICE_URL: `${baseUrl}/ai-context`,
+    AI_EVENT_PROCESSOR_URL: `${baseUrl}/ai-events`,
+    ASSISTANCE_ENGINE_URL: `${baseUrl}/assistance`,
+    MOOD_SERVICE_URL: `${baseUrl}/mood`,
+  // Keep chatbot pointing to gateway root; helper methods supply full path.
+  CHATBOT_SERVICE_URL: `${baseUrl}`,
   };
 };
 

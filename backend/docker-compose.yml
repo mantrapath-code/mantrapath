@@ -42,7 +42,7 @@ services:
     ports:
       - "${PHI4_AGENT_PORT}:8000"
     environment:
-      - OLLAMA_BASE_URL=http://host.docker.internal:11434
+      - OLLAMA_BASE_URL=http://139.84.213.185:11434
       - LOG_LEVEL=INFO
       - PHI4_AGENT_PORT=8000
     extra_hosts:
@@ -276,7 +276,7 @@ services:
       - AGENT_REDIS_URL=redis://agent-redis:6379
       - JWT_SECRET_KEY=${JWT_SECRET_KEY:-your-super-secret-jwt-key-change-in-production}
       - PHI4_MODEL_AVAILABLE=true
-      - OLLAMA_URL=http://host.docker.internal:11434
+      - OLLAMA_URL=http://139.84.213.185:11434
       
       # Phase 1 Service Integration URLs (using environment variables)
       - MODELS_SERVICE_URL=http://models-service:${MODELS_SERVICE_INTERNAL_PORT}
@@ -903,6 +903,58 @@ services:
       timeout: 10s
       retries: 3
       start_period: 60s
+
+  # Frontend Service - React Application
+  frontend:
+    build:
+      context: ../frontend
+      dockerfile: ../deployment/Dockerfile.frontend
+      args:
+        - VITE_API_GATEWAY_URL=${VITE_API_GATEWAY_URL}
+        - VITE_WS_URL=${VITE_WS_URL}
+        - VITE_API_URL=${VITE_API_URL}
+        - VITE_API_BASE_URL=${VITE_API_BASE_URL}
+        - VITE_ML_SERVICE_URL=${VITE_ML_SERVICE_URL}
+    # Ports handled by nginx reverse proxy
+    # ports:
+    #   - "${FRONTEND_PORT}:80"  # Expose on port 80 inside container, mapped to FRONTEND_PORT
+    environment:
+      - VITE_FRONTEND_PORT=${VITE_FRONTEND_PORT}
+      - VITE_API_GATEWAY_URL=${VITE_API_GATEWAY_URL}
+      - VITE_WS_URL=${VITE_WS_URL}
+      - VITE_API_URL=${VITE_API_URL}
+      - VITE_API_BASE_URL=${VITE_API_BASE_URL}
+      - VITE_ML_SERVICE_URL=${VITE_ML_SERVICE_URL}
+    networks:
+      - mantrapath-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:80/ || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+    depends_on:
+      - api-gateway
+
+  # Nginx reverse proxy with SSL termination
+  nginx:
+    image: nginx:alpine
+    container_name: mantrapath-nginx
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx/nginx-ssl.conf:/etc/nginx/nginx.conf:ro
+      - ./ssl_certs:/etc/nginx/ssl:ro
+    environment:
+      - DOMAIN=${DOMAIN:-139.84.213.185}
+    networks:
+      - mantrapath-network
+    depends_on:
+      - frontend
+      - api-gateway
+    restart: unless-stopped
 
 volumes:
   postgres_data:

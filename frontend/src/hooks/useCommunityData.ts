@@ -81,18 +81,25 @@ export function useCommunityData() {
       setLoading(true)
       setError(null)
       const forumsData = await communityApi.getForums()
-      setForums(forumsData || [])
       
-      // Sync localStorage with backend data
-      if (forumsData) {
+      // Ensure forumsData is an array
+      if (Array.isArray(forumsData)) {
+        setForums(forumsData)
+        
+        // Sync localStorage with backend data
         const joinedForumIds = forumsData
           .filter((forum: any) => forum.is_joined)
           .map((forum: any) => forum.id)
         setJoinedForums(joinedForumIds)
+      } else {
+        console.error('Forums API returned non-array data:', forumsData)
+        setForums([])
+        setError('Invalid forums data received')
       }
     } catch (err) {
       console.error('Failed to load forums:', err)
       setError('Failed to load forums')
+      setForums([])
       toast.error('Failed to load community forums')
     } finally {
       setLoading(false)
