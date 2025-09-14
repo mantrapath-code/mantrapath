@@ -1,4 +1,4 @@
-"""
+ """
 Mood-Aware Responder Module
 
 This module provides intelligent, mood-aware response generation for the MantraPath chatbot.
@@ -112,12 +112,13 @@ class MoodAwareResponder:
         self.distress_threshold = 5.0  # Mood score threshold for distress detection
         
         # MantraPath service URLs from environment
-        self.models_service_url = os.getenv('MODELS_SERVICE_URL', 'http://localhost:8085')
-        self.phi4_agent_url = os.getenv('PHI4_AGENT_URL', 'http://localhost:8016')
+        self.models_service_url = os.getenv('MODELS_SERVICE_URL', 'http://localhost:8081')
+        # Remove deprecated phi4 agent URL attribute
+        # self.phi4_agent_url = os.getenv('PHI4_AGENT_URL', 'http://localhost:8016')
         self.ai_context_store_url = os.getenv('AI_CONTEXT_STORE_URL', 'http://localhost:8006')
         self.memory_service_url = os.getenv('MEMORY_SERVICE_URL', 'http://localhost:8017')
         
-        # Prioritize models service over phi4_agent for consistency
+        # Prioritize models service only
         self.use_models_service_first = True
         
         logger.info("MoodAwareResponder initialized with centralized models service priority")
@@ -340,34 +341,19 @@ I care about your safety and wellbeing. Would you like me to help you connect wi
         Returns:
             MoodAwareResponse: Generated response
         """
-        # Try Models Service (centralized Ollama) first, then fallback to Phi4 Agent
+        # Primary: Lightweight embeddings-based template selection (no large models)
         try:
-            if self.use_models_service_first:
-                logger.info(f"Using centralized Models Service (Ollama) for strategy: {strategy}")
-                models_response = await self._generate_via_models_service_ollama(
-                    user_message, mood_context, strategy, conversation_history
-                )
-                if models_response:
-                    logger.info(f"Models Service response generated successfully with confidence: {models_response.confidence_score}")
-                    return models_response
-        except Exception as e:
-            logger.error(f"Centralized Models Service generation failed: {e}")
-        
-        # Fallback to Phi4 Agent if models service fails
-        try:
-            logger.info(f"Fallback to Phi4 Agent for strategy: {strategy}")
-            phi4_response = await self._generate_phi4_agent_response(
+            embeddings_response = await self._generate_via_embeddings_templates(
                 user_message, mood_context, strategy, conversation_history
             )
-            if phi4_response:
-                logger.info(f"Phi4 Agent response generated successfully")
-                return phi4_response
+            if embeddings_response:
+                return embeddings_response
         except Exception as e:
-            logger.error(f"Phi4 Agent generation failed: {e}")
+            logger.error(f"Embeddings-based generation failed: {e}")
         
-        # Final fallback to template-based responses
-        logger.warning(f"All AI services failed, using template response for strategy: {strategy}")
-        return await self._generate_template_response(user_message, mood_context, strategy)
+        # No mock/template fallback. Fail fast so the caller can handle properly.
+        logger.error("No AI response available from embeddings pipeline")
+        raise RuntimeError("No AI response available")
     
     def _build_system_prompt(self, mood_context: MoodContext, strategy: str) -> str:
         """
@@ -454,8 +440,9 @@ Response Guidelines:
         conversation_history: Optional[List[Dict[str, Any]]] = None
     ) -> Optional[MoodAwareResponse]:
         """
-        Generate response using centralized Models Service (Ollama backend)
+        Deprecated: Ollama/Phi routes removed.
         """
+        return None
         try:
             # Get enhanced user context from AI Context Store and Memory Service
             enhanced_context = await self._get_enhanced_user_context(mood_context)
@@ -484,8 +471,7 @@ Please provide a thoughtful, empathetic response that addresses the user's needs
             request_data = {
                 "prompt": complete_prompt,
                 "max_tokens": 250,
-                "temperature": 0.7,
-                "model": "phi4"  # Use Phi-4 via Ollama
+                "temperature": 0.7
             }
             
             # Make request to centralized models service
@@ -546,90 +532,8 @@ Please provide a thoughtful, empathetic response that addresses the user's needs
         strategy: str,
         conversation_history: Optional[List[Dict[str, Any]]] = None
     ) -> Optional[MoodAwareResponse]:
-        """
-        Generate response using Phi4 Agent Service as fallback
-        """
-        try:
-            # Get enhanced user context from AI Context Store and Memory Service
-            enhanced_context = await self._get_enhanced_user_context(mood_context)
-            
-            # Build context for AI with enhanced user insights
-            system_prompt = self._build_enhanced_system_prompt(mood_context, strategy, enhanced_context)
-            
-            # Build conversation context
-            conversation_context = ""
-            if conversation_history:
-                for msg in conversation_history[-3:]:  # Last 3 messages for context
-                    role = "User" if msg.get("sender") == "user" else "Assistant"
-                    conversation_context += f"{role}: {msg.get('content', '')}\n"
-            
-            # Create complete prompt for Phi-4 Agent
-            complete_prompt = f"""{system_prompt}
-
-Previous conversation:
-{conversation_context}
-
-Current user message: {user_message}
-
-Please provide a thoughtful, empathetic response that addresses the user's needs based on their mood context and the conversation strategy."""
-
-            # Prepare request data for Phi4 agent service
-            request_data = {
-                "prompt": complete_prompt,
-                "max_tokens": 250,
-                "temperature": 0.7
-            }
-            
-            # Make request to phi4 agent service
-            async with httpx.AsyncClient(timeout=30.0) as client:
-                response = await client.post(
-                    f"{self.phi4_agent_url}/generate",
-                    json=request_data
-                )
-                
-                if response.status_code == 200:
-                    result = response.json()
-                    ai_text = result.get("generated_text", "").strip()
-                    
-                    if ai_text:
-                        # Clean up response
-                        if ai_text.startswith("System:") or ai_text.startswith("Assistant:"):
-                            lines = ai_text.split("\n")
-                            ai_text = "\n".join([line for line in lines if not line.strip().startswith(("System:", "Assistant:", "User:"))])
-                            ai_text = ai_text.strip()
-                        
-                        # Determine if breathing exercise should be suggested
-                        breathing_exercise = None
-                        if mood_context.stress_level >= 7 or "anxious" in user_message.lower() or "stress" in user_message.lower():
-                            breathing_exercise = {
-                                "name": "4-7-8 Calming Breath",
-                                "description": "A powerful technique to reduce anxiety and stress",
-                                "steps": [
-                                    {"action": "inhale", "duration": 4, "instruction": "Breathe in slowly through your nose"},
-                                    {"action": "hold", "duration": 7, "instruction": "Hold your breath gently"},
-                                    {"action": "exhale", "duration": 8, "instruction": "Exhale completely through your mouth"}
-                                ],
-                                "cycles": 4
-                            }
-                        
-                        return MoodAwareResponse(
-                            response_text=ai_text,
-                            tone=self._determine_response_tone(mood_context),
-                            intervention_type=strategy,
-                            breathing_exercise=breathing_exercise,
-                            confidence_score=0.85,  # High confidence for phi4 agent
-                            follow_up_suggestions=self._generate_follow_up_suggestions(mood_context)
-                        )
-                    else:
-                        logger.warning(f"Phi4 Agent returned empty response")
-                        return None
-                else:
-                    logger.error(f"Phi4 Agent request failed with status {response.status_code}")
-                    return None
-                    
-        except Exception as e:
-            logger.error(f"Phi4 Agent request failed: {e}")
-            return None
+        """Deprecated: Phi-4 agent fallback removed."""
+        return None
     
     async def _generate_models_service_response(
         self,
@@ -638,104 +542,69 @@ Please provide a thoughtful, empathetic response that addresses the user's needs
         strategy: str,
         conversation_history: Optional[List[Dict[str, Any]]] = None
     ) -> Optional[MoodAwareResponse]:
+        """Deprecated: legacy models-service text generation removed."""
+        return None
+
+    async def _generate_via_embeddings_templates(
+        self,
+        user_message: str,
+        mood_context: MoodContext,
+        strategy: str,
+        conversation_history: Optional[List[Dict[str, Any]]] = None
+    ) -> Optional[MoodAwareResponse]:
         """
-        Generate AI-powered response using Phi-4 Agent Service via Ollama with enhanced context
-        
-        Args:
-            user_message (str): User's message
-            mood_context (MoodContext): Current mood context
-            strategy (str): Selected response strategy
-            conversation_history (List[Dict]): Previous conversation messages
-            
-        Returns:
-            Optional[MoodAwareResponse]: AI-generated response or None if failed
+        Generate a response by leveraging TEI embeddings from the Models Service
+        to select and personalize a high-quality template. This avoids large
+        transformer models while producing meaningful, contextual replies.
         """
         try:
-            # Get enhanced user context from AI Context Store and Memory Service
-            enhanced_context = await self._get_enhanced_user_context(mood_context)
-            
-            # Get Phi-4 agent service URL from environment or config
-            phi4_agent_url = self.phi4_agent_url
-            
-            # Build context for AI with enhanced user insights
-            system_prompt = self._build_enhanced_system_prompt(mood_context, strategy, enhanced_context)
-            
-            # Build conversation context
-            conversation_context = ""
-            if conversation_history:
-                for msg in conversation_history[-3:]:  # Last 3 messages for context
-                    role = "User" if msg.get("sender") == "user" else "Assistant"
-                    conversation_context += f"{role}: {msg.get('content', '')}\n"
-            
-            # Create complete prompt for Phi-3 
-            complete_prompt = f"""{system_prompt}
+            # Build candidate templates tailored to strategy
+            templates_map: Dict[str, List[str]] = self._load_template_candidates()
+            candidates: List[str] = templates_map.get(strategy, templates_map.get("maintenance_support", []))
+            if not candidates:
+                return None
 
-Previous conversation:
-{conversation_context}
+            # Create embeddings for user message and templates
+            from ..clients.models_service_client import models_client
 
-Current user message: {user_message}
+            message_embedding = await models_client.get_text_embeddings(user_message)
+            if not message_embedding or not message_embedding.embedding:
+                return None
 
-Please provide a thoughtful, empathetic response that addresses the user's needs based on their mood context and the conversation strategy."""
+            # Score templates by cosine similarity
+            import math
+            def cosine(a: List[float], b: List[float]) -> float:
+                dot = sum(x*y for x, y in zip(a, b))
+                na = math.sqrt(sum(x*x for x in a))
+                nb = math.sqrt(sum(x*x for x in b))
+                return (dot / (na * nb)) if na and nb else 0.0
 
-            # Prepare request data for models service
-            request_data = {
-                "prompt": complete_prompt,
-                "max_tokens": 250,
-                "temperature": 0.7
-            }
-            
-            # Make request to models service
-            async with httpx.AsyncClient(timeout=30.0) as client:
-                response = await client.post(
-                    f"{phi4_agent_url}/generate",
-                    json=request_data
-                )
-                
-                if response.status_code == 200:
-                    result = response.json()
-                    ai_text = result.get("response", "").strip()
-                    
-                    if ai_text:
-                        
-                        # Remove any system prompt echoing
-                        if ai_text.startswith("System:") or ai_text.startswith("Assistant:"):
-                            lines = ai_text.split("\n")
-                            ai_text = "\n".join([line for line in lines if not line.strip().startswith(("System:", "Assistant:", "User:"))])
-                            ai_text = ai_text.strip()
-                        
-                        # Determine if breathing exercise should be suggested
-                        breathing_exercise = None
-                        if mood_context.stress_level >= 7 or "anxious" in user_message.lower() or "stress" in user_message.lower():
-                            breathing_exercise = {
-                                "name": "4-7-8 Calming Breath",
-                                "description": "A powerful technique to reduce anxiety and stress",
-                                "steps": [
-                                    {"action": "inhale", "duration": 4, "instruction": "Breathe in slowly through your nose"},
-                                    {"action": "hold", "duration": 7, "instruction": "Hold your breath gently"},
-                                    {"action": "exhale", "duration": 8, "instruction": "Exhale completely through your mouth"}
-                                ],
-                                "cycles": 4
-                            }
-                        
-                        return MoodAwareResponse(
-                            response_text=ai_text,
-                            tone=self._determine_response_tone(mood_context),
-                            intervention_type=strategy,
-                            breathing_exercise=breathing_exercise,
-                            confidence_score=0.85,  # High confidence for models service
-                            follow_up_suggestions=self._generate_follow_up_suggestions(mood_context)
-                        )
-                    else:
-                        logger.warning(f"Phi-4 Agent returned empty response")
-                        return None
-                else:
-                    logger.error(f"Phi-4 Agent request failed with status {response.status_code}")
-                    return None
-                    
-        except Exception as e:
-            logger.error(f"Phi-4 Agent request failed: {e}")
+            best_template: Optional[str] = None
+            best_score: float = -1.0
+
+            for template in candidates:
+                emb = await models_client.get_text_embeddings(template)
+                if emb and emb.embedding:
+                    score = cosine(message_embedding.embedding, emb.embedding)
+                    if score > best_score:
+                        best_score = score
+                        best_template = template
+
+            if not best_template:
+                return None
+
+            # Personalize and return
+            personalized = await self._personalize_response(best_template, user_message, mood_context)
+            return MoodAwareResponse(
+                response_text=personalized,
+                tone=self._determine_response_tone(mood_context),
+                intervention_type=strategy,
+                confidence_score=min(0.9, max(0.5, best_score)),
+                follow_up_suggestions=self._generate_follow_up_suggestions(mood_context)
+            )
+        except Exception:
             return None
-    
+
     async def _get_enhanced_user_context(self, mood_context: MoodContext) -> Dict[str, Any]:
         """
         Get enhanced user context from AI Context Store and Memory Service
@@ -1010,4 +879,27 @@ Please provide a thoughtful, empathetic response that addresses the user's needs
             "normalization": "What you're experiencing is more common than you might think.",
             "hope_instillation": "While things feel difficult now, there are paths forward.",
             "strength_identification": "I can see the strength it takes to reach out and share this."
+        }
+
+    def _load_template_candidates(self) -> Dict[str, List[str]]:
+        """Lightweight templates for embeddings-based selection."""
+        base = self._load_response_templates()
+        return {
+            "crisis_intervention": [
+                base["supportive_intervention"]["very_low_mood"],
+                "I hear how overwhelming this feels. You're not alone. Let's focus on one small step together right now.",
+            ],
+            "supportive_intervention": [
+                base["supportive_intervention"]["low_mood"],
+                base["maintenance_support"]["default"],
+            ],
+            "guidance_focused": [
+                base["guidance_focused"]["default"],
+            ],
+            "positive_reinforcement": [
+                base["positive_reinforcement"]["default"],
+            ],
+            "maintenance_support": [
+                base["maintenance_support"]["default"],
+            ],
         }

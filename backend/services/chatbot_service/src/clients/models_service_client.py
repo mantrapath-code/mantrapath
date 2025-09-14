@@ -37,7 +37,7 @@ class ModelsServiceClient:
     
     def __init__(self):
         import os
-        self.models_service_url = os.getenv("MODELS_SERVICE_URL", "http://models-service:8085")
+        self.models_service_url = os.getenv("MODELS_SERVICE_URL", "http://localhost:8081")
         self.timeout = int(os.getenv("MODELS_SERVICE_TIMEOUT", "30"))
         self.max_retries = int(os.getenv("MODELS_SERVICE_MAX_RETRIES", "3"))
         self.cache_ttl = int(os.getenv("MODELS_SERVICE_CACHE_TTL", "3600"))
@@ -256,7 +256,7 @@ class ModelsServiceClient:
             
             async with httpx.AsyncClient(timeout=self.timeout) as client:
                 response = await client.post(
-                    f"{self.models_service_url}/api/v1/chat/generate",
+                    f"{self.models_service_url}/api/v1/nlp/generate",
                     json=payload,
                     headers=headers
                 )

@@ -278,7 +278,8 @@ async def process_voice_command(
                 "X-Language": voice_command.language
             },
             body=routing_result.body,
-            query_params=routing_result.query_params
+            query_params=routing_result.query_params,
+            request_id=request_id  # Ensure request_id is populated
         )
         
         # Proxy request to target service
@@ -491,17 +492,21 @@ async def enhanced_service_proxy(
         # Create enhanced proxy request
         body = await request.body() if request.method in ["POST", "PUT", "PATCH"] else None
         
+        # Use existing X-Request-ID if provided, otherwise use generated one
+        actual_request_id = request.headers.get("X-Request-ID") or request_id
+        
         enhanced_request = ProxyRequest(
             method=HTTPMethod(request.method),
             path=f"/{path}",
             headers={
                 **dict(request.headers),
-                "X-Request-ID": request_id,
+                "X-Request-ID": actual_request_id,
                 "X-AI-Context": ai_context.to_header() if ai_context else "",
                 "X-Cultural-Context": cultural_context.to_header() if cultural_context else ""
             },
             body=body,
-            query_params=dict(request.query_params)
+            query_params=dict(request.query_params),
+            request_id=actual_request_id  # Ensure request_id is populated
         )
         
         # Circuit breaker check
@@ -675,17 +680,21 @@ async def route_request(
                     if not target_path.startswith('/'):
                         target_path = f"/{target_path}"
         
+        # Use existing X-Request-ID if provided, otherwise use generated one
+        actual_request_id = request.headers.get("X-Request-ID") or request_id
+        
         proxy_request = ProxyRequest(
             method=HTTPMethod(request.method),
             path=target_path,
             headers={
                 **dict(request.headers),
-                "X-Request-ID": request_id,
+                "X-Request-ID": actual_request_id,
                 "X-AI-Context": ai_context.to_header() if ai_context else "",
                 "X-Cultural-Context": cultural_context.to_header() if cultural_context else ""
             },
             body=body,
-            query_params=dict(request.query_params)
+            query_params=dict(request.query_params),
+            request_id=actual_request_id  # Ensure request_id is populated
         )
         
         # Circuit breaker check

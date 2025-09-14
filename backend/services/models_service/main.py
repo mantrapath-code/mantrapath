@@ -27,7 +27,7 @@ from api.routes import router as api_router
 from api.translation_routes import router as translation_router, set_models_service
 # from api.emotion_routes import router as emotion_router
 # from api.translation_routes_ollama import router as ollama_translation_router
-# from api.text_generation_routes import router as text_generation_router
+from api.text_generation_routes import router as text_generation_router
 from config.settings import get_settings
 from utils.logger import setup_logger
 
@@ -221,7 +221,7 @@ app.include_router(translation_router, prefix="/api/v1/translation", tags=["tran
 # Include new Ollama-based routes for centralized model service (temporarily commented out)
 # app.include_router(emotion_router, tags=["emotion"])  # Includes /api/v1/emotion/*
 # app.include_router(ollama_translation_router, prefix="/api/v1/translation/ollama", tags=["ollama-translation"])
-# app.include_router(text_generation_router, tags=["text-generation"])  # Includes /api/v1/nlp/*
+app.include_router(text_generation_router, tags=["text-generation"])  # Includes /api/v1/nlp/*
 
 if __name__ == "__main__":
     # Get port from environment or use default
