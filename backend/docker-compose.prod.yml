@@ -419,12 +419,12 @@ services:
       # NLP Configuration
       - NLP_DEFAULT_ENGINE=transformers
       - TRANSLATION_DEFAULT_ENGINE=marian
-  - SENTIMENT_DEFAULT_MODEL=cardiffnlp/twitter-roberta-base-sentiment-latest
-  # Preload (download) specific models in background without blocking startup (comma separated)
-  - MODELS_PRELOAD_LIST=${MODELS_PRELOAD_LIST:-whisper_base,vosk_hi_small}
-  - MODELS_PRELOAD_BACKGROUND=${MODELS_PRELOAD_BACKGROUND:-true}
-  # When running in non-minimal mode you can skip default loads if providing custom preload list
-  - MODELS_SERVICE_SKIP_DEFAULTS=${MODELS_SERVICE_SKIP_DEFAULTS:-false}
+      - SENTIMENT_DEFAULT_MODEL=cardiffnlp/twitter-roberta-base-sentiment-latest
+      # Preload (download) specific models in background without blocking startup (comma separated)
+      - MODELS_PRELOAD_LIST=${MODELS_PRELOAD_LIST:-whisper_base,vosk_hi_small}
+      - MODELS_PRELOAD_BACKGROUND=${MODELS_PRELOAD_BACKGROUND:-true}
+      # When running in non-minimal mode you can skip default loads if providing custom preload list
+      - MODELS_SERVICE_SKIP_DEFAULTS=${MODELS_SERVICE_SKIP_DEFAULTS:-false}
     volumes:
       - models_cache:/app/cache
       - models_data:/app/models
