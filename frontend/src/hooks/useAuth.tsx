@@ -1,4 +1,4 @@
-import { createContext, useContext, useEffect, useState } from 'react'
+import { createContext, useContext, useEffect, useState, useCallback } from 'react'
 import { apiService } from '@/services/api'
 import { getUserDisplayName, getUserInitials } from '@/utils/userDisplay'
 
@@ -112,23 +112,23 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   }
 
-  const verifyEmail = async (token: string) => {
+  const verifyEmail = useCallback(async (token: string) => {
     try {
       const result = await apiService.verifyEmail(token)
       return result
     } catch (error) {
       throw error
     }
-  }
+  }, [])
 
-  const resendVerification = async (email: string) => {
+  const resendVerification = useCallback(async (email: string) => {
     try {
       const result = await apiService.resendVerification(email)
       return result
     } catch (error) {
       throw error
     }
-  }
+  }, [])
 
   const logout = () => {
     apiService.logout()

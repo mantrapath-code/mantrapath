@@ -56,8 +56,7 @@ class ApiService {
 
     this.backendCheckPromise = new Promise(async (resolve) => {
       try {
-        console.log('🔍 Checking backend availability at:', this.baseUrl)
-        const response = await fetch(`${this.baseUrl}/health`, {
+        const response = await fetch(`${this.baseUrl.replace('/api', '')}/api/health`, {
           method: 'GET',
           headers: { 'Content-Type': 'application/json' },
           signal: AbortSignal.timeout(5000) // 5 second timeout
@@ -66,22 +65,13 @@ class ApiService {
         this.isBackendAvailable = response.ok
         
         if (this.isBackendAvailable) {
-          console.log('✅ Backend is available and healthy at', this.baseUrl)
           const healthData = await response.json()
-          console.log('Backend health data:', healthData)
         } else {
-          console.error('❌ Backend responded but not healthy:', response.status)
           throw new Error(`Backend health check failed with status: ${response.status}`)
         }
         
         resolve(this.isBackendAvailable)
       } catch (error) {
-        console.error('❌ Backend not available at', this.baseUrl, error)
-        console.error('To start the backend services:')
-        console.error('   ./start.sh')
-        console.error('   # Select option 2: Backend Services Only')
-        console.error('   # OR')
-        console.error('   ./start.sh backend')
         this.isBackendAvailable = false
         resolve(false)
       }
@@ -233,7 +223,7 @@ class ApiService {
 
   // Auth methods
   async login(emailOrUsername: string, password: string) {
-    const response = await this.request<{access_token: string, refresh_token: string}>('/login', {
+    const response = await this.request<{access_token: string, refresh_token: string}>('/auth/login', {
       method: 'POST',
       body: JSON.stringify({ email_or_username: emailOrUsername, password }),
     })
@@ -259,7 +249,7 @@ class ApiService {
       access_token?: string
       refresh_token?: string
       token_type?: string
-    }>('/register', {
+    }>('/auth/register', {
       method: 'POST',
       body: JSON.stringify(userData),
     })
@@ -390,7 +380,7 @@ class ApiService {
   async getCelebrationStats() {
     try {
       // Use community service directly for user stats
-      const response = await fetch(`${COMMUNITY_SERVICE_URL}/user/stats`, {
+      const response = await fetch(`${this.baseUrl.replace('/api', '')}/api/community/user/stats`, {
         method: 'GET',
         headers: {
           'Content-Type': 'application/json',
@@ -759,19 +749,19 @@ class ApiService {
       category: string
       member_count: number
       is_joined: boolean
-    }>>('/forums', {}, COMMUNITY_SERVICE_URL)
+    }>>('/community/forums')
   }
 
   async joinForum(forumId: string) {
-    return this.request(`/forums/${forumId}/join`, {
+    return this.request(`/community/community/forums/${forumId}/join`, {
       method: 'POST',
-    }, COMMUNITY_SERVICE_URL)
+    })
   }
 
   async leaveForum(forumId: string) {
-    return this.request(`/forums/${forumId}/leave`, {
+    return this.request(`/community/community/forums/${forumId}/leave`, {
       method: 'DELETE',
-    }, COMMUNITY_SERVICE_URL)
+    })
   }
 
   async getForumThreads(forumId: string, limit: number = 20) {
@@ -791,7 +781,7 @@ class ApiService {
       is_liked: boolean
       created_at: string
       is_pinned?: boolean
-    }>>(`/forums/${forumId}/threads?format=array&limit=${limit}`, {}, COMMUNITY_SERVICE_URL)
+    }>>(`/community/community/forums/${forumId}/threads?format=array&limit=${limit}`)
   }
 
   async createThread(threadData: {
@@ -799,21 +789,21 @@ class ApiService {
     title: string
     content: string
   }) {
-    return this.request('/forums/thread', {
+    return this.request('/community/community/forums/thread', {
       method: 'POST',
       body: JSON.stringify(threadData),
-    }, COMMUNITY_SERVICE_URL)
+    })
   }
 
   async replyToThread(threadId: string, content: string, parentId?: string) {
-    return this.request(`/forums/thread/${threadId}/reply`, {
+    return this.request(`/community/community/forums/thread/${threadId}/reply`, {
       method: 'POST',
       body: JSON.stringify({
         thread_id: threadId,
         content,
         parent_id: parentId,
       }),
-    }, COMMUNITY_SERVICE_URL)
+    })
   }
 
   async getThreadReplies(threadId: string) {
@@ -844,7 +834,7 @@ class ApiService {
         is_liked: boolean
       }>
       reply_count: number
-    }>(`/forums/thread/${threadId}`, {}, COMMUNITY_SERVICE_URL)
+    }>(`/community/community/forums/thread/${threadId}`)
     return threadDetails.replies || []
   }
 
@@ -853,13 +843,13 @@ class ApiService {
       success: boolean
       liked: boolean
       message: string
-    }>('/forums/like', {
+    }>('/community/forums/like', {
       method: 'POST',
       body: JSON.stringify({
         content_type: contentType,
         content_id: contentId,
       }),
-    }, COMMUNITY_SERVICE_URL)
+    })
   }
 
   async unlikeContent(contentType: string, contentId: string) {
@@ -868,20 +858,20 @@ class ApiService {
       success: boolean
       liked: boolean
       message: string
-    }>('/forums/like', {
+    }>('/community/forums/like', {
       method: 'POST',
       body: JSON.stringify({
         content_type: contentType,
         content_id: contentId,
       }),
-    }, COMMUNITY_SERVICE_URL)
+    })
   }
 
   async getContentLikes(contentType: string, contentId: string) {
     return this.request<{
       like_count: number
       is_liked: boolean
-    }>(`/forums/content/${contentType}/${contentId}/likes`, {}, COMMUNITY_SERVICE_URL)
+    }>(`/community/forums/content/${contentType}/${contentId}/likes`)
   }
 
   // User Stats and Reputation
@@ -894,7 +884,7 @@ class ApiService {
       replies_posted: number
       likes_received: number
       help_score: number
-    }>('/user/stats', {}, COMMUNITY_SERVICE_URL)
+    }>('/community/user/stats')
   }
 
   async getUserActivity(limit: number = 10) {
@@ -909,7 +899,7 @@ class ApiService {
         created_at: string
         like_count: number
       }>
-    }>(`/user/activity?limit=${limit}`, {}, COMMUNITY_SERVICE_URL)
+    }>(`/community/user/activity?limit=${limit}`)
   }
 
   // Events & Challenges
@@ -925,7 +915,7 @@ class ApiService {
       participant_count: number
       is_participating: boolean
       created_at: string
-    }>>('/forums/events', {}, COMMUNITY_SERVICE_URL)
+    }>>('/community/forums/events')
   }
 
   async createEvent(eventData: {
@@ -936,22 +926,22 @@ class ApiService {
     location?: string
     is_virtual: boolean
   }) {
-    return this.request('/forums/events', {
+    return this.request('/community/forums/events', {
       method: 'POST',
       body: JSON.stringify(eventData),
-    }, COMMUNITY_SERVICE_URL)
+    })
   }
 
   async joinEvent(eventId: string) {
-    return this.request(`/forums/events/${eventId}/join`, {
+    return this.request(`/community/forums/events/${eventId}/join`, {
       method: 'POST',
-    }, COMMUNITY_SERVICE_URL)
+    })
   }
 
   async leaveEvent(eventId: string) {
-    return this.request(`/forums/events/${eventId}/leave`, {
+    return this.request(`/community/forums/events/${eventId}/leave`, {
       method: 'DELETE',
-    }, COMMUNITY_SERVICE_URL)
+    })
   }
 
   async getChallenges() {
@@ -966,7 +956,7 @@ class ApiService {
       participant_count: number
       is_participating: boolean
       created_at: string
-    }>>('/forums/challenges', {}, COMMUNITY_SERVICE_URL)
+    }>>('/community/forums/challenges')
   }
 
   async createChallenge(challengeData: {
@@ -990,22 +980,22 @@ class ApiService {
       difficulty_level: challengeData.difficulty_level || 'beginner'
     }
     
-    return this.request('/forums/challenges', {
+    return this.request('/community/forums/challenges', {
       method: 'POST',
       body: JSON.stringify(completeData),
-    }, COMMUNITY_SERVICE_URL)
+    })
   }
 
   async joinChallenge(challengeId: string) {
-    return this.request(`/forums/challenges/${challengeId}/join`, {
+    return this.request(`/community/forums/challenges/${challengeId}/join`, {
       method: 'POST',
-    }, COMMUNITY_SERVICE_URL)
+    })
   }
 
   async leaveChallenge(challengeId: string) {
-    return this.request(`/forums/challenges/${challengeId}/leave`, {
+    return this.request(`/community/forums/challenges/${challengeId}/leave`, {
       method: 'POST',
-    }, COMMUNITY_SERVICE_URL)
+    })
   }
 
   // Enhanced Challenge Progress Tracking
@@ -1026,7 +1016,7 @@ class ApiService {
       streak_count: number
       difficulty_rating?: number
       created_at: string
-    }>(`/forums/challenges/${challengeId}/progress`, {
+    }>(`/community/forums/challenges/${challengeId}/progress`, {
       method: 'POST',
       body: JSON.stringify(progressData),
     })
@@ -1043,7 +1033,7 @@ class ApiService {
       streak_count: number
       difficulty_rating?: number
       created_at: string
-    }>>(`/forums/challenges/${challengeId}/progress?days=${days}`)
+    }>>(`/community/forums/challenges/${challengeId}/progress?days=${days}`)
   }
 
   async getChallengeLeaderboard(challengeId: string, limit: number = 10) {
@@ -1054,7 +1044,7 @@ class ApiService {
       completed_days: number
       current_streak: number
       joined_at: string
-    }>>(`/forums/challenges/${challengeId}/leaderboard?limit=${limit}`)
+    }>>(`/community/forums/challenges/${challengeId}/leaderboard?limit=${limit}`)
   }
 
   // Event Comments
@@ -1076,7 +1066,7 @@ class ApiService {
       is_liked: boolean
       parent_id?: string
       replies: any[]
-    }>(`/forums/events/${eventId}/comments`, {
+    }>(`/community/forums/events/${eventId}/comments`, {
       method: 'POST',
       body: JSON.stringify(commentData),
     })
@@ -1097,7 +1087,7 @@ class ApiService {
       is_liked: boolean
       parent_id?: string
       replies: any[]
-    }>>(`/forums/events/${eventId}/comments`)
+    }>>(`/community/forums/events/${eventId}/comments`)
   }
 
   // Challenge Comments
@@ -1119,7 +1109,7 @@ class ApiService {
       is_liked: boolean
       parent_id?: string
       replies: any[]
-    }>(`/forums/challenges/${challengeId}/comments`, {
+    }>(`/community/forums/challenges/${challengeId}/comments`, {
       method: 'POST',
       body: JSON.stringify(commentData),
     })
@@ -1140,7 +1130,7 @@ class ApiService {
       is_liked: boolean
       parent_id?: string
       replies: any[]
-    }>>(`/forums/challenges/${challengeId}/comments`)
+    }>>(`/community/forums/challenges/${challengeId}/comments`)
   }
 
   async getPersonalizedFeed(userId: string, preferences?: {
@@ -1582,7 +1572,7 @@ class ApiService {
   // Real-time AI Insights from backend services
   async getAIEmotionAnalysis(text: string) {
     try {
-      const response = await fetch(`http://localhost:8000/ai-events/api/v1/analyze/emotion`, {
+  const response = await fetch(`${AI_EVENT_PROCESSOR_URL}/api/v1/analyze/emotion`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -1618,7 +1608,7 @@ class ApiService {
     try {
       // Get predictive intervention analysis
       const userId = this.getUserId()
-      const response = await fetch(`http://localhost:8000/ai-events/api/v1/predict/intervention/${userId}`, {
+  const response = await fetch(`${AI_EVENT_PROCESSOR_URL}/api/v1/predict/intervention/${userId}`, {
         method: 'GET',
         headers: {
           'Content-Type': 'application/json',
@@ -1779,8 +1769,8 @@ export const communityApi = {
     try {
       // Use forums/challenges and forums/events as community feed sources
       const [challenges, events] = await Promise.all([
-        apiService.request('/forums/challenges'),
-        apiService.request('/forums/events')
+        apiService.request('/community/forums/challenges'),
+        apiService.request('/community/forums/events')
       ])
 
       // Transform challenges and events into feed items

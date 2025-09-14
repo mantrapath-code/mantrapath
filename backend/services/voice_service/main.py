@@ -224,4 +224,22 @@ async def voice_service_status():
 if __name__ == "__main__":
     import uvicorn
     port = int(os.getenv("VOICE_SERVICE_PORT", 8011))
-    uvicorn.run(app, host="0.0.0.0", port=port, reload=True)
+    
+    # SSL configuration
+    ssl_keyfile = os.getenv("SSL_KEYFILE", "/app/ssl_certs/key.pem")
+    ssl_certfile = os.getenv("SSL_CERTFILE", "/app/ssl_certs/cert.pem")
+    ssl_enabled = os.getenv("SSL_ENABLED", "true").lower() == "true"
+    
+    if ssl_enabled and os.path.exists(ssl_keyfile) and os.path.exists(ssl_certfile):
+        logger.info(f"Starting voice service with SSL on port {port}")
+        uvicorn.run(
+            app, 
+            host="0.0.0.0", 
+            port=port, 
+            ssl_keyfile=ssl_keyfile,
+            ssl_certfile=ssl_certfile,
+            reload=True
+        )
+    else:
+        logger.warning(f"SSL disabled or certificates not found. Starting without SSL on port {port}")
+        uvicorn.run(app, host="0.0.0.0", port=port, reload=True)

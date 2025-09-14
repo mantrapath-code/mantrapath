@@ -71,7 +71,7 @@ class AuthService {
 
   // Register a new user
   async register(email: string, username: string, password: string): Promise<LoginResponse> {
-    const response = await fetch(`${API_BASE_URL}/register`, {
+    const response = await fetch(`${API_BASE_URL}/auth/register`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -102,7 +102,7 @@ class AuthService {
 
   // Login with email and password
   async login(email: string, password: string): Promise<LoginResponse> {
-    const response = await fetch(`${API_BASE_URL}/login`, {
+    const response = await fetch(`${API_BASE_URL}/auth/login`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -146,7 +146,7 @@ class AuthService {
     if (!refreshToken) return null
 
     try {
-      const response = await fetch(`${API_BASE_URL}/refresh-token`, {
+      const response = await fetch(`${API_BASE_URL}/auth/refresh-token`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

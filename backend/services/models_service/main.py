@@ -64,13 +64,44 @@ async def lifespan(app: FastAPI):
         tts_engine = TTSEngine(model_manager)
         nlp_engine = NLPEngine(model_manager)
         
+        # Optional preload list (comma separated)
+        preload_list_env = os.getenv("MODELS_PRELOAD_LIST", "").strip()
+        background_preload = os.getenv("MODELS_PRELOAD_BACKGROUND", "true").lower() == "true"
+
         if minimal_mode:
-            logger.info("✅ Models Service initialized in minimal mode (skipping model loading)")
+            logger.info("✅ Models Service initialized in minimal mode (skipping default model loading)")
         else:
-            # Load default models only if not in minimal mode
-            await stt_engine.load_default_models()
-            await tts_engine.load_default_models()
-            await nlp_engine.load_default_models()
+            # Load defaults unless user explicitly wants to skip (when providing custom preload list and setting skip flag)
+            skip_defaults = os.getenv("MODELS_SERVICE_SKIP_DEFAULTS", "false").lower() == "true"
+            if skip_defaults and preload_list_env:
+                logger.info("⚙️  Skipping default model loads due to MODELS_SERVICE_SKIP_DEFAULTS=true")
+            else:
+                await stt_engine.load_default_models()
+                await tts_engine.load_default_models()
+                await nlp_engine.load_default_models()
+
+        # Handle custom preload list (works in both minimal and normal modes)
+        if preload_list_env:
+            models_to_preload = [m.strip() for m in preload_list_env.split(',') if m.strip()]
+            if models_to_preload:
+                logger.info(f"📥 Requested preload of models: {models_to_preload} (background={background_preload})")
+
+                async def _preload_models():
+                    for model_name in models_to_preload:
+                        try:
+                            if model_manager.is_model_available(model_name):
+                                logger.info(f"✅ Model already available: {model_name}")
+                                continue
+                            await model_manager.download_model(model_name)
+                        except Exception as e:
+                            logger.error(f"❌ Failed to preload {model_name}: {e}")
+                    logger.info("🎯 Preload sequence complete")
+
+                if background_preload:
+                    # Launch without blocking startup
+                    asyncio.create_task(_preload_models())
+                else:
+                    await _preload_models()
         
         # Set models service reference for translation routes
         set_models_service(nlp_engine)

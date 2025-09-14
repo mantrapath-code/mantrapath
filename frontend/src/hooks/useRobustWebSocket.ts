@@ -380,24 +380,22 @@ export function useRobustWebSocket(
   // Initialize connections
   useEffect(() => {
     if (isInitializedRef.current) {
-      console.log('🔌 WebSocket already initialized, skipping...')
       return
     }
 
-    console.log('🔌 Starting WebSocket initialization...')
     isInitializedRef.current = true
-    // Use demo user ID if no user is authenticated
-    const effectiveUserId = userId || 'demo-user'
+    // Use authenticated user ID or skip WebSocket if no user
+    if (!userId) {
+      return
+    }
+    const effectiveUserId = userId
     const urls = getWebSocketUrls(effectiveUserId)
 
     const initializeConnections = async () => {
       try {
-        console.log('🔌 Initializing WebSocket connections for user:', effectiveUserId)
-        console.log('🔌 WebSocket URLs:', urls)
         
         // Wait for page to be fully loaded
         if (document.readyState !== 'complete') {
-          console.log('⏳ Waiting for page to load...')
           await new Promise(resolve => {
             if (document.readyState === 'complete') {
               resolve(void 0)
@@ -412,9 +410,7 @@ export function useRobustWebSocket(
         
         for (const url of urls) {
           try {
-            console.log('🔌 Attempting to connect to:', url)
             await connect(url, effectiveUserId)
-            console.log('✅ Successfully connected to:', url)
           } catch (error) {
             console.error('❌ Failed to connect to:', url, error)
             // Continue trying other URLs instead of failing completely

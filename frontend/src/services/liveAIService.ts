@@ -4,10 +4,12 @@
  * Updated to use real backend endpoints
  */
 
+import { getServiceUrls } from '../config/api-config'
+
 class LiveAIService {
   private static instance: LiveAIService;
-  private baseUrl = 'http://localhost:8000'; // API Gateway
-  private mlServiceUrl = 'http://localhost:8008'; // ML Service
+  private baseUrl: string;
+  private mlServiceUrl: string;
 
   public static getInstance(): LiveAIService {
     if (!LiveAIService.instance) {
@@ -41,7 +43,7 @@ class LiveAIService {
   async getInsights() {
     try {
       // Use the real unified insights endpoint from ML service
-      const response = await fetch(`${this.mlServiceUrl}/api/v1/insights/unified`, {
+  const response = await fetch(`${this.mlServiceUrl}/api/v1/insights/unified`, {
         headers: this.getAuthHeaders()
       });
       
@@ -96,16 +98,9 @@ class LiveAIService {
 
   async getCommunityData() {
     try {
-      // Use real community service endpoint
-      const response = await fetch(`http://localhost:8000/community/user/stats`, {
-        headers: this.getAuthHeaders()
-      });
-      
-      if (!response.ok) {
-        throw new Error(`HTTP ${response.status}`);
-      }
-      
-      const data = await response.json();
+      // Use API service for consistent routing
+      const { apiService } = await import('./api');
+      const data = await apiService.getUserStats();
       
       // Transform to expected format
       return {
@@ -127,16 +122,25 @@ class LiveAIService {
 
   async getMoodData() {
     try {
-      // Use real mood service endpoint
-      const response = await fetch(`http://localhost:8000/notifications/mood/current`, {
-        headers: this.getAuthHeaders()
-      });
+      // Use API service for consistent routing
+      const { apiService } = await import('./api');
+      const data = await apiService.getMoodEntries(100);
       
-      if (!response.ok) {
-        throw new Error(`HTTP ${response.status}`);
+      // Process mood data to get current mood
+      if (data && data.length > 0) {
+        const latestMood = data[0];
+        return {
+          current_mood: latestMood.mood_type || 'neutral',
+          mood_score: latestMood.mood_score || 5,
+          trend: 'stable' // Could be calculated from recent entries
+        };
       }
       
-      return await response.json();
+      return {
+        current_mood: 'neutral',
+        mood_score: 5,
+        trend: 'unknown'
+      };
     } catch (error) {
       console.warn('😊 Mood service not available:', error);
       return {
@@ -150,7 +154,8 @@ class LiveAIService {
   async getEmotionDetection(text: string) {
     try {
       // Use real AI Event Processor emotion detection
-      const response = await fetch(`http://localhost:8000/ai-events/api/v1/analyze/emotion`, {
+  const urls = getServiceUrls();
+  const response = await fetch(`${urls.AI_EVENT_PROCESSOR_URL}/api/v1/analyze/emotion`, {
         method: 'POST',
         headers: this.getAuthHeaders(),
         body: JSON.stringify({ text, user_id: this.getUserId() })
@@ -173,8 +178,8 @@ class LiveAIService {
 
   async getAssistanceSuggestions() {
     try {
-      // Use real assistance engine endpoint
-      const response = await fetch(`http://localhost:8000/chatbot/assistance/suggestions`, {
+  // Placeholder: implement when assistance suggestions endpoint exists behind gateway
+  const response = await fetch(`${this.baseUrl}/notify/recent`, {
         headers: this.getAuthHeaders()
       });
       

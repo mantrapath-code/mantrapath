@@ -422,7 +422,7 @@ async def get_events(current_user: dict = Depends(get_current_user), db: Session
         return result
     except Exception as e:
         logger.error(f"Error getting events: {e}")
-        raise HTTPException(status_code=500, detail="Failed to get events")
+        return []
 
 @app.post("/forums/events/{event_id}/join")
 async def join_event(event_id: str, current_user: dict = Depends(get_current_user), db: Session = Depends(get_db)):
@@ -571,7 +571,7 @@ async def get_challenges(current_user: dict = Depends(get_current_user), db: Ses
         return result
     except Exception as e:
         logger.error(f"Error getting challenges: {e}")
-        raise HTTPException(status_code=500, detail="Failed to get challenges")
+        return []
 
 @app.post("/forums/challenges/{challenge_id}/join")
 async def join_challenge(challenge_id: str, current_user: dict = Depends(get_current_user), db: Session = Depends(get_db)):
