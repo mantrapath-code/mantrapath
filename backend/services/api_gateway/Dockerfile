@@ -17,8 +17,8 @@ RUN apt-get update && apt-get install -y \
     pkg-config \
     && rm -rf /var/lib/apt/lists/*
 
-# Copy requirements first for better caching
-COPY requirements.txt .
+# Copy service-specific requirements first for better caching
+COPY services/api_gateway/requirements.txt ./requirements.txt
 
 # Install Python dependencies
 RUN pip install --no-cache-dir -r requirements.txt
@@ -32,6 +32,13 @@ COPY services/api_gateway/config/ ./config/
 
 # Copy shared modules (required for authentication)
 COPY shared/ ./shared/
+
+# Compile shared protos for gRPC clients
+RUN python -m grpc_tools.protoc \
+    -I /app/shared/protos \
+    --python_out=/app/shared/protos \
+    --grpc_python_out=/app/shared/protos \
+    /app/shared/protos/translation.proto || true
 
 # Copy V3 enhanced configuration files
 COPY config/voice_config.yaml ./config/
@@ -50,7 +57,7 @@ HEALTHCHECK --interval=30s --timeout=10s --start-period=60s --retries=5 \
     CMD curl -f http://localhost:8000/api/v3/health/enhanced || exit 1
 
 # Set environment variables
-ENV PYTHONPATH=/app \
+ENV PYTHONPATH=/app:/app/shared/protos \
     PYTHONUNBUFFERED=1 \
     GATEWAY_VERSION=v3_enhanced \
     GATEWAY_PORT=8000 \

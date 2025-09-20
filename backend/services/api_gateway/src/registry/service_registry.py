@@ -40,8 +40,28 @@ class ServiceRegistry:
         logger.info("Service registry stopped")
     
     async def _initialize_services(self):
-        """Initialize services from configuration with standardized ports"""
-        services_config = [
+        """Initialize services from configuration with standardized ports.
+        If discovery is enabled, allow multiple instances via env lists for targeted services.
+        """
+        def _register_list(name: str, urls: List[str], health_path: str):
+            if not urls:
+                return False
+            instances: List[ServiceInstance] = []
+            for idx, url in enumerate(urls, start=1):
+                inst = ServiceInstance(
+                    id=f"{name}-{idx}",
+                    name=name,
+                    url=url,
+                    health_path=health_path,
+                    weight=1,
+                )
+                instances.append(inst)
+                logger.info(f"Registered service: {name} instance {idx} at {url} (health: {health_path})")
+            self._services[name] = instances
+            return True
+
+        # Default single-instance registrations (backward compatible)
+        defaults = [
             ("auth", service_config.auth_service_url, service_config.auth_service_health_path),
             ("profile", service_config.profile_service_url, service_config.profile_service_health_path),
             ("mood", service_config.mood_service_url, service_config.mood_service_health_path),
@@ -58,8 +78,20 @@ class ServiceRegistry:
             ("ai-events", service_config.ai_event_processor_url, service_config.ai_event_processor_health_path),
             ("ai-context", service_config.ai_context_store_url, service_config.ai_context_store_health_path),
         ]
-        
-        for name, url, health_path in services_config:
+
+        # If discovery is enabled, override specific services with multi-instance lists
+        if gateway_config.discovery_enabled:
+            # Translation service multi-instance
+            if service_config.translation_service_urls:
+                _register_list("translation", service_config.translation_service_urls, service_config.translation_service_health_path)
+            # Models service multi-instance
+            if service_config.models_service_urls:
+                _register_list("models", service_config.models_service_urls, service_config.models_service_health_path)
+
+        # Register any service not overridden above using single-instance default
+        for name, url, health_path in defaults:
+            if name in self._services:
+                continue
             service_instance = ServiceInstance(
                 id=f"{name}-1",
                 name=name,

@@ -1,0 +1,42 @@
+name: Deploy Prod
+
+on:
+  workflow_dispatch:
+    inputs:
+      release_name:
+        description: "Helm release name for prod"
+        required: false
+        default: "mantrapath-prod"
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Helm
+        uses: azure/setup-helm@v4
+
+      - name: Setup Kubectl
+        uses: azure/setup-kubectl@v4
+
+      - name: Configure kubeconfig
+        env:
+          KUBECONFIG_B64: ${{ secrets.KUBECONFIG_B64 }}
+        run: |
+          echo "$KUBECONFIG_B64" | base64 -d > kubeconfig
+          echo "KUBECONFIG=$(pwd)/kubeconfig" >> $GITHUB_ENV
+
+      - name: Create namespace if missing
+        run: |
+          kubectl --kubeconfig $KUBECONFIG get ns mantrapath-prod || kubectl --kubeconfig $KUBECONFIG create ns mantrapath-prod
+
+      - name: Helm upgrade prod
+        env:
+          RELEASE_NAME: ${{ github.event.inputs.release_name }}
+        run: |
+          helm upgrade --install ${RELEASE_NAME} ./deployment/helm/mantrapath \
+            --namespace mantrapath-prod \
+            -f ./deployment/helm/mantrapath/values.yaml \
+            -f ./deployment/helm/mantrapath/values-prod.yaml

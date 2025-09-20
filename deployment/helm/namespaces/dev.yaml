@@ -1,0 +1,8 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: mantrapath-dev
+  labels:
+    name: mantrapath-dev
+    app.kubernetes.io/part-of: mantrapath
+    environment: dev

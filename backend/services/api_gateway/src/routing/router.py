@@ -269,31 +269,21 @@ class RequestRouter:
                 auth_required=True
             ),
             
-            # Translation Service Routes - API v1 endpoints first
+            # Translation Service Routes - prefer clean paths
             RouteRule(
-                path_pattern=r"^/api/v1/translation/.*",
-                methods=[HTTPMethod.GET, HTTPMethod.POST],
-                service_name="translation",
-                strip_prefix=False,  # Keep full path
-                timeout=30,
-                retries=2,
-                auth_required=True
-            ),
-            # Translation Service Routes - Public endpoints
-            RouteRule(
-                path_pattern=r"^/translate/languages/?$",
+                path_pattern=r"^/translation/languages/?$",
                 methods=[HTTPMethod.GET],
                 service_name="translation",
-                strip_prefix=True,  # Strip /translate prefix
+                strip_prefix=False,
                 timeout=30,
                 retries=2,
                 auth_required=False  # Public endpoint
             ),
             RouteRule(
-                path_pattern=r"^/translate/.*",
+                path_pattern=r"^/translation/.*",
                 methods=[HTTPMethod.GET, HTTPMethod.POST],
                 service_name="translation",
-                strip_prefix=True,  # Strip /translate prefix
+                strip_prefix=False,
                 timeout=30,
                 retries=2,
                 auth_required=True

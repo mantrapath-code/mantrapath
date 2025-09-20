@@ -1,0 +1,48 @@
+syntax = "proto3";
+
+package mantrapath.translation;
+
+// Translation Service API
+service TranslationService {
+  // Translate a piece of text
+  rpc Translate (TranslateRequest) returns (TranslateResponse) {}
+
+  // Detect language of the provided text
+  rpc DetectLanguage (LanguageDetectionRequest) returns (LanguageDetectionResponse) {}
+
+  // List supported languages
+  rpc ListLanguages (ListLanguagesRequest) returns (ListLanguagesResponse) {}
+}
+
+message TranslateRequest {
+  string text = 1;
+  string source_language = 2; // "auto" allowed
+  string target_language = 3;
+  string domain = 4; // optional
+}
+
+message TranslateResponse {
+  string translated_text = 1;
+  string source_language = 2;
+  string target_language = 3;
+  double confidence_score = 4;
+  string engine = 5;
+  int32 processing_time_ms = 6;
+  bool cache_hit = 7;
+}
+
+message LanguageDetectionRequest {
+  string text = 1;
+}
+
+message LanguageDetectionResponse {
+  string detected_language = 1;
+  double confidence = 2;
+}
+
+message ListLanguagesRequest {}
+
+message ListLanguagesResponse {
+  repeated string supported_languages = 1;
+  repeated string indian_languages = 2;
+}

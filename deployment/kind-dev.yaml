@@ -1,0 +1,12 @@
+# kind cluster for dev with NodePort 30880 -> host 30880 for gateway
+kind: Cluster
+apiVersion: kind.x-k8s.io/v1alpha4
+name: mantrapath-dev
+nodes:
+- role: control-plane
+  extraPortMappings:
+    - containerPort: 30880
+      hostPort: 30880
+      protocol: TCP
+- role: worker
+- role: worker

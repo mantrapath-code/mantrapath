@@ -42,6 +42,7 @@ from src.models.response_models import EnhancedResponse
 from src.utils.language_detector import LanguageDetector
 from src.utils.cache_manager import CacheManager
 from src.utils.performance_monitor import PerformanceMonitor
+from src.shared.grpc_clients import TranslationGrpcClient
 
 # Configure structured logging
 import structlog
@@ -83,6 +84,7 @@ websocket_manager = WebSocketManager()
 language_detector = LanguageDetector()
 cache_manager = CacheManager()
 performance_monitor = PerformanceMonitor()
+translation_grpc = TranslationGrpcClient()
 
 # Security
 security = HTTPBearer(auto_error=False)
@@ -377,6 +379,24 @@ async def voice_streaming_websocket(websocket: WebSocket):
         await websocket_manager.unregister_connection(connection_id)
 
 
+# Versionless WebSocket alias for voice streaming
+@app.websocket("/api/voice/stream")
+async def voice_streaming_websocket_alias(websocket: WebSocket):
+    connection_id = str(uuid.uuid4())
+    await websocket.accept()
+    logger.info("Voice streaming (alias) connection established", connection_id=connection_id)
+    try:
+        await websocket_manager.register_connection(connection_id, websocket)
+        async for message in websocket.iter_text():
+            await websocket_manager.handle_voice_stream(connection_id, message)
+    except WebSocketDisconnect:
+        logger.info("Voice streaming (alias) connection closed", connection_id=connection_id)
+    except Exception as e:
+        logger.exception("Voice streaming (alias) error", connection_id=connection_id, error=str(e))
+    finally:
+        await websocket_manager.unregister_connection(connection_id)
+
+
 # WebSocket Proxy Endpoints for Backend Services
 @app.websocket("/api/notifications/ws/{user_id}")
 async def notifications_websocket_proxy(websocket: WebSocket, user_id: str):
@@ -455,6 +475,117 @@ async def voice_metrics():
 async def cultural_metrics():
     """Get cultural adaptation metrics"""
     return await performance_monitor.get_cultural_metrics()
+
+
+# Start of gRPC-backed REST shims
+@app.post("/translation/translate")
+async def translate_via_grpc(payload: dict):
+    """Use gRPC to call Translation service while exposing a clean REST path."""
+    text = payload.get("text", "")
+    target_language = payload.get("target_language", "")
+    source_language = payload.get("source_language", "auto")
+    domain = payload.get("domain", "")
+    if not text or not target_language:
+        raise HTTPException(status_code=400, detail="text and target_language are required")
+    try:
+        resp = translation_grpc.translate(text=text, target_language=target_language, source_language=source_language, domain=domain)
+        return {
+            "translated_text": resp.translated_text,
+            "source_language": resp.source_language,
+            "target_language": resp.target_language,
+            "confidence_score": resp.confidence_score,
+            "engine": resp.engine,
+            "processing_time_ms": resp.processing_time_ms,
+            "cache_hit": resp.cache_hit,
+        }
+    except Exception as e:
+        logger.error("gRPC translation error", error=str(e))
+        raise HTTPException(status_code=502, detail="Translation service unavailable")
+
+
+@app.post("/translation/detect-language")
+async def detect_language_via_grpc(payload: dict):
+    text = payload.get("text", "")
+    if not text:
+        raise HTTPException(status_code=400, detail="text is required")
+    try:
+        resp = translation_grpc.detect_language(text=text)
+        return {"detected_language": resp.detected_language, "confidence": resp.confidence}
+    except Exception as e:
+        logger.error("gRPC detect-language error", error=str(e))
+        raise HTTPException(status_code=502, detail="Translation service unavailable")
+
+
+@app.get("/translation/languages")
+async def list_languages_via_grpc():
+    try:
+        resp = translation_grpc.list_languages()
+        return {"supported_languages": list(resp.supported_languages), "indian_languages": list(resp.indian_languages)}
+    except Exception as e:
+        logger.error("gRPC list-languages error", error=str(e))
+        raise HTTPException(status_code=502, detail="Translation service unavailable")
+
+    
+@app.post("/api/translation/translate")
+async def api_translate_via_grpc(payload: dict):
+    return await translate_via_grpc(payload)
+
+
+@app.post("/api/translation/detect-language")
+async def api_detect_language_via_grpc(payload: dict):
+    return await detect_language_via_grpc(payload)
+
+
+@app.get("/api/translation/languages")
+async def api_list_languages_via_grpc():
+    return await list_languages_via_grpc()
+
+
+# Versionless alias under /api/translate/* to match frontend expectations
+@app.post("/api/translate/translate")
+async def api_translate_alias_via_grpc(payload: dict):
+    return await translate_via_grpc(payload)
+
+
+@app.post("/api/translate/detect-language")
+async def api_detect_language_alias_via_grpc(payload: dict):
+    return await detect_language_via_grpc(payload)
+
+
+@app.get("/api/translate/languages")
+async def api_list_languages_alias_via_grpc():
+    return await list_languages_via_grpc()
+
+
+# Direct aliases without /api prefix because Nginx strips /api/ when proxy_pass has trailing slash
+@app.post("/translate/translate")
+async def translate_alias_no_api(payload: dict):
+    return await translate_via_grpc(payload)
+
+
+@app.post("/translate/detect-language")
+async def detect_language_alias_no_api(payload: dict):
+    return await detect_language_via_grpc(payload)
+
+
+@app.get("/translate/languages")
+async def list_languages_alias_no_api():
+    """Return languages as an array of {code, name} objects for frontend compatibility."""
+    try:
+        resp = translation_grpc.list_languages()
+        codes = list(resp.supported_languages)
+        # Friendly names for common languages; default to code if unknown
+        name_map = {
+            "en": "English", "hi": "Hindi", "es": "Spanish", "fr": "French", "de": "German",
+            "bn": "Bengali", "te": "Telugu", "ta": "Tamil", "mr": "Marathi", "gu": "Gujarati",
+            "kn": "Kannada", "ml": "Malayalam", "pa": "Punjabi", "zh": "Chinese", "ja": "Japanese",
+            "ko": "Korean", "ar": "Arabic", "pt": "Portuguese", "ru": "Russian", "it": "Italian",
+            "ur": "Urdu", "as": "Assamese"
+        }
+        return [{"code": c, "name": name_map.get(c, c)} for c in codes]
+    except Exception as e:
+        logger.error("gRPC list-languages alias error", error=str(e))
+        raise HTTPException(status_code=502, detail="Translation service unavailable")
 
 
 # Enhanced Service Proxy with V3 Features

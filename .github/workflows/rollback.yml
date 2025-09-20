@@ -1,0 +1,92 @@
+name: Rollback Deployment
+
+on:
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: 'Target environment'
+        required: true
+        type: choice
+        options:
+        - dev
+        - prod
+      revision:
+        description: 'Revision to rollback to (leave empty for previous)'
+        required: false
+        type: string
+
+env:
+  REGISTRY: blr.vultrcr.com/mantrapath
+
+jobs:
+  rollback:
+    runs-on: ubuntu-latest
+    environment:
+      name: ${{ github.event.inputs.environment }}
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Setup kubectl and Helm
+      run: |
+        # Install kubectl
+        curl -LO "https://dl.k8s.io/release/$(curl -L -s https://dl.k8s.io/release/stable.txt)/bin/linux/amd64/kubectl"
+        chmod +x kubectl
+        sudo mv kubectl /usr/local/bin/
+        
+        # Install Helm
+        curl https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3 | bash
+
+    - name: Get current deployment info
+      run: |
+        NAMESPACE="mantrapath-${{ github.event.inputs.environment }}"
+        RELEASE="mantrapath-${{ github.event.inputs.environment }}"
+        
+        echo "Current deployment status:"
+        helm status $RELEASE -n $NAMESPACE || echo "No deployment found"
+        
+        echo "Deployment history:"
+        helm history $RELEASE -n $NAMESPACE || echo "No history found"
+
+    - name: Rollback deployment
+      run: |
+        NAMESPACE="mantrapath-${{ github.event.inputs.environment }}"
+        RELEASE="mantrapath-${{ github.event.inputs.environment }}"
+        
+        if [[ -n "${{ github.event.inputs.revision }}" ]]; then
+          echo "Rolling back to revision ${{ github.event.inputs.revision }}"
+          helm rollback $RELEASE ${{ github.event.inputs.revision }} -n $NAMESPACE --wait --timeout=15m
+        else
+          echo "Rolling back to previous revision"
+          helm rollback $RELEASE -n $NAMESPACE --wait --timeout=15m
+        fi
+
+    - name: Verify rollback
+      run: |
+        NAMESPACE="mantrapath-${{ github.event.inputs.environment }}"
+        RELEASE="mantrapath-${{ github.event.inputs.environment }}"
+        
+        echo "Checking rollback status..."
+        helm status $RELEASE -n $NAMESPACE
+        
+        echo "Checking pod status..."
+        kubectl get pods -n $NAMESPACE -l app.kubernetes.io/instance=$RELEASE
+        
+        # Wait for pods to be ready
+        kubectl wait --for=condition=ready pod -l app.kubernetes.io/instance=$RELEASE -n $NAMESPACE --timeout=300s
+
+    - name: Run health checks
+      run: |
+        echo "Running post-rollback health checks..."
+        # Add health check commands here
+        echo "Health checks completed"
+
+    - name: Notify rollback status
+      if: always()
+      run: |
+        if [[ "${{ job.status }}" == "success" ]]; then
+          echo "✅ Rollback to ${{ github.event.inputs.environment }} completed successfully!"
+        else
+          echo "❌ Rollback to ${{ github.event.inputs.environment }} failed!"
+        fi

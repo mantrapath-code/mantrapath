@@ -45,6 +45,8 @@ class GatewayConfig(BaseSettings):
     
     # Load balancing
     load_balancing_strategy: LoadBalancingStrategy = Field(default=LoadBalancingStrategy.ROUND_ROBIN)
+    # Discovery toggle (off by default to avoid prod impact)
+    discovery_enabled: bool = Field(default=False, description="Enable multi-instance service discovery from env lists")
     
     # Health checks
     health_check_interval: int = Field(default=30)  # seconds
@@ -134,6 +136,8 @@ class ServiceConfig(BaseSettings):
     # Translation Service (Fixed naming - was incorrectly mapped to content service) 
     translation_service_url: str = Field(default_factory=lambda: f"http://translation-service:{os.getenv('TRANSLATION_SERVICE_PORT', '8010')}")
     translation_service_health_path: str = Field(default="/health")
+    # Optional multi-instance list (comma-separated or JSON array)
+    translation_service_urls: List[str] = Field(default_factory=lambda: ServiceConfig._split_env_list('SERVICE_TRANSLATION_SERVICE_URLS'))
     
     # Voice Service
     voice_service_url: str = Field(default_factory=lambda: f"http://voice-service:{os.getenv('VOICE_SERVICE_PORT', '8011')}")
@@ -146,6 +150,8 @@ class ServiceConfig(BaseSettings):
     # Models Service (Fixed port conflict - was 8080, now using env var)
     models_service_url: str = Field(default_factory=lambda: f"http://models-service:{os.getenv('MODELS_SERVICE_INTERNAL_PORT', '8080')}")
     models_service_health_path: str = Field(default="/health")
+    # Optional multi-instance list (comma-separated or JSON array)
+    models_service_urls: List[str] = Field(default_factory=lambda: ServiceConfig._split_env_list('SERVICE_MODELS_SERVICE_URLS'))
     
     # AI Event Processor Service
     ai_event_processor_url: str = Field(default_factory=lambda: f"http://ai-event-processor:{os.getenv('AI_EVENT_PROCESSOR_PORT', '8014')}")
@@ -160,6 +166,25 @@ class ServiceConfig(BaseSettings):
         "env_prefix": "SERVICE_",
         "extra": "ignore"
     }
+
+    @staticmethod
+    def _split_env_list(var_name: str) -> List[str]:
+        """Load a list of URLs from environment variable.
+        Supports comma-separated or JSON array values.
+        """
+        raw = os.getenv(var_name, "").strip()
+        if not raw:
+            return []
+        # Try JSON first
+        try:
+            import json
+            val = json.loads(raw)
+            if isinstance(val, list):
+                return [str(u).strip() for u in val if str(u).strip()]
+        except Exception:
+            pass
+        # Fallback: comma-separated
+        return [u.strip() for u in raw.split(',') if u.strip()]
 
 # Global configuration instances
 gateway_config = GatewayConfig()

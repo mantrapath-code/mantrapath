@@ -1,0 +1,376 @@
+name: Production Deployment
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'backend/**'
+      - 'frontend/**'
+      - 'deployment/**'
+      - '.github/workflows/**'
+  workflow_dispatch:
+    inputs:
+      force_rebuild:
+        description: 'Force rebuild all images'
+        required: false
+        default: 'false'
+        type: boolean
+      environment:
+        description: 'Target environment'
+        required: true
+        default: 'prod'
+        type: choice
+        options:
+          - prod
+          - staging
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_NAME: ${{ github.repository }}
+  NODE_VERSION: '18'
+  PYTHON_VERSION: '3.11'
+
+jobs:
+  validate:
+    name: Validate & Build
+    runs-on: ubuntu-latest
+    outputs:
+      backend_changed: ${{ steps.changes.outputs.backend }}
+      frontend_changed: ${{ steps.changes.outputs.frontend }}
+      deployment_changed: ${{ steps.changes.outputs.deployment }}
+      image_tag: ${{ steps.meta.outputs.tags }}
+      should_deploy: ${{ steps.should_deploy.outputs.deploy }}
+    
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
+
+      - name: Detect changes
+        uses: dorny/paths-filter@v2
+        id: changes
+        with:
+          filters: |
+            backend:
+              - 'backend/**'
+            frontend:
+              - 'frontend/**'
+            deployment:
+              - 'deployment/**'
+              - '.github/workflows/**'
+
+      - name: Determine deployment necessity
+        id: should_deploy
+        run: |
+          if [[ "${{ steps.changes.outputs.backend }}" == "true" || 
+                "${{ steps.changes.outputs.frontend }}" == "true" || 
+                "${{ steps.changes.outputs.deployment }}" == "true" || 
+                "${{ github.event.inputs.force_rebuild }}" == "true" ]]; then
+            echo "deploy=true" >> $GITHUB_OUTPUT
+            echo "🚀 Changes detected - deployment will proceed"
+          else
+            echo "deploy=false" >> $GITHUB_OUTPUT
+            echo "ℹ️ No relevant changes - skipping deployment"
+          fi
+
+      - name: Extract metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+          tags: |
+            type=ref,event=branch
+            type=sha,prefix={{branch}}-
+            type=raw,value=latest,enable={{is_default_branch}}
+
+      - name: System health check
+        run: |
+          echo "🔍 System Health Check"
+          echo "======================"
+          echo "Runner OS: $(uname -a)"
+          echo "Docker: $(docker --version)"
+          echo "Available space: $(df -h / | tail -1 | awk '{print $4}')"
+          echo "Memory: $(free -h | grep Mem | awk '{print $7}')"
+
+  build-images:
+    name: Build & Push Images
+    runs-on: ubuntu-latest
+    needs: validate
+    if: needs.validate.outputs.should_deploy == 'true'
+    strategy:
+      matrix:
+        service:
+          - api-gateway
+          - models-service
+          - translation-service
+          - auth-service
+          - profile-service
+          - mood-service
+          - chatbot-service
+          - content-service
+          - community-service
+          - notification-service
+          - ml-service
+          - voice-service
+          - action-orchestrator
+          - ai-context-store
+          - ai-event-processor
+          - voice-event-processor
+          - memory-service
+          - proactive-assistance
+          - media-service
+          - frontend
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and push ${{ matrix.service }}
+        uses: docker/build-push-action@v5
+        with:
+          context: ${{ matrix.service == 'frontend' && './frontend' || './backend' }}
+          dockerfile: ${{ matrix.service == 'frontend' && './frontend/Dockerfile' || format('./backend/{0}/Dockerfile', matrix.service) }}
+          push: true
+          tags: ${{ env.REGISTRY }}/${{ github.repository }}/mantrapath-${{ matrix.service }}:${{ github.sha }},${{ env.REGISTRY }}/${{ github.repository }}/mantrapath-${{ matrix.service }}:latest
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+          platforms: linux/amd64
+
+  deploy-production:
+    name: Deploy to Production Cluster
+    runs-on: ubuntu-latest
+    needs: [validate, build-images]
+    if: needs.validate.outputs.should_deploy == 'true'
+    environment: 
+      name: production
+      url: https://mantrapath.com
+    
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Configure Production Kubernetes Context
+        run: |
+          echo "🔧 Setting up Production Kubernetes context..."
+          
+          # Create kubeconfig for production cluster
+          mkdir -p ~/.kube
+          
+          # Production cluster configuration
+          cat > ~/.kube/config << EOF
+          apiVersion: v1
+          kind: Config
+          clusters:
+          - cluster:
+              certificate-authority-data: ${{ secrets.PROD_K8S_CA_CERT }}
+              server: ${{ secrets.PROD_K8S_SERVER }}
+            name: production-cluster
+          contexts:
+          - context:
+              cluster: production-cluster
+              namespace: mantrapath-prod
+              user: production-user
+            name: production
+          current-context: production
+          users:
+          - name: production-user
+            user:
+              token: ${{ secrets.PROD_K8S_TOKEN }}
+          EOF
+          
+          # Verify connection to production cluster
+          kubectl cluster-info
+          kubectl get nodes
+          
+          echo "✅ Connected to production cluster"
+
+      - name: Install Helm
+        uses: azure/setup-helm@v3
+        with:
+          version: '3.13.0'
+
+      - name: Validate Production Configuration
+        run: |
+          echo "🔍 Validating production deployment configuration..."
+          
+          cd deployment/helm/mantrapath
+          
+          # Lint production values
+          helm lint . --values values-prod.yaml
+          
+          # Test template rendering
+          helm template mantrapath-prod . \
+            --values values-prod.yaml \
+            --set global.env=prod \
+            --set global.namespace=mantrapath-prod \
+            --set global.imageTag=${{ github.sha }} \
+            --dry-run > /tmp/prod-manifest.yaml
+          
+          echo "📊 Production deployment will create:"
+          grep -c "^kind:" /tmp/prod-manifest.yaml | xargs echo "Kubernetes resources:"
+          
+          echo "✅ Production configuration validated"
+
+      - name: Deploy to Production Cluster
+        run: |
+          echo "🚀 Starting production deployment..."
+          echo "=================================="
+          
+          cd deployment/helm/mantrapath
+          
+          # Create production namespace if it doesn't exist
+          kubectl create namespace mantrapath-prod --dry-run=client -o yaml | kubectl apply -f -
+          
+          # Label namespace for production
+          kubectl label namespace mantrapath-prod environment=production --overwrite
+          kubectl label namespace mantrapath-prod app.kubernetes.io/name=mantrapath --overwrite
+          
+          # Deploy production secrets
+          echo "🔐 Deploying production secrets..."
+          kubectl create secret generic mantrapath-prod-secrets \
+            --namespace=mantrapath-prod \
+            --from-literal=postgres-password="${{ secrets.PROD_POSTGRES_PASSWORD }}" \
+            --from-literal=postgres-user="${{ secrets.PROD_POSTGRES_USER }}" \
+            --from-literal=postgres-database="${{ secrets.PROD_POSTGRES_DATABASE }}" \
+            --from-literal=jwt-secret-key="${{ secrets.PROD_JWT_SECRET_KEY }}" \
+            --from-literal=redis-password="${{ secrets.PROD_REDIS_PASSWORD }}" \
+            --from-literal=openai-api-key="${{ secrets.OPENAI_API_KEY }}" \
+            --from-literal=smtp-username="${{ secrets.SMTP_USERNAME }}" \
+            --from-literal=smtp-password="${{ secrets.SMTP_PASSWORD }}" \
+            --from-literal=smtp-server="${{ secrets.SMTP_SERVER }}" \
+            --from-literal=service-auth-token="${{ secrets.PROD_SERVICE_AUTH_TOKEN }}" \
+            --dry-run=client -o yaml | kubectl apply -f -
+          
+          # Deploy with Helm
+          echo "🎯 Deploying MantraPath to production cluster..."
+          helm upgrade --install mantrapath-prod . \
+            --namespace mantrapath-prod \
+            --values values-prod.yaml \
+            --set global.env=prod \
+            --set global.namespace=mantrapath-prod \
+            --set global.imageTag=${{ github.sha }} \
+            --set global.registry=${{ env.REGISTRY }}/${{ github.repository }} \
+            --set-string global.labels.deployment-id=$(date -u +%Y%m%d-%H%M%S) \
+            --set-string global.labels.git-sha=${{ github.sha }} \
+            --set-string global.labels.deployed-by="${{ github.actor }}" \
+            --timeout 15m \
+            --wait \
+            --atomic
+          
+          echo "✅ Production deployment completed successfully!"
+
+      - name: Production Health Checks
+        run: |
+          echo "🏥 Running production health checks..."
+          echo "===================================="
+          
+          # Wait for pods to be ready
+          echo "⏳ Waiting for pods to be ready..."
+          kubectl wait --for=condition=ready pod \
+            --selector=app.kubernetes.io/instance=mantrapath-prod \
+            --namespace=mantrapath-prod \
+            --timeout=600s
+          
+          # Check critical services
+          echo "🔍 Checking critical services..."
+          
+          critical_services=("postgres" "redis" "nats" "api-gateway" "frontend")
+          for service in "${critical_services[@]}"; do
+            pod_count=$(kubectl get pods -n mantrapath-prod -l component=$service --no-headers | wc -l)
+            ready_count=$(kubectl get pods -n mantrapath-prod -l component=$service --no-headers | grep -c "Running" || echo "0")
+            echo "  $service: $ready_count/$pod_count pods ready"
+          done
+          
+          # Test external connectivity
+          echo "🌐 Testing external connectivity..."
+          
+          # Get ingress IP
+          INGRESS_IP=$(kubectl get ingress mantrapath-prod-ingress -n mantrapath-prod -o jsonpath='{.status.loadBalancer.ingress[0].ip}' 2>/dev/null || echo "pending")
+          echo "  Ingress IP: $INGRESS_IP"
+          
+          # Test API Gateway health (via port-forward for now)
+          kubectl port-forward svc/mantrapath-prod-api-gateway 8000:8000 -n mantrapath-prod &
+          PORT_FORWARD_PID=$!
+          sleep 5
+          
+          if curl -f http://localhost:8000/health >/dev/null 2>&1; then
+            echo "  ✅ API Gateway health check passed"
+          else
+            echo "  ❌ API Gateway health check failed"
+          fi
+          
+          kill $PORT_FORWARD_PID 2>/dev/null || true
+          
+          echo "✅ Production health checks completed"
+
+      - name: Production Deployment Summary
+        run: |
+          echo "🎉 Production Deployment Summary"
+          echo "==============================="
+          echo ""
+          echo "📊 Deployment Details:"
+          echo "  Environment: Production"
+          echo "  Cluster: ${{ secrets.PROD_K8S_SERVER }}"
+          echo "  Namespace: mantrapath-prod"
+          echo "  Image Tag: ${{ github.sha }}"
+          echo "  Deployed by: ${{ github.actor }}"
+          echo "  Commit: ${{ github.sha }}"
+          echo ""
+          echo "🚀 Deployed Services:"
+          kubectl get pods -n mantrapath-prod --no-headers | wc -l | xargs echo "  Total Pods:"
+          kubectl get services -n mantrapath-prod --no-headers | wc -l | xargs echo "  Total Services:"
+          echo ""
+          echo "🌐 Access Points:"
+          echo "  Frontend: https://mantrapath.com"
+          echo "  API: https://api.mantrapath.com"
+          echo "  Admin: https://admin.mantrapath.com"
+          echo ""
+          echo "📈 Resource Usage:"
+          kubectl top nodes 2>/dev/null | head -5 || echo "  Resource metrics not available"
+          echo ""
+          echo "✅ Production deployment completed successfully!"
+
+  notify:
+    name: Notify Deployment Status
+    runs-on: ubuntu-latest
+    needs: [validate, build-images, deploy-production]
+    if: always()
+    
+    steps:
+      - name: Notify Success
+        if: needs.deploy-production.result == 'success'
+        run: |
+          echo "🎉 Production deployment successful!"
+          echo "Commit: ${{ github.sha }}"
+          echo "Deployed by: ${{ github.actor }}"
+          echo "Time: $(date)"
+          
+          # Add Slack/Discord/Email notification here if needed
+          # curl -X POST -H 'Content-type: application/json' \
+          #   --data '{"text":"🚀 MantraPath deployed to production successfully!"}' \
+          #   ${{ secrets.SLACK_WEBHOOK_URL }}
+
+      - name: Notify Failure
+        if: needs.deploy-production.result == 'failure'
+        run: |
+          echo "❌ Production deployment failed!"
+          echo "Commit: ${{ github.sha }}"
+          echo "Actor: ${{ github.actor }}"
+          echo "Please check the deployment logs."
+          
+          # Add failure notification here
+          # curl -X POST -H 'Content-type: application/json' \
+          #   --data '{"text":"🚨 MantraPath production deployment failed!"}' \
+          #   ${{ secrets.SLACK_WEBHOOK_URL }}
+

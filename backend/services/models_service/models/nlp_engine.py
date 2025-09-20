@@ -33,10 +33,22 @@ class NLPEngine:
     
     async def initialize(self):
         """Initialize the NLP engine with Phi-3"""
-        logger.info("🧠 Initializing NLP Engine with Phi-3...")
-        
-        # Initialize Phi-3 engine
-        success = await self.phi3_engine.initialize()
+        logger.info("🧠 Initializing NLP Engine with Phi-3 (non-blocking)...")
+
+        # Offload heavy model loading to a background thread to avoid blocking the event loop
+        try:
+            import asyncio
+
+            async def _init_async():
+                return await self.phi3_engine.initialize()
+
+            # phi3_engine.initialize() is async but internally performs heavy sync work.
+            # Execute it in a separate thread context to keep the server responsive.
+            success = await asyncio.to_thread(lambda: asyncio.run(_init_async()))
+        except Exception as e:
+            logger.error(f"❌ Error during Phi-3 engine init: {e}")
+            success = False
+
         if success:
             self.is_initialized = True
             self.loaded_models["phi3"] = self.phi3_engine  # Track the loaded model

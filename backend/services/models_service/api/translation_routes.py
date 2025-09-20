@@ -3,6 +3,7 @@ Translation API routes for Models Service using Phi-3
 """
 
 from fastapi import APIRouter, HTTPException, BackgroundTasks
+import asyncio
 from pydantic import BaseModel
 from typing import Optional, List, Dict, Any
 import logging
@@ -55,33 +56,44 @@ class TextGenerationResponse(BaseModel):
 
 # Global reference to models service components
 nlp_engine_ref = None
+_nlp_init_lock = asyncio.Lock()
 
 def set_models_service(service):
     global nlp_engine_ref
     nlp_engine_ref = service
 
+async def ensure_nlp_initialized():
+    """Ensure NLPEngine is initialized; perform lazy init if needed.
+    Uses an async lock to avoid concurrent initializations."""
+    global nlp_engine_ref
+    if nlp_engine_ref is None:
+        raise HTTPException(status_code=503, detail="NLP Engine not initialized (missing reference)")
+    try:
+        if getattr(nlp_engine_ref, 'is_initialized', False):
+            return
+        async with _nlp_init_lock:
+            # Double-check inside lock
+            if getattr(nlp_engine_ref, 'is_initialized', False):
+                return
+            logger.info("🧠 Lazy-initializing NLP Engine (Phi-3) on first request...")
+            init_ok = await nlp_engine_ref.initialize()
+            if not init_ok or not getattr(nlp_engine_ref, 'is_initialized', False):
+                logger.error("❌ NLP Engine lazy init failed")
+                raise HTTPException(status_code=503, detail="NLP Engine not ready")
+            logger.info("✅ NLP Engine initialized successfully (lazy)")
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error during NLP Engine init: {e}")
+        raise HTTPException(status_code=503, detail=f"NLP Engine init error: {str(e)}")
+
 @router.post("/translate", response_model=TranslationResponse)
 async def translate_text(request: TranslationRequest):
     """Translate text using Phi-3 model"""
     logger.info(f"Translation request received. nlp_engine_ref: {nlp_engine_ref}")
-    
-    if nlp_engine_ref is None:
-        logger.error("NLP Engine reference is None")
-        raise HTTPException(status_code=503, detail="NLP Engine not initialized")
-    
-    # Debug the nlp_engine_ref object
-    logger.info(f"NLP Engine type: {type(nlp_engine_ref)}")
-    logger.info(f"NLP Engine attributes: {dir(nlp_engine_ref)}")
-    
-    try:
-        is_initialized = getattr(nlp_engine_ref, 'is_initialized', None)
-        logger.info(f"is_initialized value: {is_initialized}")
-        
-        if not is_initialized:
-            raise HTTPException(status_code=503, detail="NLP Engine not ready")
-    except Exception as e:
-        logger.error(f"Error checking initialization: {e}")
-        raise HTTPException(status_code=503, detail=f"NLP Engine check failed: {str(e)}")
+
+    # Ensure NLP engine is ready (lazy-init on demand)
+    await ensure_nlp_initialized()
     
     try:
         result = await nlp_engine_ref.translate(
@@ -113,8 +125,8 @@ async def translate_text(request: TranslationRequest):
 @router.post("/detect-language", response_model=LanguageDetectionResponse)
 async def detect_language(request: LanguageDetectionRequest):
     """Detect language of text using Phi-3"""
-    if nlp_engine_ref is None or not getattr(nlp_engine_ref, 'is_initialized', False):
-        raise HTTPException(status_code=503, detail="NLP Engine not initialized")
+    # Ensure NLP engine is ready (lazy-init on demand)
+    await ensure_nlp_initialized()
     
     try:
         result = await nlp_engine_ref.detect_language(request.text)
@@ -129,8 +141,7 @@ async def detect_language(request: LanguageDetectionRequest):
 @router.post("/analyze-sentiment", response_model=SentimentResponse)
 async def analyze_sentiment(request: SentimentRequest):
     """Analyze sentiment using Phi-3"""
-    if nlp_engine_ref is None or not getattr(nlp_engine_ref, 'is_initialized', False):
-        raise HTTPException(status_code=503, detail="NLP Engine not initialized")
+    await ensure_nlp_initialized()
     
     try:
         result = await nlp_engine_ref.analyze_sentiment(
@@ -147,8 +158,7 @@ async def analyze_sentiment(request: SentimentRequest):
 @router.post("/generate-text", response_model=TextGenerationResponse)
 async def generate_text(request: TextGenerationRequest):
     """Generate text using Phi-3"""
-    if nlp_engine_ref is None or not getattr(nlp_engine_ref, 'is_initialized', False):
-        raise HTTPException(status_code=503, detail="NLP Engine not initialized")
+    await ensure_nlp_initialized()
     
     try:
         result = await nlp_engine_ref.generate_text(

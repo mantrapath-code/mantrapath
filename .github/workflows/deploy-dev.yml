@@ -1,0 +1,36 @@
+name: Deploy Dev
+
+on:
+  push:
+    branches: [ "main" ]
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Helm
+        uses: azure/setup-helm@v4
+
+      - name: Setup Kubectl
+        uses: azure/setup-kubectl@v4
+
+      - name: Configure kubeconfig
+        env:
+          KUBECONFIG_B64: ${{ secrets.KUBECONFIG_B64 }}
+        run: |
+          echo "$KUBECONFIG_B64" | base64 -d > kubeconfig
+          echo "KUBECONFIG=$(pwd)/kubeconfig" >> $GITHUB_ENV
+
+      - name: Create namespace if missing
+        run: |
+          kubectl --kubeconfig $KUBECONFIG get ns mantrapath-dev || kubectl --kubeconfig $KUBECONFIG create ns mantrapath-dev
+
+      - name: Helm upgrade dev
+        run: |
+          helm upgrade --install mantrapath-dev ./deployment/helm/mantrapath \
+            --namespace mantrapath-dev \
+            -f ./deployment/helm/mantrapath/values.yaml \
+            -f ./deployment/helm/mantrapath/values-dev.yaml
