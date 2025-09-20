@@ -14,7 +14,9 @@ export async function runHealthCheck() {
 
   // 1. Test backend connectivity
   try {
-    const response = await fetch('http://localhost:8000/health')
+    const { getApiBaseUrl } = await import('@/config/api-config')
+    const apiBase = getApiBaseUrl().replace(/\/$/, '')
+    const response = await fetch(`${apiBase}/health`)
     if (response.ok) {
       results.backendConnectivity = true
       console.log('✅ Backend connectivity: OK')
@@ -43,19 +45,21 @@ export async function runHealthCheck() {
 
   // 3. Test individual services
   const servicesToTest = [
-    { name: 'auth', port: 8001 },
-    { name: 'profile', port: 8002 },
-    { name: 'mood', port: 8003 },
-    { name: 'chatbot', port: 8004 },
-    { name: 'content', port: 8005 },
-    { name: 'community', port: 8006 },
-    { name: 'notification', port: 8007 },
-    { name: 'ml', port: 8008 }
+    { name: 'auth', path: '/api/auth/health' },
+    { name: 'profile', path: '/api/profile/health' },
+    { name: 'mood', path: '/api/mood/health' },
+    { name: 'chatbot', path: '/api/chatbot/health' },
+    { name: 'content', path: '/api/content/health' },
+    { name: 'community', path: '/api/community/health' },
+    { name: 'notification', path: '/api/notifications/health' },
+    { name: 'ml', path: '/api/ml/health' }
   ]
 
   for (const service of servicesToTest) {
     try {
-      const response = await fetch(`http://localhost:${service.port}/health`)
+      const { getApiBaseUrl } = await import('@/config/api-config')
+      const apiBase = getApiBaseUrl().replace(/\/$/, '')
+      const response = await fetch(`${apiBase}${service.path}`)
       results.services[service.name] = response.ok
       console.log(`${response.ok ? '✅' : '❌'} ${service.name} service: ${response.ok ? 'OK' : 'DOWN'}`)
     } catch (error) {
