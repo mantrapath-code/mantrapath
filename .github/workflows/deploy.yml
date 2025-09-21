@@ -1,4 +1,5 @@
 name: 🚀 MantraPath GitOps Deployment
+# Updated to use GitHub-hosted runners for compatibility
 
 on:
   push:
