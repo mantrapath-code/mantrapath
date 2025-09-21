@@ -38,23 +38,21 @@ except ImportError as e:
     logger.warning(f"Some ML/NLP libraries not available: {e}")
     ML_AVAILABLE = False
 
-# Download required NLTK data
+NLTK_AVAILABLE = False
 if ML_AVAILABLE:
     try:
-        nltk.download('vader_lexicon', quiet=True)
-        nltk.download('punkt', quiet=True)
-        nltk.download('stopwords', quiet=True)
-        nltk.download('averaged_perceptron_tagger', quiet=True)
         from nltk.sentiment import SentimentIntensityAnalyzer
         from nltk.corpus import stopwords
         from nltk.tokenize import word_tokenize, sent_tokenize
         from nltk.stem import WordNetLemmatizer
+        # Validate resources present (downloaded in Docker build)
+        _ = SentimentIntensityAnalyzer()
+        _ = set(stopwords.words('english'))
         NLTK_AVAILABLE = True
+        logger.info("NLTK components and data detected")
     except Exception as e:
-        logger.warning(f"NLTK data not fully available: {e}")
+        logger.error(f"Required NLTK components missing: {e}")
         NLTK_AVAILABLE = False
-else:
-    NLTK_AVAILABLE = False
 
 logger = logging.getLogger(__name__)
 
@@ -67,10 +65,22 @@ class NotificationContentEngine:
         self.model_dir = os.path.join(os.path.dirname(__file__), '..', 'trained_models')
         os.makedirs(self.model_dir, exist_ok=True)
         
-        # NLP and sentiment analysis components
-        self.sentiment_analyzer = SentimentIntensityAnalyzer() if NLTK_AVAILABLE else None
-        self.lemmatizer = WordNetLemmatizer() if NLTK_AVAILABLE else None
-        self.stop_words = set(stopwords.words('english')) if NLTK_AVAILABLE else set()
+        # NLP and sentiment analysis components (required)
+        if not NLTK_AVAILABLE:
+            raise RuntimeError(
+                "NLTK data not available. Please ensure the following corpora are installed: "
+                "'vader_lexicon', 'stopwords', 'punkt', 'wordnet'.\n"
+                "You can install them by running the following in a Python shell:\n"
+                "    import nltk\n"
+                "    nltk.download('vader_lexicon')\n"
+                "    nltk.download('stopwords')\n"
+                "    nltk.download('punkt')\n"
+                "    nltk.download('wordnet')\n"
+                "See https://www.nltk.org/data.html for more information."
+            )
+        self.sentiment_analyzer = SentimentIntensityAnalyzer()
+        self.lemmatizer = WordNetLemmatizer()
+        self.stop_words = set(stopwords.words('english'))
         
         # ML models for content generation
         self.tfidf_vectorizer = TfidfVectorizer(max_features=1000, stop_words='english')
@@ -522,27 +532,22 @@ class NotificationContentEngine:
                     # Extract emotional keywords
                     keywords = self._extract_emotional_keywords(text)
                     emotional_analysis["emotional_keywords"].extend(keywords)
-                
-                # Update primary emotion based on sentiment analysis
-                if emotional_analysis["sentiment_scores"]:
-                    avg_compound = np.mean([s['compound'] for s in emotional_analysis["sentiment_scores"]])
-                    
-                    if avg_compound <= -0.5:
-                        emotional_analysis["primary_emotion"] = "distressed"
-                        emotional_analysis["emotion_intensity"] = abs(avg_compound)
-                        emotional_analysis["therapeutic_needs"] = ["validation", "reframing", "grounding"]
-                    elif avg_compound <= -0.1:
-                        emotional_analysis["primary_emotion"] = "low_mood"
-                        emotional_analysis["emotion_intensity"] = abs(avg_compound)
-                        emotional_analysis["therapeutic_needs"] = ["encouragement", "behavioral_activation"]
-                    elif avg_compound >= 0.5:
-                        emotional_analysis["primary_emotion"] = "positive"
-                        emotional_analysis["emotion_intensity"] = avg_compound
-                        emotional_analysis["therapeutic_needs"] = ["reinforcement", "growth_mindset"]
-                    else:
-                        emotional_analysis["primary_emotion"] = "neutral"
-                        emotional_analysis["emotion_intensity"] = 0.5
-                        emotional_analysis["therapeutic_needs"] = ["general_support", "mindfulness"]
+            # If we have text but NLTK not available, use fallback sentiment analysis
+            elif text_data:
+                # Use simple sentiment fallback methods for each text entry
+                for text in text_data:
+                    fallback_score = self._simple_sentiment_score(text)
+                    combined_score = {
+                        'compound': fallback_score,
+                        'positive': max(fallback_score, 0),
+                        'negative': abs(min(fallback_score, 0)),
+                        'neutral': 1.0 - abs(fallback_score),
+                        'textblob_polarity': fallback_score,
+                        'textblob_subjectivity': 0.5  # Default/unknown
+                    }
+                    emotional_analysis["sentiment_scores"].append(combined_score)
+                    keywords = self._extract_emotional_keywords(text)
+                    emotional_analysis["emotional_keywords"].extend(keywords)
             
             # Analyze mood score trends if available
             if mood_entries:
@@ -1165,3 +1170,27 @@ class NotificationContentEngine:
         """Retrain the content model (placeholder for future ML)"""
         logger.info("Content engine model retrain completed (template-based system)")
         return True
+    
+    def _get_basic_stop_words(self) -> set:
+        """Provide a minimal English stop words set as fallback."""
+        return set([
+            'the','a','an','and','or','but','if','then','else','when','at','by','for','with','about','against',
+            'between','into','through','during','before','after','to','from','in','out','on','off','over','under',
+            'again','further','then','once','here','there','all','any','both','each','few','more','most','other',
+            'some','such','no','nor','not','only','own','same','so','than','too','very','s','t','can','will','just'
+        ])
+    
+    def _simple_sentiment_score(self, text: str) -> float:
+        """Simple sentiment heuristic if VADER is unavailable."""
+        positive = ['good','great','happy','joy','love','awesome','excellent','positive','relaxed','calm']
+        negative = ['bad','sad','angry','anxious','stress','terrible','awful','negative','upset','tired']
+        text_l = text.lower()
+        score = 0
+        for w in positive:
+            if w in text_l:
+                score += 1
+        for w in negative:
+            if w in text_l:
+                score -= 1
+        # Normalize roughly to [-1,1]
+        return max(-1.0, min(1.0, score / 5.0))

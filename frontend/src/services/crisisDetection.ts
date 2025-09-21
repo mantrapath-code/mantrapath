@@ -234,23 +234,39 @@ class CrisisDetectionService {
     moodEntries: any[], 
     behavioralInsights: any[]
   ): CrisisAnalysisResult {
+    // Guard: ML assessment may be null/undefined if ML service is down or returned no data
+    if (!mlAssessment || typeof mlAssessment !== 'object') {
+      console.warn('⚠️ ML crisis assessment missing or invalid. Returning fallback crisis analysis result.')
+      const fallback = this.createServiceUnavailableResponse('ml service unavailable or returned no data')
+      return {
+        ...fallback,
+        dataQuality: {
+          moodEntries: moodEntries.length,
+          journalEntries: 0,
+          sufficientData: moodEntries.length >= 7
+        },
+        mlAssessment: mlAssessment || null,
+        lastUpdated: new Date().toISOString()
+      }
+    }
+
     // Convert ML risk level to frontend format
-    const riskLevel = this.convertRiskLevel(mlAssessment.risk_level)
+    const riskLevel = this.convertRiskLevel(mlAssessment?.risk_level)
     
     // Extract crisis indicators from various sources
     const crisisIndicators = this.extractCrisisIndicators(moodEntries, behavioralInsights, mlAssessment)
     
     // Generate recommendations based on ML assessment
-    const recommendations = mlAssessment.recommended_interventions || []
+  const recommendations = mlAssessment?.recommended_interventions || []
     
     return {
       riskLevel,
-      confidence: mlAssessment.confidence || 0.5,
-      riskFactors: mlAssessment.key_risk_factors || [],
-      protectiveFactors: mlAssessment.protective_factors || [],
+      confidence: mlAssessment?.confidence ?? 0.5,
+      riskFactors: mlAssessment?.key_risk_factors ?? [],
+      protectiveFactors: mlAssessment?.protective_factors ?? [],
       recommendations,
-      urgencyLevel: this.convertUrgencyLevel(mlAssessment.urgency_level),
-      timeToIntervention: this.calculateTimeToIntervention(riskLevel, mlAssessment.time_to_crisis),
+      urgencyLevel: this.convertUrgencyLevel(mlAssessment?.urgency_level),
+      timeToIntervention: this.calculateTimeToIntervention(riskLevel, mlAssessment?.time_to_crisis),
       crisisIndicators,
       lastUpdated: new Date().toISOString(),
       mlAssessment,

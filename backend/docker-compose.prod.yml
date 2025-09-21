@@ -1,4 +1,3 @@
-version: "3.9"
 services:
   # Database
   postgres:
@@ -65,6 +64,33 @@ services:
       - NATS_SERVER_NAME=mantrapath-nats
     restart: unless-stopped
 
+  # Nginx reverse proxy with SSL termination
+  nginx:
+    image: nginx:alpine
+    container_name: mantrapath-nginx
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx/nginx-ssl.conf:/etc/nginx/nginx.conf:ro
+      - ./ssl_certs:/etc/nginx/ssl:ro
+      - nginx_cache:/var/cache/nginx
+      - nginx_logs:/var/log/nginx
+    environment:
+      - DOMAIN=${DOMAIN:-139.84.213.185}
+    networks:
+      - mantrapath-network
+    depends_on:
+      api-gateway:
+        condition: service_healthy
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://localhost/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 15s
+
   # API Gateway - Main service (V3 Enhanced)
   api-gateway:
     # Unique image (avoid single shared tag across all services)
@@ -85,6 +111,9 @@ services:
       - GATEWAY_PORT=8000
       - WEBSOCKET_PORT=8080
       - METRICS_PORT=9090
+      
+      # JWT configuration (must match Auth Service)
+      - JWT_SECRET_KEY=${JWT_SECRET_KEY}
       
       # Voice Features
       - VOICE_ROUTING_ENABLED=true
@@ -806,6 +835,10 @@ services:
       retries: 3
       start_period: 60s
 
+networks:
+  mantrapath-network:
+    driver: bridge
+
 volumes:
   postgres_data:
   nats_data:
@@ -813,7 +846,5 @@ volumes:
   models_data:
   voice_models:
   ai_models_cache:
-
-networks:
-  mantrapath-network:
-    driver: bridge
+  nginx_cache:
+  nginx_logs:

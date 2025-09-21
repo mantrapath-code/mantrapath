@@ -9,9 +9,6 @@ on:
       - 'nginx/**'
       - 'deployment/**'
       - '.github/workflows/**'
-  pull_request:
-    branches: [ main ]
-    types: [closed]
   workflow_dispatch:
     inputs:
       environment:
@@ -28,12 +25,18 @@ on:
         default: false
         type: boolean
 
+# Required to publish to GHCR using the workflow token or a PAT
+permissions:
+  contents: read
+  packages: write
+
 env:
   REGISTRY: ghcr.io
   IMAGE_NAME: ${{ github.repository }}
   DEPLOYMENT_PATH: /home/runner/mantrapath
   NODE_VERSION: '18'
   PYTHON_VERSION: '3.11'
+  USE_SYSTEM_NGINX: 'false'
 
 jobs:
   # Pre-deployment checks and validation
@@ -99,6 +102,47 @@ jobs:
         
         echo "✅ System check completed"
 
+  # Build and push container image(s) to GHCR only when updating main
+  build-and-push:
+    needs: validate
+    if: github.ref == 'refs/heads/main'
+    runs-on: [self-hosted, Linux, X64]
+    steps:
+    - name: 📥 Checkout code
+      uses: actions/checkout@v4
+
+    - name: 🐳 Set up Docker Buildx
+      uses: docker/setup-buildx-action@v3
+
+    - name: 🔑 Log in to GHCR
+      uses: docker/login-action@v3
+      with:
+        registry: ${{ env.REGISTRY }}
+        username: ${{ secrets.GHCR_USERNAME || github.actor }}
+        # Prefer a PAT (GHCR_PAT) if provided; otherwise use the default GITHUB_TOKEN
+        password: ${{ secrets.GHCR_PAT || secrets.GITHUB_TOKEN }}
+
+    - name: 🏷️ Extract metadata (tags, labels)
+      id: meta
+      uses: docker/metadata-action@v5
+      with:
+        images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+        tags: |
+          type=raw,value=main
+          type=sha,enable=true
+          type=raw,value=latest,enable={{is_default_branch}}
+
+    - name: 🏗️ Build and push backend base image
+      uses: docker/build-push-action@v6
+      with:
+        context: ./backend
+        file: ./backend/Dockerfile
+        push: true
+        tags: ${{ steps.meta.outputs.tags }}
+        labels: ${{ steps.meta.outputs.labels }}
+        cache-from: type=registry,ref=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:buildcache
+        cache-to: type=registry,ref=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:buildcache,mode=max
+
   # Main deployment job
   deploy:
     needs: validate
@@ -115,8 +159,8 @@ jobs:
       uses: docker/login-action@v3
       with:
         registry: ${{ env.REGISTRY }}
-        username: ${{ github.actor }}
-        password: ${{ secrets.GITHUB_TOKEN }}
+        username: ${{ secrets.GHCR_USERNAME || github.actor }}
+        password: ${{ secrets.GHCR_PAT || secrets.GITHUB_TOKEN }}
         
     - name: 🏷️ Extract metadata
       id: meta
@@ -303,16 +347,11 @@ jobs:
         # Build frontend
         echo "🔨 Building frontend..."
         npm run build
+
+  echo "✅ Frontend built"
         
-        # Deploy using Docker
-        echo "🐳 Deploying frontend container..."
-        cd ..
-        docker-compose -f backend/docker-compose.prod.yml up -d frontend
-        
-        echo "✅ Frontend deployed"
-        
-    - name: 🌐 Configure Nginx
-      if: needs.validate.outputs.deploy-config == 'true'
+    - name: 🌐 Configure Nginx (system)
+      if: needs.validate.outputs.deploy-config == 'true' && env.USE_SYSTEM_NGINX == 'true'
       run: |
         echo "🌐 Configuring Nginx..."
         
@@ -338,6 +377,14 @@ jobs:
         sudo systemctl enable nginx
         
         echo "✅ Nginx configured"
+
+    - name: 🌐 Start Nginx reverse proxy (container)
+      if: needs.validate.outputs.deploy-config == 'true' && env.USE_SYSTEM_NGINX != 'true'
+      run: |
+        echo "🌐 Starting Nginx container..."
+        cd backend
+        docker-compose -f docker-compose.prod.yml up -d nginx
+        echo "✅ Nginx container running"
         
     - name: ⏳ Wait for services to be ready
       run: |
@@ -421,13 +468,13 @@ jobs:
           failed_services+=("Redis")
         fi
         
-        # Frontend check
-        echo "🎨 Checking Frontend..."
-        if curl -f -s "http://localhost:3000/health" >/dev/null 2>&1; then
-          echo "✅ Frontend - Healthy"
+        # Frontend (via Nginx) check
+        echo "🎨 Checking Nginx/Frontend..."
+        if curl -f -s "http://localhost/health" >/dev/null 2>&1; then
+          echo "✅ Nginx - Healthy"
         else
-          echo "❌ Frontend - Unhealthy"
-          failed_services+=("Frontend")
+          echo "❌ Nginx - Unhealthy"
+          failed_services+=("Nginx")
         fi
         
         # Summary

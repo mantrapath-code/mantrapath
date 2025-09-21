@@ -17,12 +17,9 @@ const ML_SERVICE_URL = serviceUrls.ML_SERVICE_URL;
 
 // Direct service URLs for specific endpoints
 const COMMUNITY_SERVICE_URL = serviceUrls.COMMUNITY_SERVICE_URL;
-const PROFILE_SERVICE_URL = serviceUrls.PROFILE_SERVICE_URL;
 const AI_CONTEXT_SERVICE_URL = serviceUrls.AI_CONTEXT_SERVICE_URL;
 const AI_EVENT_PROCESSOR_URL = serviceUrls.AI_EVENT_PROCESSOR_URL;
 const ASSISTANCE_ENGINE_URL = serviceUrls.ASSISTANCE_ENGINE_URL;
-const MOOD_SERVICE_URL = serviceUrls.MOOD_SERVICE_URL;
-const CHATBOT_SERVICE_URL = serviceUrls.CHATBOT_SERVICE_URL;
 
 interface ApiError {
   message: string
@@ -56,7 +53,8 @@ class ApiService {
 
     this.backendCheckPromise = new Promise(async (resolve) => {
       try {
-        const response = await fetch(`${this.baseUrl.replace('/api', '')}/api/health`, {
+        // Prefer the gateway health/live endpoint via base URL
+        const response = await fetch(`${this.baseUrl}/health/live`, {
           method: 'GET',
           headers: { 'Content-Type': 'application/json' },
           signal: AbortSignal.timeout(5000) // 5 second timeout
@@ -309,7 +307,7 @@ class ApiService {
         }>
       }>
       celebration_triggers?: string[]
-    }>>(`/api/v1/mood/?limit=${limit}`, {}, MOOD_SERVICE_URL)
+    }>>(`/api/v1/mood/?limit=${limit}`)
   }
 
   async createMoodEntry(moodData: {
@@ -327,7 +325,7 @@ class ApiService {
     return this.request('/api/v1/mood/', {
       method: 'POST',
       body: JSON.stringify(moodData),
-    }, MOOD_SERVICE_URL)
+    })
   }
 
   async getAdaptiveQuestions() {
@@ -379,20 +377,16 @@ class ApiService {
 
   async getCelebrationStats() {
     try {
-      // Use community service directly for user stats
-      const response = await fetch(`${this.baseUrl.replace('/api', '')}/api/community/user/stats`, {
-        method: 'GET',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${this.token}`
-        }
-      });
-
-      if (!response.ok) {
-        throw new Error(`Community service error: ${response.status}`);
+      interface CommunityUserStats {
+        challenges_joined: number
+        events_joined: number
+        active_challenges: number
+        completed_activities: number
+        community_engagement_score: number
       }
 
-      const data = await response.json();
+      // Fetch user stats via community service through the gateway origin base
+      const data = await this.request<CommunityUserStats>(`/community/user/stats`, {}, COMMUNITY_SERVICE_URL)
 
       // Transform community stats to celebration format
       return {
@@ -524,7 +518,7 @@ class ApiService {
         description: string
       }>
       confidence_score: number
-    }>('/api/v1/mood/emotional-weather', {}, MOOD_SERVICE_URL)
+    }>('/api/v1/mood/emotional-weather')
   }
 
   async getWeeklyWeather() {
@@ -664,9 +658,9 @@ class ApiService {
         patterns: any[]
         insights: string[]
         recommendations: string[]
-      }>('/api/v1/ml/analyze-patterns/me', {
+      }>('/ml/analyze-patterns/me', {
         method: 'POST'
-      })
+      }, ML_SERVICE_URL)
     } catch (error) {
       console.warn('Pattern analysis endpoint error:', error)
       throw new Error('Pattern analysis endpoint is not available')
@@ -676,13 +670,13 @@ class ApiService {
   async getCorrelationAnalysis() {
     try {
       // Use the mood analytics overview which includes correlation data
-      return this.request<{
+      return this.requestML<{
         mood_statistics: any
         energy_statistics: any
         stress_statistics: any
         insights: string[]
         correlations?: any[]
-      }>('/api/v1/ml/mood-analysis')
+      }>('/ml/mood-analysis')
     } catch (error) {
       console.warn('Correlation analysis endpoint error:', error)
       throw new Error('Correlation analysis endpoint is not available')
@@ -698,7 +692,7 @@ class ApiService {
         insight_type: string
         generated_at: string
         data_quality: any
-      }>(`/api/v1/ml/personalized-insights/me?insight_type=weekly_summary`)
+      }>(`/ml/personalized-insights/me?insight_type=weekly_summary`, {}, ML_SERVICE_URL)
     } catch (error) {
       console.warn('ML personalized insights endpoint error:', error)
       throw new Error('ML personalized insights endpoint is not available')
@@ -733,7 +727,7 @@ class ApiService {
         key_metrics: any
         trend_analysis: any
         ml_features_available: string[]
-      }>('/api/v1/ml/analytics/overview')
+      }>('/ml/analytics/overview', {}, ML_SERVICE_URL)
     } catch (error) {
       console.warn('ML analytics overview endpoint error:', error)
       throw new Error('ML analytics overview endpoint is not available')
@@ -749,19 +743,19 @@ class ApiService {
       category: string
       member_count: number
       is_joined: boolean
-    }>>('/community/forums')
+    }>>('/community/forums', {}, COMMUNITY_SERVICE_URL)
   }
 
   async joinForum(forumId: string) {
-    return this.request(`/community/community/forums/${forumId}/join`, {
+    return this.request(`/community/forums/${forumId}/join`, {
       method: 'POST',
-    })
+    }, COMMUNITY_SERVICE_URL)
   }
 
   async leaveForum(forumId: string) {
-    return this.request(`/community/community/forums/${forumId}/leave`, {
+    return this.request(`/community/forums/${forumId}/leave`, {
       method: 'DELETE',
-    })
+    }, COMMUNITY_SERVICE_URL)
   }
 
   async getForumThreads(forumId: string, limit: number = 20) {
@@ -781,7 +775,7 @@ class ApiService {
       is_liked: boolean
       created_at: string
       is_pinned?: boolean
-    }>>(`/community/community/forums/${forumId}/threads?format=array&limit=${limit}`)
+    }>>(`/community/forums/${forumId}/threads?format=array&limit=${limit}`, {}, COMMUNITY_SERVICE_URL)
   }
 
   async createThread(threadData: {
@@ -789,21 +783,21 @@ class ApiService {
     title: string
     content: string
   }) {
-    return this.request('/community/community/forums/thread', {
+    return this.request('/community/forums/thread', {
       method: 'POST',
       body: JSON.stringify(threadData),
-    })
+    }, COMMUNITY_SERVICE_URL)
   }
 
   async replyToThread(threadId: string, content: string, parentId?: string) {
-    return this.request(`/community/community/forums/thread/${threadId}/reply`, {
+    return this.request(`/community/forums/thread/${threadId}/reply`, {
       method: 'POST',
       body: JSON.stringify({
         thread_id: threadId,
         content,
         parent_id: parentId,
       }),
-    })
+    }, COMMUNITY_SERVICE_URL)
   }
 
   async getThreadReplies(threadId: string) {
@@ -834,7 +828,7 @@ class ApiService {
         is_liked: boolean
       }>
       reply_count: number
-    }>(`/community/community/forums/thread/${threadId}`)
+    }>(`/community/forums/thread/${threadId}`, {}, COMMUNITY_SERVICE_URL)
     return threadDetails.replies || []
   }
 
@@ -849,7 +843,7 @@ class ApiService {
         content_type: contentType,
         content_id: contentId,
       }),
-    })
+    }, COMMUNITY_SERVICE_URL)
   }
 
   async unlikeContent(contentType: string, contentId: string) {
@@ -864,14 +858,14 @@ class ApiService {
         content_type: contentType,
         content_id: contentId,
       }),
-    })
+    }, COMMUNITY_SERVICE_URL)
   }
 
   async getContentLikes(contentType: string, contentId: string) {
     return this.request<{
       like_count: number
       is_liked: boolean
-    }>(`/community/forums/content/${contentType}/${contentId}/likes`)
+    }>(`/community/forums/content/${contentType}/${contentId}/likes`, {}, COMMUNITY_SERVICE_URL)
   }
 
   // User Stats and Reputation
@@ -884,7 +878,7 @@ class ApiService {
       replies_posted: number
       likes_received: number
       help_score: number
-    }>('/community/user/stats')
+    }>('/community/user/stats', {}, COMMUNITY_SERVICE_URL)
   }
 
   async getUserActivity(limit: number = 10) {
@@ -899,7 +893,7 @@ class ApiService {
         created_at: string
         like_count: number
       }>
-    }>(`/community/user/activity?limit=${limit}`)
+    }>(`/community/user/activity?limit=${limit}`, {}, COMMUNITY_SERVICE_URL)
   }
 
   // Events & Challenges
@@ -915,7 +909,7 @@ class ApiService {
       participant_count: number
       is_participating: boolean
       created_at: string
-    }>>('/community/forums/events')
+    }>>('/community/forums/events', {}, COMMUNITY_SERVICE_URL)
   }
 
   async createEvent(eventData: {
@@ -929,19 +923,19 @@ class ApiService {
     return this.request('/community/forums/events', {
       method: 'POST',
       body: JSON.stringify(eventData),
-    })
+    }, COMMUNITY_SERVICE_URL)
   }
 
   async joinEvent(eventId: string) {
     return this.request(`/community/forums/events/${eventId}/join`, {
       method: 'POST',
-    })
+    }, COMMUNITY_SERVICE_URL)
   }
 
   async leaveEvent(eventId: string) {
     return this.request(`/community/forums/events/${eventId}/leave`, {
       method: 'DELETE',
-    })
+    }, COMMUNITY_SERVICE_URL)
   }
 
   async getChallenges() {
@@ -956,7 +950,7 @@ class ApiService {
       participant_count: number
       is_participating: boolean
       created_at: string
-    }>>('/community/forums/challenges')
+    }>>('/community/forums/challenges', {}, COMMUNITY_SERVICE_URL)
   }
 
   async createChallenge(challengeData: {
@@ -983,19 +977,19 @@ class ApiService {
     return this.request('/community/forums/challenges', {
       method: 'POST',
       body: JSON.stringify(completeData),
-    })
+    }, COMMUNITY_SERVICE_URL)
   }
 
   async joinChallenge(challengeId: string) {
     return this.request(`/community/forums/challenges/${challengeId}/join`, {
       method: 'POST',
-    })
+    }, COMMUNITY_SERVICE_URL)
   }
 
   async leaveChallenge(challengeId: string) {
     return this.request(`/community/forums/challenges/${challengeId}/leave`, {
       method: 'POST',
-    })
+    }, COMMUNITY_SERVICE_URL)
   }
 
   // Enhanced Challenge Progress Tracking
@@ -1019,7 +1013,7 @@ class ApiService {
     }>(`/community/forums/challenges/${challengeId}/progress`, {
       method: 'POST',
       body: JSON.stringify(progressData),
-    })
+    }, COMMUNITY_SERVICE_URL)
   }
 
   async getChallengeProgress(challengeId: string, days: number = 30) {
@@ -1033,7 +1027,7 @@ class ApiService {
       streak_count: number
       difficulty_rating?: number
       created_at: string
-    }>>(`/community/forums/challenges/${challengeId}/progress?days=${days}`)
+    }>>(`/community/forums/challenges/${challengeId}/progress?days=${days}`, {}, COMMUNITY_SERVICE_URL)
   }
 
   async getChallengeLeaderboard(challengeId: string, limit: number = 10) {
@@ -1044,7 +1038,7 @@ class ApiService {
       completed_days: number
       current_streak: number
       joined_at: string
-    }>>(`/community/forums/challenges/${challengeId}/leaderboard?limit=${limit}`)
+    }>>(`/community/forums/challenges/${challengeId}/leaderboard?limit=${limit}`, {}, COMMUNITY_SERVICE_URL)
   }
 
   // Event Comments
@@ -1069,7 +1063,7 @@ class ApiService {
     }>(`/community/forums/events/${eventId}/comments`, {
       method: 'POST',
       body: JSON.stringify(commentData),
-    })
+    }, COMMUNITY_SERVICE_URL)
   }
 
   async getEventComments(eventId: string) {
@@ -1087,7 +1081,7 @@ class ApiService {
       is_liked: boolean
       parent_id?: string
       replies: any[]
-    }>>(`/community/forums/events/${eventId}/comments`)
+    }>>(`/community/forums/events/${eventId}/comments`, {}, COMMUNITY_SERVICE_URL)
   }
 
   // Challenge Comments
@@ -1112,7 +1106,7 @@ class ApiService {
     }>(`/community/forums/challenges/${challengeId}/comments`, {
       method: 'POST',
       body: JSON.stringify(commentData),
-    })
+    }, COMMUNITY_SERVICE_URL)
   }
 
   async getChallengeComments(challengeId: string) {
@@ -1130,7 +1124,7 @@ class ApiService {
       is_liked: boolean
       parent_id?: string
       replies: any[]
-    }>>(`/community/forums/challenges/${challengeId}/comments`)
+    }>>(`/community/forums/challenges/${challengeId}/comments`, {}, COMMUNITY_SERVICE_URL)
   }
 
   async getPersonalizedFeed(userId: string, preferences?: {
@@ -1170,7 +1164,7 @@ class ApiService {
     }>(`/community/feed/personalized`, {
       method: 'POST',
       body: JSON.stringify({ user_id: userId, preferences })
-    })
+    }, COMMUNITY_SERVICE_URL)
   }
 
   // Profile Service - now goes through API gateway
@@ -1178,8 +1172,8 @@ class ApiService {
     endpoint: string,
     options: RequestInit = {}
   ): Promise<T> {
-    // Route profile requests to Profile Service directly
-    return this.request<T>(endpoint, options, PROFILE_SERVICE_URL)
+    // Route profile requests through API Gateway
+    return this.request<T>(endpoint, options)
   }
 
   async getMyProfile() {
@@ -1279,7 +1273,7 @@ class ApiService {
         session_id: sessionId,
         user_context_refresh: false
       }),
-    }, CHATBOT_SERVICE_URL)
+    })
   }
 
   // Enhanced chatbot with Action Orchestrator integration
@@ -1333,7 +1327,7 @@ class ApiService {
         session_id: sessionId,
         user_context_refresh: shouldRefreshContext
       }),
-    }, CHATBOT_SERVICE_URL)
+    })
   }
 
   async getChatSessions() {
@@ -1343,7 +1337,7 @@ class ApiService {
       session_type: string
       is_active: boolean
       created_at: string
-    }>>('/api/chatbot/chat/sessions', {}, CHATBOT_SERVICE_URL)
+    }>>('/api/chatbot/chat/sessions')
   }
 
   async getChatHistory(sessionId: string) {
@@ -1353,13 +1347,13 @@ class ApiService {
       content: string
       message_type: string
       created_at: string
-    }>>(`/api/chatbot/chat/history?session_id=${sessionId}`, {}, CHATBOT_SERVICE_URL)
+    }>>(`/api/chatbot/chat/history?session_id=${sessionId}`)
   }
 
   async createChatSession() {
     return this.request('/api/chatbot/chat/session', {
       method: 'POST',
-    }, CHATBOT_SERVICE_URL)
+    })
   }
 
   async getBreathingExercises() {
@@ -1374,7 +1368,7 @@ class ApiService {
         }>
         cycles: number
       }>
-    }>('/api/chatbot/breathing-exercises', {}, CHATBOT_SERVICE_URL)
+    }>('/api/chatbot/breathing-exercises')
   }
 
   // Health check
@@ -1572,20 +1566,12 @@ class ApiService {
   // Real-time AI Insights from backend services
   async getAIEmotionAnalysis(text: string) {
     try {
-  const response = await fetch(`${AI_EVENT_PROCESSOR_URL}/api/v1/analyze/emotion`, {
+      const response = await this.request(`/ai-events/api/v1/analyze/emotion`, {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${this.token}`
-        },
         body: JSON.stringify({ text, user_id: this.getUserId() })
-      });
+      })
 
-      if (!response.ok) {
-        throw new Error(`AI Emotion service error: ${response.status}`);
-      }
-
-      return await response.json();
+      return response
     } catch (error) {
       console.warn('AI Emotion Analysis not available:', error);
       // Return mock emotion data as fallback
@@ -1608,20 +1594,22 @@ class ApiService {
     try {
       // Get predictive intervention analysis
       const userId = this.getUserId()
-  const response = await fetch(`${AI_EVENT_PROCESSOR_URL}/api/v1/predict/intervention/${userId}`, {
-        method: 'GET',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${this.token}`
+      interface PredictiveAnalysisResponse {
+        result?: {
+          insights?: any[]
+          recommended_actions?: any[]
+          urgency_level?: string
+          confidence?: number
         }
-      });
-
-      if (!response.ok) {
-        console.warn(`AI Insights service returned ${response.status}, using fallback`);
-        return this.getFallbackAIInsights();
+        insights?: any[]
+        recommendations?: any[]
+        risk_level?: string
+        confidence?: number
+        timestamp?: string
+        generated_at?: string
+        factors_analyzed?: any[]
       }
-
-      const data = await response.json();
+      const data = await this.request<PredictiveAnalysisResponse>(`/ai-events/api/v1/predict/intervention/${userId}`)
       
       return {
         insights: data.result?.insights || data.insights || [],
@@ -1693,7 +1681,7 @@ class ApiService {
 
   async getCurrentMoodContext() {
     try {
-      const response = await fetch(`${MOOD_SERVICE_URL}/api/v1/analytics/overview`, {
+      const response = await fetch(`${this.baseUrl}/api/v1/analytics/overview`, {
         method: 'GET',
         headers: {
           'Content-Type': 'application/json',
@@ -1769,8 +1757,8 @@ export const communityApi = {
     try {
       // Use forums/challenges and forums/events as community feed sources
       const [challenges, events] = await Promise.all([
-        apiService.request('/community/forums/challenges'),
-        apiService.request('/community/forums/events')
+        apiService.request('/community/forums/challenges', {}, COMMUNITY_SERVICE_URL),
+        apiService.request('/community/forums/events', {}, COMMUNITY_SERVICE_URL)
       ])
 
       // Transform challenges and events into feed items
@@ -1876,7 +1864,7 @@ export const communityApi = {
   getUserCommunityScore: async () => {
     return apiService.request<any>('/community/score', {
       method: 'GET'
-    })
+    }, COMMUNITY_SERVICE_URL)
   },
 }
 

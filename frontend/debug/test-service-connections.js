@@ -4,7 +4,7 @@
  */
 
 const services = [
-  { name: 'API Gateway', url: 'http://localhost:8000', port: 8000 },
+  { name: 'API Gateway', url: 'http://139.84.213.185:8000', port: 8000 },
   { name: 'AI Context Store', url: 'http://localhost:8001', port: 8001 },
   { name: 'AI Event Processor', url: 'http://localhost:8002', port: 8002 },
   { name: 'Voice Processor', url: 'http://localhost:8003', port: 8003 },
