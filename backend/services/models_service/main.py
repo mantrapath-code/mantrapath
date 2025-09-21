@@ -21,7 +21,8 @@ import psutil
 
 from models.stt_engine import STTEngine
 from models.tts_engine import TTSEngine  
-from models.nlp_engine import NLPEngine
+# Temporarily disable NLPEngine due to import issues
+# from models.nlp_engine import NLPEngine
 from models.model_manager import ModelManager
 from api.routes import router as api_router
 from api.translation_routes import router as translation_router, set_models_service
@@ -38,7 +39,7 @@ logger = setup_logger(__name__)
 # Global components
 stt_engine: Optional[STTEngine] = None
 tts_engine: Optional[TTSEngine] = None
-nlp_engine: Optional[NLPEngine] = None
+nlp_engine: Optional[Any]  # NLPEngine temporarily disabled = None
 model_manager: Optional[ModelManager] = None
 
 @asynccontextmanager
@@ -62,7 +63,7 @@ async def lifespan(app: FastAPI):
         # Initialize engines
         stt_engine = STTEngine(model_manager)
         tts_engine = TTSEngine(model_manager)
-        nlp_engine = NLPEngine(model_manager)
+        # nlp_engine = NLPEngine(model_manager)  # Temporarily disabled
         
         # Optional preload list (comma separated)
         preload_list_env = os.getenv("MODELS_PRELOAD_LIST", "").strip()
@@ -135,7 +136,7 @@ app = FastAPI(
 # Global components
 stt_engine: Optional[STTEngine] = None
 tts_engine: Optional[TTSEngine] = None
-nlp_engine: Optional[NLPEngine] = None
+nlp_engine: Optional[Any]  # NLPEngine temporarily disabled = None
 model_manager: Optional[ModelManager] = None
 
 # CORS

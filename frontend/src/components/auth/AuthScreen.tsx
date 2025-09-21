@@ -54,7 +54,7 @@ export function AuthScreen() {
   useEffect(() => {
     const checkBackend = async () => {
       try {
-        await apiService.request('/health')
+        await apiService.request('/api/health')
         setBackendStatus('connected')
       } catch (error) {
         setBackendStatus('disconnected')

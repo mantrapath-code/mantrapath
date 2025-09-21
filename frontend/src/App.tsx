@@ -22,6 +22,7 @@ import { useDeviceCapabilities } from "@/hooks/useDeviceCapabilities"
 import { usePerformanceMonitor } from "@/hooks/usePerformanceMonitor"
 import { motion, AnimatePresence } from "framer-motion"
 import { Toaster } from "@/components/ui/sonner"
+import { toast } from "sonner"
 // Import localStorage utilities for debugging
 import "@/utils/localStorage"
 // Import voice permissions for voice features
@@ -70,13 +71,38 @@ function AppContent() {
   // Memoize performance score to prevent excessive re-calculations
   const performanceScore = useMemo(() => getPerformanceScore(metrics), [getPerformanceScore, metrics])
 
-  // Check for email verification token in URL
+  // Check for email verification token in URL or verification result
   useEffect(() => {
     const urlParams = new URLSearchParams(window.location.search)
     const verificationToken = urlParams.get('token')
+    const currentPath = window.location.pathname
     
+    // Handle direct token verification (legacy)
     if (verificationToken) {
       setShowEmailVerification(true)
+    }
+    
+    // Handle verification success/failure redirects from auth service
+    if (currentPath.includes('verification-success')) {
+      const status = urlParams.get('status')
+      if (status === 'already_verified') {
+        toast.success('Email already verified! You can now log in.')
+      } else {
+        toast.success('Email verified successfully! You can now log in.')
+      }
+      // Clean up URL
+      window.history.replaceState({}, '', window.location.pathname)
+    } else if (currentPath.includes('verification-failed')) {
+      const error = urlParams.get('error')
+      if (error === 'token_expired') {
+        toast.error('Verification link has expired. Please register again.')
+      } else if (error === 'invalid_token') {
+        toast.error('Invalid verification link. Please try again.')
+      } else {
+        toast.error('Email verification failed. Please try again.')
+      }
+      // Clean up URL
+      window.history.replaceState({}, '', window.location.pathname)
     }
   }, [])
 

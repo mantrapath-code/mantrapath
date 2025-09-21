@@ -3,6 +3,7 @@ Authentication Service - Handles user registration, login, and token management
 """
 from fastapi import FastAPI, Depends, HTTPException, status, BackgroundTasks
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import RedirectResponse
 from sqlalchemy.orm import Session
 from pydantic import BaseModel, EmailStr
 from typing import Optional, Union
@@ -427,6 +428,37 @@ async def verify_email(verification_data: VerificationRequest, db: Session = Dep
     db.commit()
     
     return {"message": "Email verified successfully! You can now log in."}
+
+@app.get("/verify-email/{token}")
+async def verify_email_get(token: str, db: Session = Depends(get_db)):
+    """Verify user's email address via GET request (for email links)"""
+    
+    user = db.query(User).filter(
+        User.verification_token == token
+    ).first()
+    
+    frontend_url = os.getenv("FRONTEND_URL", "http://139.84.213.185:5173")
+    
+    if not user:
+        # Redirect to frontend with error
+        return RedirectResponse(url=f"{frontend_url}/auth/verification-failed?error=invalid_token")
+    
+    if user.verification_token_expires and user.verification_token_expires < datetime.utcnow():
+        # Redirect to frontend with error
+        return RedirectResponse(url=f"{frontend_url}/auth/verification-failed?error=token_expired")
+    
+    if user.is_verified:
+        # Redirect to frontend with success (already verified)
+        return RedirectResponse(url=f"{frontend_url}/auth/verification-success?status=already_verified")
+    
+    # Verify the user
+    user.is_verified = True
+    user.verification_token = None
+    user.verification_token_expires = None
+    db.commit()
+    
+    # Redirect to frontend with success
+    return RedirectResponse(url=f"{frontend_url}/auth/verification-success")
 
 @app.post("/resend-verification")
 async def resend_verification(email_data: dict, db: Session = Depends(get_db)):

@@ -25,6 +25,16 @@ class RequestRouter:
                 retries=3,
                 auth_required=False  # Auth endpoints don't require auth
             ),
+            # Auth Service Routes with /api prefix
+            RouteRule(
+                path_pattern=r"^/api/auth/.*",
+                methods=[HTTPMethod.GET, HTTPMethod.POST, HTTPMethod.PUT, HTTPMethod.DELETE],
+                service_name="auth",
+                strip_prefix=False,  # Handle custom stripping in proxy logic
+                timeout=30,
+                retries=3,
+                auth_required=False  # Auth endpoints don't require auth
+            ),
             RouteRule(
                 path_pattern=r"^/(register|login|logout|refresh-token|verify-email|resend-verification)/?$",
                 methods=[HTTPMethod.POST],

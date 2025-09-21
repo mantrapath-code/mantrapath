@@ -1,0 +1,121 @@
+name: Manual Deployment Trigger
+
+on:
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: 'Target environment'
+        required: true
+        default: 'dev'
+        type: choice
+        options:
+        - dev
+        - prod
+      services:
+        description: 'Services to deploy (comma-separated, leave empty for all)'
+        required: false
+        default: ''
+        type: string
+      force_rebuild:
+        description: 'Force rebuild all images'
+        required: false
+        default: false
+        type: boolean
+      setup_storage:
+        description: 'Setup persistent storage'
+        required: false
+        default: true
+        type: boolean
+      dry_run:
+        description: 'Dry run (show what would be done)'
+        required: false
+        default: false
+        type: boolean
+
+env:
+  REGISTRY: blr.vultrcr.com/mantrapath
+  REGISTRY_USERNAME: ${{ secrets.VULTR_CR_USERNAME }}
+  REGISTRY_PASSWORD: ${{ secrets.VULTR_CR_PASSWORD }}
+
+jobs:
+  manual-deploy:
+    runs-on: self-hosted
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Display deployment parameters
+      run: |
+        echo "🎯 Manual Deployment Configuration"
+        echo "=================================="
+        echo "Environment: ${{ github.event.inputs.environment }}"
+        echo "Services: ${{ github.event.inputs.services || 'All services' }}"
+        echo "Force Rebuild: ${{ github.event.inputs.force_rebuild }}"
+        echo "Setup Storage: ${{ github.event.inputs.setup_storage }}"
+        echo "Dry Run: ${{ github.event.inputs.dry_run }}"
+        echo "Registry: ${{ env.REGISTRY }}"
+        echo "Runner: self-hosted"
+        echo ""
+
+    - name: Run deployment script
+      run: |
+        cd deployment/scripts
+        
+        # Make script executable
+        chmod +x complete-production-deployment.sh
+        
+        # Build command with parameters
+        CMD="./complete-production-deployment.sh"
+        CMD="$CMD --environment ${{ github.event.inputs.environment }}"
+        
+        if [[ -n "${{ github.event.inputs.services }}" ]]; then
+          CMD="$CMD --services '${{ github.event.inputs.services }}'"
+        fi
+        
+        if [[ "${{ github.event.inputs.force_rebuild }}" == "true" ]]; then
+          CMD="$CMD --force-rebuild"
+        fi
+        
+        if [[ "${{ github.event.inputs.setup_storage }}" == "false" ]]; then
+          CMD="$CMD --no-storage"
+        fi
+        
+        if [[ "${{ github.event.inputs.dry_run }}" == "true" ]]; then
+          CMD="$CMD --dry-run"
+        fi
+        
+        echo "🚀 Running: $CMD"
+        echo ""
+        
+        # Set environment variables for the script
+        export VULTR_REGISTRY_PASSWORD="${{ env.REGISTRY_PASSWORD }}"
+        
+        # Execute the deployment
+        eval $CMD
+
+    - name: Generate summary
+      if: always()
+      run: |
+        echo "# 🎯 Manual Deployment Summary" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "**Trigger:** Manual workflow dispatch" >> $GITHUB_STEP_SUMMARY
+        echo "**Environment:** ${{ github.event.inputs.environment }}" >> $GITHUB_STEP_SUMMARY
+        echo "**Services:** ${{ github.event.inputs.services || 'All services' }}" >> $GITHUB_STEP_SUMMARY
+        echo "**Force Rebuild:** ${{ github.event.inputs.force_rebuild }}" >> $GITHUB_STEP_SUMMARY
+        echo "**Setup Storage:** ${{ github.event.inputs.setup_storage }}" >> $GITHUB_STEP_SUMMARY
+        echo "**Dry Run:** ${{ github.event.inputs.dry_run }}" >> $GITHUB_STEP_SUMMARY
+        echo "**Registry:** ${{ env.REGISTRY }}" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        
+        if [[ "${{ job.status }}" == "success" ]]; then
+          echo "✅ **Result:** Deployment completed successfully!" >> $GITHUB_STEP_SUMMARY
+        else
+          echo "❌ **Result:** Deployment failed!" >> $GITHUB_STEP_SUMMARY
+        fi
+        
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "## 🔗 Next Steps" >> $GITHUB_STEP_SUMMARY
+        echo "- Check pod status: \`kubectl get pods -n mantrapath-${{ github.event.inputs.environment }}\`" >> $GITHUB_STEP_SUMMARY
+        echo "- View services: \`kubectl get services -n mantrapath-${{ github.event.inputs.environment }}\`" >> $GITHUB_STEP_SUMMARY
+        echo "- Monitor logs: \`kubectl logs -f deployment/mantrapath-api-gateway -n mantrapath-${{ github.event.inputs.environment }}\`" >> $GITHUB_STEP_SUMMARY

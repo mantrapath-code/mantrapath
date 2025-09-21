@@ -62,9 +62,12 @@ def send_verification_email(email: str, token: str, username: str) -> bool:
         from_email = os.getenv("FROM_EMAIL", smtp_username)
         app_url = os.getenv("APP_URL", "http://localhost:5173")
         
+        # Get the API Gateway URL for verification
+        api_gateway_url = os.getenv("VITE_API_GATEWAY_URL", os.getenv("API_GATEWAY_URL", "http://139.84.213.185:8000"))
+        
         if not smtp_username or not smtp_password:
             # For development/testing - print verification link to console
-            verification_url = f"{app_url}/?token={token}"
+            verification_url = f"{api_gateway_url}/api/auth/verify-email/{token}"
             print("\n" + "="*80)
             print("🔐 EMAIL VERIFICATION REQUIRED")
             print("="*80)
@@ -77,8 +80,8 @@ def send_verification_email(email: str, token: str, username: str) -> bool:
             print("="*80 + "\n")
             return False  # Return False to allow proper verification flow testing
         
-        # Create verification URL
-        verification_url = f"{app_url}/?token={token}"
+        # Create verification URL - goes through API Gateway to auth service
+        verification_url = f"{api_gateway_url}/api/auth/verify-email/{token}"
         
         # Create email content
         subject = "Welcome to MantraPath - Verify Your Email"
@@ -148,9 +151,9 @@ def send_verification_email(email: str, token: str, username: str) -> bool:
         
     except Exception as e:
         print(f"❌ Error sending verification email: {e}")
-        # For development - still show the verification link in console
-        app_url = os.getenv("APP_URL", "http://localhost:5173")
-        verification_url = f"{app_url}/verify-email?token={token}"
+        # For development - still show the verification link in console using API Gateway
+        api_gateway_url = os.getenv("VITE_API_GATEWAY_URL", os.getenv("API_GATEWAY_URL", "http://139.84.213.185:8000"))
+        verification_url = f"{api_gateway_url}/api/auth/verify-email/{token}"
         print("\n" + "="*80)
         print("🔐 EMAIL VERIFICATION REQUIRED (Email send failed)")
         print("="*80)

@@ -1,6 +1,7 @@
 /**
- * Sprint 2 Real-Ti  const services = [
-    { name: 'API Gateway', port: 8000, url: 'http://localhost:8000' },
+ * Sprint 2 Real-Ti  const baseUrl = import.meta.env.VITE_API_GATEWAY_URL || import.meta.env.VITE_API_URL || 'http://localhost:8000'
+  const services = [
+    { name: 'API Gateway', port: 8000, url: baseUrl },
     { name: 'Auth Service', port: 8001, url: 'http://localhost:8001' },
     { name: 'Profile Service', port: 8002, url: 'http://localhost:8002' },
     { name: 'Mood Service', port: 8003, url: 'http://localhost:8003' },
@@ -33,8 +34,9 @@ export function useServiceMonitor() {
   const [isMonitoring, setIsMonitoring] = useState(false)
   const { user } = useAuth()
 
+  const baseUrl = import.meta.env.VITE_API_GATEWAY_URL || import.meta.env.VITE_API_URL || 'http://localhost:8000'
   const serviceEndpoints = [
-    { name: 'API Gateway', port: 8000, key: 'gateway', healthUrl: 'http://localhost:8000/health' },
+    { name: 'API Gateway', port: 8000, key: 'gateway', healthUrl: `${baseUrl}/health` },
     { name: 'AI Context Store', port: 8013, key: 'context', healthUrl: 'http://localhost:8013/health' },
     { name: 'AI Event Processor', port: 8014, key: 'aiEvents', healthUrl: 'http://localhost:8014/health' },
     { name: 'Voice Processor', port: 8015, key: 'voiceEvents', healthUrl: 'http://localhost:8015/health' },

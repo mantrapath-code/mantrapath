@@ -7,10 +7,21 @@ import asyncio
 import json
 import logging
 import os
+import sys
 from pathlib import Path
 from typing import Dict, List, Optional, Union, Any
 
-from ..embeddings_integration import embeddings_client
+# Import embeddings_client with absolute import
+try:
+    from embeddings_integration import embeddings_client
+except ImportError:
+    # Add parent directory to sys.path and try again
+    import sys
+    import os
+    parent_dir = os.path.dirname(os.path.dirname(__file__))
+    if parent_dir not in sys.path:
+        sys.path.insert(0, parent_dir)
+    from embeddings_integration import embeddings_client
 
 logger = logging.getLogger(__name__)
 

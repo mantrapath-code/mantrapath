@@ -14,7 +14,8 @@ export async function runHealthCheck() {
 
   // 1. Test backend connectivity
   try {
-    const response = await fetch('http://localhost:8000/health')
+    const baseUrl = import.meta.env.VITE_API_GATEWAY_URL || import.meta.env.VITE_API_URL || 'http://localhost:8000'
+    const response = await fetch(`${baseUrl}/health`)
     if (response.ok) {
       results.backendConnectivity = true
       console.log('✅ Backend connectivity: OK')
@@ -71,7 +72,8 @@ export async function runHealthCheck() {
       apiService.refreshToken()
       
       // Test a simple API call
-      const response = await fetch('http://localhost:8000/api/profiles/me', {
+      const baseUrl = import.meta.env.VITE_API_GATEWAY_URL || import.meta.env.VITE_API_URL || 'http://localhost:8000'
+      const response = await fetch(`${baseUrl}/api/profiles/me`, {
         headers: {
           'Authorization': `Bearer ${localStorage.getItem('mantrapath_token')}`,
           'Content-Type': 'application/json'
