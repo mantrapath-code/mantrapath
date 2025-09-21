@@ -1,0 +1,57 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>API Configuration Debug</title>
+</head>
+<body>
+    <h1>MantraPath API Configuration Debug</h1>
+    <div id="config-info"></div>
+    
+    <script type="module">
+        // Import the API configuration
+        import { getApiBaseUrl, getEnvironmentInfo } from '/src/config/api-config.ts';
+        
+        // Display configuration information
+        const configDiv = document.getElementById('config-info');
+        
+        try {
+            const envInfo = getEnvironmentInfo();
+            const baseUrl = getApiBaseUrl();
+            
+            configDiv.innerHTML = `
+                <h2>Current Configuration:</h2>
+                <p><strong>API Base URL:</strong> ${baseUrl}</p>
+                <p><strong>Hostname:</strong> ${envInfo.hostname}</p>
+                <p><strong>Is Ngrok:</strong> ${envInfo.isNgrok}</p>
+                <p><strong>Environment Variables:</strong></p>
+                <ul>
+                    <li>VITE_API_BASE_URL: ${import.meta.env.VITE_API_BASE_URL || 'Not set'}</li>
+                    <li>VITE_API_GATEWAY_URL: ${import.meta.env.VITE_API_GATEWAY_URL || 'Not set'}</li>
+                </ul>
+                
+                <h3>Service URLs:</h3>
+                <pre>${JSON.stringify(envInfo.serviceUrls, null, 2)}</pre>
+                
+                <h3>Test API Call:</h3>
+                <button onclick="testApiCall()">Test API Gateway Health</button>
+                <div id="api-test-result"></div>
+            `;
+            
+            // Add test function to window
+            window.testApiCall = async () => {
+                const resultDiv = document.getElementById('api-test-result');
+                try {
+                    const response = await fetch(baseUrl + '/health');
+                    const data = await response.json();
+                    resultDiv.innerHTML = `<p style="color: green;">✅ API Gateway is accessible!</p><pre>${JSON.stringify(data, null, 2)}</pre>`;
+                } catch (error) {
+                    resultDiv.innerHTML = `<p style="color: red;">❌ API Gateway error: ${error.message}</p>`;
+                }
+            };
+            
+        } catch (error) {
+            configDiv.innerHTML = `<p style="color: red;">Error loading configuration: ${error.message}</p>`;
+        }
+    </script>
+</body>
+</html>

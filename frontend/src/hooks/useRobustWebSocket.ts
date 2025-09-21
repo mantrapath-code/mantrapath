@@ -162,10 +162,20 @@ class WebSocketManager {
 
 // WebSocket URL configuration
 const getWebSocketUrls = (userId: string): string[] => {
-  const baseUrl = import.meta.env.VITE_WS_URL || 'ws://localhost:8007'
+  let baseUrl = import.meta.env.VITE_WS_URL || 'ws://localhost:8007'
+
+  // If running under https, ensure wss and prefer same host
+  if (typeof window !== 'undefined' && window.location.protocol === 'https:') {
+    baseUrl = baseUrl.replace('ws://', 'wss://')
+    if (window.location.hostname !== 'localhost') {
+      baseUrl = `wss://${window.location.host}`
+    }
+  }
+
+  // Prefer API Gateway proxied WS endpoints under /api for unified routing
   return [
-    `${baseUrl}/ws/${userId}`,
-    // Add other WebSocket endpoints as needed
+    `${baseUrl}/api/notifications/ws/${userId}`,
+    // Additional endpoints can be added similarly under /api/...
   ]
 }
 

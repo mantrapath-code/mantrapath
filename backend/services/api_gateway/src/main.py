@@ -188,6 +188,15 @@ async def basic_health_check():
         "timestamp": time.time()
     }
 
+# Aliased health endpoint under /api to satisfy frontend and docs
+@app.get("/api/health")
+async def basic_health_check_api():
+    return {
+        "status": "healthy",
+        "service": "api-gateway",
+        "timestamp": time.time()
+    }
+
 
 @app.get("/health/live")
 async def liveness_check():

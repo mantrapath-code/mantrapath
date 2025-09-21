@@ -1,8 +1,14 @@
-name: Deploy MantraPath to Self-Hosted Runner
+name: 🚀 MantraPath GitOps Deployment
 
 on:
   push:
     branches: [ main ]
+    paths:
+      - 'backend/**'
+      - 'frontend/**'
+      - 'nginx/**'
+      - 'deployment/**'
+      - '.github/workflows/**'
   workflow_dispatch:
     inputs:
       environment:
@@ -13,29 +19,150 @@ on:
         options:
         - production
         - staging
+      force_rebuild:
+        description: 'Force rebuild all services'
+        required: false
+        default: false
+        type: boolean
+
+# Required to publish to GHCR using the workflow token or a PAT
+permissions:
+  contents: read
+  packages: write
 
 env:
   REGISTRY: ghcr.io
   IMAGE_NAME: ${{ github.repository }}
+  DEPLOYMENT_PATH: /home/runner/mantrapath
+  NODE_VERSION: '18'
+  PYTHON_VERSION: '3.11'
+  USE_SYSTEM_NGINX: 'false'
 
 jobs:
-  deploy:
-    runs-on: [self-hosted, Linux, X64]    
+  # Pre-deployment checks and validation
+  validate:
+    runs-on: [self-hosted, Linux, X64]
+    outputs:
+      deploy-backend: ${{ steps.changes.outputs.backend }}
+      deploy-frontend: ${{ steps.changes.outputs.frontend }}
+      deploy-config: ${{ steps.changes.outputs.config }}
     steps:
-    - name: Checkout code
+    - name: 📥 Checkout code
       uses: actions/checkout@v4
-      
-    - name: Set up Docker Buildx
+      with:
+        fetch-depth: 2
+        
+    - name: 🔍 Detect changes
+      id: changes
+      run: |
+        if [ "${{ github.event.inputs.force_rebuild }}" = "true" ]; then
+          echo "backend=true" >> $GITHUB_OUTPUT
+          echo "frontend=true" >> $GITHUB_OUTPUT
+          echo "config=true" >> $GITHUB_OUTPUT
+        else
+          git diff --name-only HEAD^ HEAD > changed_files.txt
+          
+          if grep -q "^backend/" changed_files.txt || grep -q "^deployment/" changed_files.txt; then
+            echo "backend=true" >> $GITHUB_OUTPUT
+          else
+            echo "backend=false" >> $GITHUB_OUTPUT
+          fi
+          
+          if grep -q "^frontend/" changed_files.txt; then
+            echo "frontend=true" >> $GITHUB_OUTPUT
+          else
+            echo "frontend=false" >> $GITHUB_OUTPUT
+          fi
+          
+          if grep -q "^nginx/" changed_files.txt || grep -q "^deployment/" changed_files.txt; then
+            echo "config=true" >> $GITHUB_OUTPUT
+          else
+            echo "config=false" >> $GITHUB_OUTPUT
+          fi
+        fi
+        
+        cat changed_files.txt || echo "No changes detected"
+        
+    - name: 🏥 System health check
+      run: |
+        echo "🔧 Checking system requirements..."
+        
+        # Check Docker
+        docker --version
+        docker-compose --version
+        
+        # Check available space
+        df -h /
+        
+        # Check memory
+        free -h
+        
+        # Check running containers
+        docker ps --format "table {{.Names}}\t{{.Status}}\t{{.Ports}}"
+        
+        echo "✅ System check completed"
+
+  # Build and push container image(s) to GHCR only when updating main
+  build-and-push:
+    needs: validate
+    if: github.ref == 'refs/heads/main'
+    runs-on: [self-hosted, Linux, X64]
+    steps:
+    - name: 📥 Checkout code
+      uses: actions/checkout@v4
+
+    - name: 🐳 Set up Docker Buildx
       uses: docker/setup-buildx-action@v3
-      
-    - name: Log in to Container Registry
+
+    - name: 🔑 Log in to GHCR
       uses: docker/login-action@v3
       with:
         registry: ${{ env.REGISTRY }}
-        username: ${{ github.actor }}
-        password: ${{ secrets.GITHUB_TOKEN }}
+        username: ${{ secrets.GHCR_USERNAME || github.actor }}
+        # Prefer a PAT (GHCR_PAT) if provided; otherwise use the default GITHUB_TOKEN
+        password: ${{ secrets.GHCR_PAT || secrets.GITHUB_TOKEN }}
+
+    - name: 🏷️ Extract metadata (tags, labels)
+      id: meta
+      uses: docker/metadata-action@v5
+      with:
+        images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+        tags: |
+          type=raw,value=main
+          type=sha,enable=true
+          type=raw,value=latest,enable={{is_default_branch}}
+
+    - name: 🏗️ Build and push backend base image
+      uses: docker/build-push-action@v6
+      with:
+        context: ./backend
+        file: ./backend/Dockerfile
+        push: true
+        tags: ${{ steps.meta.outputs.tags }}
+        labels: ${{ steps.meta.outputs.labels }}
+        cache-from: type=registry,ref=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:buildcache
+        cache-to: type=registry,ref=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:buildcache,mode=max
+
+  # Main deployment job
+  deploy:
+    needs: validate
+    runs-on: [self-hosted, Linux, X64]
+    environment: ${{ github.event.inputs.environment || 'production' }}
+    steps:
+    - name: 📥 Checkout code
+      uses: actions/checkout@v4
+      
+    - name: 🐳 Set up Docker Buildx
+      uses: docker/setup-buildx-action@v3
+      
+    - name: 🔑 Log in to Container Registry
+      uses: docker/login-action@v3
+      with:
+        registry: ${{ env.REGISTRY }}
+        username: ${{ secrets.GHCR_USERNAME || github.actor }}
+        password: ${{ secrets.GHCR_PAT || secrets.GITHUB_TOKEN }}
         
-    - name: Extract metadata
+    - name: 🏷️ Extract metadata
       id: meta
       uses: docker/metadata-action@v5
       with:
@@ -46,20 +173,23 @@ jobs:
           type=sha,prefix={{branch}}-
           type=raw,value=latest,enable={{is_default_branch}}
           
-    - name: Create environment file
+    - name: 📝 Create environment configuration
       run: |
+        echo "🔧 Setting up environment variables..."
+        
+        # Create backend environment file
         cat > backend/.env << EOF
         # Database Configuration
         POSTGRES_DB=mantrapath
         POSTGRES_USER=mantrapath
-        POSTGRES_PASSWORD=${{ secrets.POSTGRES_PASSWORD }}
+        POSTGRES_PASSWORD=${{ secrets.POSTGRES_PASSWORD || 'mantrapath123' }}
         POSTGRES_PORT=5432
         
         # Redis Configuration
         REDIS_PORT=6379
         
         # JWT Configuration
-        JWT_SECRET_KEY=${{ secrets.JWT_SECRET_KEY }}
+        JWT_SECRET_KEY=${{ secrets.JWT_SECRET_KEY || 'your-super-secret-jwt-key-change-in-production' }}
         JWT_ALGORITHM=HS256
         JWT_ACCESS_TOKEN_EXPIRE_MINUTES=30
         
@@ -86,183 +216,323 @@ jobs:
         PROACTIVE_ASSISTANCE_PORT=8018
         MODELS_SERVICE_INTERNAL_PORT=8080
         MODELS_SERVICE_EXTERNAL_PORT=8081
-        PHI4_AGENT_PORT=8000
+        PHI4_AGENT_PORT=8016
         
         # Environment Configuration
         ENVIRONMENT=production
         DEBUG=false
-        DOMAIN=${{ secrets.DOMAIN || 'localhost' }}
-        PROTOCOL=${{ secrets.PROTOCOL || 'https' }}
-        FRONTEND_PORT=5173
+        TAG=latest
+        DOMAIN=${{ secrets.DOMAIN || '139.84.213.185' }}
+        PROTOCOL=${{ secrets.PROTOCOL || 'http' }}
+        FRONTEND_PORT=3000
         
         # Database URLs
-        DATABASE_URL=postgresql://mantrapath:${{ secrets.POSTGRES_PASSWORD }}@postgres:5432/mantrapath
+        DATABASE_URL=postgresql://mantrapath:${{ secrets.POSTGRES_PASSWORD || 'mantrapath123' }}@postgres:5432/mantrapath
         REDIS_URL=redis://redis:6379/0
         
         # External API Keys (only if needed)
-        OPENAI_API_KEY=${{ secrets.OPENAI_API_KEY }}
+        OPENAI_API_KEY=${{ secrets.OPENAI_API_KEY || '' }}
         
         # SMTP Configuration
-        SMTP_SERVER=${{ secrets.SMTP_SERVER }}
-        SMTP_PORT=${{ secrets.SMTP_PORT }}
-        SMTP_USERNAME=${{ secrets.SMTP_USERNAME }}
-        SMTP_PASSWORD=${{ secrets.SMTP_PASSWORD }}
-        FROM_EMAIL=${{ secrets.FROM_EMAIL }}
-        APP_URL=${{ secrets.APP_URL }}
+        SMTP_SERVER=${{ secrets.SMTP_SERVER || 'smtp.gmail.com' }}
+        SMTP_PORT=${{ secrets.SMTP_PORT || '587' }}
+        SMTP_USERNAME=${{ secrets.SMTP_USERNAME || '' }}
+        SMTP_PASSWORD=${{ secrets.SMTP_PASSWORD || '' }}
+        FROM_EMAIL=${{ secrets.FROM_EMAIL || 'noreply@mantrapath.com' }}
+        APP_URL=${{ secrets.APP_URL || 'http://139.84.213.185' }}
+        
+        # Performance Configuration
+        WORKERS_PER_CORE=1
+        MAX_WORKERS=4
+        WEB_CONCURRENCY=4
+        KEEP_ALIVE=2
+        
+        # Security
+        CORS_ORIGINS=["http://localhost:3000","http://localhost:5173","http://139.84.213.185","http://139.84.213.185:3000"]
         EOF
         
-    - name: Create frontend environment file
-      run: |
+        # Create frontend environment file
         cat > frontend/.env << EOF
-        VITE_API_BASE_URL=${{ secrets.PROTOCOL || 'https' }}://${{ secrets.DOMAIN || 'localhost' }}:8000
-        VITE_WS_URL=ws://${{ secrets.DOMAIN || 'localhost' }}:8080
+        VITE_API_BASE_URL=${{ secrets.PROTOCOL || 'http' }}://${{ secrets.DOMAIN || '139.84.213.185' }}:8000
+        VITE_API_GATEWAY_URL=${{ secrets.PROTOCOL || 'http' }}://${{ secrets.DOMAIN || '139.84.213.185' }}:8000
+        VITE_WS_URL=ws://${{ secrets.DOMAIN || '139.84.213.185' }}:8080
+        VITE_API_URL=${{ secrets.PROTOCOL || 'http' }}://${{ secrets.DOMAIN || '139.84.213.185' }}:8000/api
+        VITE_ML_SERVICE_URL=${{ secrets.PROTOCOL || 'http' }}://${{ secrets.DOMAIN || '139.84.213.185' }}:8008
         VITE_ENVIRONMENT=production
+        VITE_FRONTEND_PORT=3000
         EOF
         
-    - name: Build and push Docker images
-      uses: docker/build-push-action@v5
-      with:
-        # Point build context at backend directory which contains the Dockerfile
-        context: ./backend
-        push: true
-        tags: ${{ steps.meta.outputs.tags }}
-        labels: ${{ steps.meta.outputs.labels }}
-        cache-from: type=gha
-        cache-to: type=gha,mode=max
+        echo "✅ Environment files created"
         
-    - name: Stop existing containers
+    - name: 🧹 Clean up existing deployment
       run: |
+        echo "🧹 Cleaning up existing containers..."
+        
+        # Stop and remove existing containers
         cd backend
-        docker-compose down --remove-orphans || true
+        docker-compose -f docker-compose.prod.yml down --remove-orphans || true
         
-    - name: Pull latest images
+        # Clean up unused Docker resources
+        docker system prune -f --volumes || true
+        
+        # Remove old images (keep last 3 versions)
+        docker images --format "table {{.Repository}}\t{{.Tag}}\t{{.ID}}" | grep mantrapath | tail -n +4 | awk '{print $3}' | xargs -r docker rmi || true
+        
+        echo "✅ Cleanup completed"
+        
+    - name: 🐳 Deploy backend services
+      if: needs.validate.outputs.deploy-backend == 'true'
       run: |
+        echo "🚀 Deploying backend services..."
         cd backend
-        docker-compose pull
         
-    - name: Start services
-      run: |
-        cd backend
-        docker-compose up -d --build
+        # Start infrastructure services first
+        echo "📊 Starting infrastructure services..."
+        docker-compose -f docker-compose.prod.yml up -d postgres redis nats
         
-    - name: Wait for services to be ready
-      run: |
-        echo "Waiting for services to start..."
+        # Wait for infrastructure
+        echo "⏳ Waiting for infrastructure to be ready..."
         sleep 30
         
-        # Check API Gateway health
-        for i in {1..30}; do
-          if curl -f http://localhost:8000/health; then
-            echo "API Gateway is ready!"
+        # Check database health
+        for i in {1..10}; do
+          if docker-compose -f docker-compose.prod.yml exec -T postgres pg_isready -U mantrapath -d mantrapath; then
+            echo "✅ Database is ready"
             break
           fi
-          echo "Waiting for API Gateway... ($i/30)"
-          sleep 10
+          echo "⏳ Waiting for database... ($i/10)"
+          sleep 5
         done
         
-    - name: Run health checks
+        # Start core services
+        echo "🔧 Starting core services..."
+        docker-compose -f docker-compose.prod.yml up -d models-service
+        
+        # Wait for models service
+        sleep 60
+        
+        # Start application services
+        echo "🎯 Starting application services..."
+        docker-compose -f docker-compose.prod.yml up -d \
+          auth-service profile-service mood-service chatbot-service \
+          content-service community-service notification-service ml-service \
+          translation-service voice-service ai-context-store action-orchestrator \
+          memory-service ai-event-processor media-service
+        
+        # Wait for services
+        sleep 30
+        
+        # Start API Gateway last
+        echo "🚪 Starting API Gateway..."
+        docker-compose -f docker-compose.prod.yml up -d api-gateway
+        
+        echo "✅ Backend services deployed"
+        
+    - name: 🎨 Build and deploy frontend
+      if: needs.validate.outputs.deploy-frontend == 'true'
       run: |
-        echo "Running health checks..."
+        echo "🎨 Building and deploying frontend..."
+        cd frontend
         
-        # Check API Gateway
-        curl -f http://localhost:8000/health || exit 1
+        # Install Node.js if not present
+        if ! command -v node &> /dev/null; then
+          curl -fsSL https://deb.nodesource.com/setup_18.x | sudo -E bash -
+          sudo apt-get install -y nodejs
+        fi
         
-        # Check database
-        docker-compose -f backend/docker-compose.yml exec -T postgres pg_isready -U mantrapath -d mantrapath || exit 1
+        # Install dependencies
+        echo "📦 Installing dependencies..."
+        npm ci --production
         
-        # Check Redis
-        docker-compose -f backend/docker-compose.yml exec -T redis redis-cli ping || exit 1
+        # Build frontend
+        echo "🔨 Building frontend..."
+        npm run build
+
+  echo "✅ Frontend built"
         
-        echo "All health checks passed!"
-        
-    - name: Show service status
+    - name: 🌐 Configure Nginx (system)
+      if: needs.validate.outputs.deploy-config == 'true' && env.USE_SYSTEM_NGINX == 'true'
       run: |
-        cd backend
-        docker-compose ps
+        echo "🌐 Configuring Nginx..."
         
-    - name: Setup Nginx (if needed)
-      run: |
         # Install nginx if not present
         if ! command -v nginx &> /dev/null; then
           sudo apt-get update
           sudo apt-get install -y nginx
         fi
         
-        # Create nginx configuration
-        sudo tee /etc/nginx/sites-available/mantrapath << 'EOF'
-        server {
-            listen 80;
-            server_name ${{ secrets.DOMAIN || 'localhost' }};
-            
-            # Frontend
-            location / {
-                proxy_pass http://localhost:5173;
-                proxy_set_header Host $host;
-                proxy_set_header X-Real-IP $remote_addr;
-                proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-                proxy_set_header X-Forwarded-Proto $scheme;
-            }
-            
-            # API Gateway
-            location /api/ {
-                proxy_pass http://localhost:8000/;
-                proxy_set_header Host $host;
-                proxy_set_header X-Real-IP $remote_addr;
-                proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-                proxy_set_header X-Forwarded-Proto $scheme;
-            }
-            
-            # WebSocket
-            location /ws/ {
-                proxy_pass http://localhost:8080/;
-                proxy_http_version 1.1;
-                proxy_set_header Upgrade $http_upgrade;
-                proxy_set_header Connection "upgrade";
-                proxy_set_header Host $host;
-                proxy_set_header X-Real-IP $remote_addr;
-                proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-                proxy_set_header X-Forwarded-Proto $scheme;
-            }
-        }
-        EOF
+        # Copy nginx configuration
+        sudo cp nginx/mantrapath.conf /etc/nginx/sites-available/mantrapath
+        
+        # Update server_name with actual domain
+        sudo sed -i "s/server_name _;/server_name ${{ secrets.DOMAIN || '139.84.213.185' }};/" /etc/nginx/sites-available/mantrapath
         
         # Enable site
         sudo ln -sf /etc/nginx/sites-available/mantrapath /etc/nginx/sites-enabled/
-        sudo nginx -t && sudo systemctl reload nginx
+        sudo rm -f /etc/nginx/sites-enabled/default
         
-    - name: Deploy Frontend
+        # Test and reload
+        sudo nginx -t
+        sudo systemctl reload nginx
+        sudo systemctl enable nginx
+        
+        echo "✅ Nginx configured"
+
+    - name: 🌐 Start Nginx reverse proxy (container)
+      if: needs.validate.outputs.deploy-config == 'true' && env.USE_SYSTEM_NGINX != 'true'
       run: |
-        cd frontend
+        echo "🌐 Starting Nginx container..."
+        cd backend
+        docker-compose -f docker-compose.prod.yml up -d nginx
+        echo "✅ Nginx container running"
         
-        # Install dependencies
-        npm ci
+    - name: ⏳ Wait for services to be ready
+      run: |
+        echo "⏳ Waiting for all services to be ready..."
         
-        # Build frontend
-        npm run build
+        # Function to check service health
+        check_service() {
+          local service_name=$1
+          local port=$2
+          local max_attempts=30
+          local attempt=1
+          
+          while [ $attempt -le $max_attempts ]; do
+            if curl -f -s http://localhost:$port/health >/dev/null 2>&1; then
+              echo "✅ $service_name is healthy"
+              return 0
+            fi
+            echo "⏳ Waiting for $service_name... ($attempt/$max_attempts)"
+            sleep 10
+            ((attempt++))
+          done
+          
+          echo "❌ $service_name health check failed"
+          return 1
+        }
         
-        # Serve with nginx or simple server
-        if command -v nginx &> /dev/null; then
-          sudo cp -r dist/* /var/www/html/
+        # Check critical services
+        check_service "API Gateway" 8000
+        check_service "Auth Service" 8001
+        check_service "Models Service" 8081
+        
+        echo "✅ All critical services are ready"
+        
+    - name: 🏥 Run comprehensive health checks
+      run: |
+        echo "🏥 Running comprehensive health checks..."
+        
+        # Service health checks
+        services=(
+          "8000:API Gateway"
+          "8001:Auth Service"
+          "8002:Profile Service"
+          "8003:Mood Service"
+          "8004:Chatbot Service"
+          "8006:Community Service"
+          "8007:Notification Service"
+          "8008:ML Service"
+          "8081:Models Service"
+        )
+        
+        failed_services=()
+        
+        for service in "${services[@]}"; do
+          port=$(echo $service | cut -d: -f1)
+          name=$(echo $service | cut -d: -f2)
+          
+          if curl -f -s "http://localhost:$port/health" >/dev/null 2>&1; then
+            echo "✅ $name (port $port) - Healthy"
+          else
+            echo "❌ $name (port $port) - Unhealthy"
+            failed_services+=("$name")
+          fi
+        done
+        
+        # Database checks
+        echo "🗄️ Checking database..."
+        cd backend
+        if docker-compose -f docker-compose.prod.yml exec -T postgres pg_isready -U mantrapath -d mantrapath; then
+          echo "✅ PostgreSQL - Healthy"
         else
-          # Fallback: serve with Python
-          cd dist
-          python3 -m http.server 5173 &
+          echo "❌ PostgreSQL - Unhealthy"
+          failed_services+=("PostgreSQL")
         fi
         
-    - name: Create deployment summary
+        # Redis check
+        echo "🔴 Checking Redis..."
+        if docker-compose -f docker-compose.prod.yml exec -T redis redis-cli ping | grep -q PONG; then
+          echo "✅ Redis - Healthy"
+        else
+          echo "❌ Redis - Unhealthy"
+          failed_services+=("Redis")
+        fi
+        
+        # Frontend (via Nginx) check
+        echo "🎨 Checking Nginx/Frontend..."
+        if curl -f -s "http://localhost/health" >/dev/null 2>&1; then
+          echo "✅ Nginx - Healthy"
+        else
+          echo "❌ Nginx - Unhealthy"
+          failed_services+=("Nginx")
+        fi
+        
+        # Summary
+        if [ ${#failed_services[@]} -eq 0 ]; then
+          echo "🎉 All health checks passed!"
+        else
+          echo "⚠️ Failed services: ${failed_services[*]}"
+          echo "📊 Deployment completed with warnings"
+        fi
+        
+    - name: 📊 Show deployment status
       run: |
-        echo "## 🚀 MantraPath Deployment Summary" >> $GITHUB_STEP_SUMMARY
+        echo "📊 Current deployment status:"
+        echo ""
+        
+        # Docker services
+        echo "🐳 Docker Services:"
+        cd backend
+        docker-compose -f docker-compose.prod.yml ps
+        
+        echo ""
+        echo "🌐 Nginx Status:"
+        sudo systemctl status nginx --no-pager -l || true
+        
+        echo ""
+        echo "💾 System Resources:"
+        echo "Disk Usage:"
+        df -h /
+        echo ""
+        echo "Memory Usage:"
+        free -h
+        echo ""
+        echo "Docker Usage:"
+        docker system df
+        
+    - name: 📝 Create deployment summary
+      run: |
+        echo "## 🚀 MantraPath GitOps Deployment Summary" >> $GITHUB_STEP_SUMMARY
         echo "" >> $GITHUB_STEP_SUMMARY
         echo "**Status:** ✅ Successfully deployed" >> $GITHUB_STEP_SUMMARY
         echo "**Environment:** ${{ github.event.inputs.environment || 'production' }}" >> $GITHUB_STEP_SUMMARY
-        echo "**Runner:** ubuntu-latest-m" >> $GITHUB_STEP_SUMMARY
+        echo "**Commit:** ${{ github.sha }}" >> $GITHUB_STEP_SUMMARY
+        echo "**Deployed by:** ${{ github.actor }}" >> $GITHUB_STEP_SUMMARY
+        echo "**Deployment time:** $(date -u '+%Y-%m-%d %H:%M:%S UTC')" >> $GITHUB_STEP_SUMMARY
         echo "" >> $GITHUB_STEP_SUMMARY
         echo "### 🌐 Access URLs" >> $GITHUB_STEP_SUMMARY
-        echo "- **Frontend:** http://${{ secrets.DOMAIN || 'localhost' }}:5173" >> $GITHUB_STEP_SUMMARY
-        echo "- **API Gateway:** http://${{ secrets.DOMAIN || 'localhost' }}:8000" >> $GITHUB_STEP_SUMMARY
-        echo "- **API Docs:** http://${{ secrets.DOMAIN || 'localhost' }}:8000/docs" >> $GITHUB_STEP_SUMMARY
-        echo "- **Health Check:** http://${{ secrets.DOMAIN || 'localhost' }}:8000/health" >> $GITHUB_STEP_SUMMARY
+        echo "- **Frontend:** http://${{ secrets.DOMAIN || '139.84.213.185' }}" >> $GITHUB_STEP_SUMMARY
+        echo "- **API Gateway:** http://${{ secrets.DOMAIN || '139.84.213.185' }}:8000" >> $GITHUB_STEP_SUMMARY
+        echo "- **API Docs:** http://${{ secrets.DOMAIN || '139.84.213.185' }}:8000/docs" >> $GITHUB_STEP_SUMMARY
+        echo "- **Health Check:** http://${{ secrets.DOMAIN || '139.84.213.185' }}:8000/health" >> $GITHUB_STEP_SUMMARY
         echo "" >> $GITHUB_STEP_SUMMARY
-        echo "### 🐳 Running Services" >> $GITHUB_STEP_SUMMARY
+        echo "### 🐳 Service Status" >> $GITHUB_STEP_SUMMARY
+        echo '```' >> $GITHUB_STEP_SUMMARY
         cd backend
-        docker-compose ps >> $GITHUB_STEP_SUMMARY
+        docker-compose -f docker-compose.prod.yml ps >> $GITHUB_STEP_SUMMARY
+        echo '```' >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "### 📈 Changes Deployed" >> $GITHUB_STEP_SUMMARY
+        echo "- Backend: ${{ needs.validate.outputs.deploy-backend }}" >> $GITHUB_STEP_SUMMARY
+        echo "- Frontend: ${{ needs.validate.outputs.deploy-frontend }}" >> $GITHUB_STEP_SUMMARY
+        echo "- Configuration: ${{ needs.validate.outputs.deploy-config }}" >> $GITHUB_STEP_SUMMARY

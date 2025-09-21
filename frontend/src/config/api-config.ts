@@ -17,45 +17,47 @@ export const getApiBaseUrl = (): string => {
     return import.meta.env.VITE_NGROK_BACKEND_URL || 'https://f5b4589b2fdf.ngrok-free.app';
   }
   
-  // Default to local development
-  return import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000';
+  // Prioritize environment variable first, then fall back to origin-based URL
+  // This ensures proper configuration for server deployment
+  return import.meta.env.VITE_API_BASE_URL || import.meta.env.VITE_API_GATEWAY_URL || `${window.location.origin}/api`;
 };
 
 // Function to get service URLs based on environment
 export const getServiceUrls = () => {
   const baseUrl = getApiBaseUrl();
+  const origin = window.location.origin; // Root origin without /api
   
   if (isAccessedThroughNgrok()) {
-    // When accessed through ngrok, all services should go through the API Gateway
+    // When accessed through ngrok, all services still go through the API Gateway.
+    // Use origin-level base for custom calls so endpoints can include "/api/..." paths once.
     return {
       API_BASE_URL: baseUrl,
-      ML_SERVICE_URL: `${baseUrl}/ml`,
-      COMMUNITY_SERVICE_URL: `${baseUrl}/community`,
-      PROFILE_SERVICE_URL: `${baseUrl}/profile`,
-      AI_CONTEXT_SERVICE_URL: `${baseUrl}/ai-context`,
-      AI_EVENT_PROCESSOR_URL: `${baseUrl}/ai-events`,
-      ASSISTANCE_ENGINE_URL: `${baseUrl}/assistance`,
-      MOOD_SERVICE_URL: `${baseUrl}/mood`,
-  // IMPORTANT: Do NOT append /chatbot here. Frontend request helpers already
-  // include paths like /chat/intelligent or /api/chatbot/chat/session.
-  // Previously this produced URLs like /chatbot/api/chatbot/chat/session (404).
-  // Using the gateway base fixes routing via existing rules (^/chat/ and ^/api/chatbot/).
-  CHATBOT_SERVICE_URL: `${baseUrl}`,
+      // Custom bases for service-specific calls (endpoints will include /api/.. or /api/ml/..)
+      ML_SERVICE_URL: origin,
+      COMMUNITY_SERVICE_URL: origin,
+      PROFILE_SERVICE_URL: origin,
+      AI_CONTEXT_SERVICE_URL: origin,
+      AI_EVENT_PROCESSOR_URL: origin,
+      ASSISTANCE_ENGINE_URL: origin,
+      MOOD_SERVICE_URL: origin,
+      // IMPORTANT: Keep chatbot pointing to origin; helper methods supply full path.
+      CHATBOT_SERVICE_URL: origin,
     };
   }
   
   // Local development - use API Gateway for consistency
   return {
     API_BASE_URL: baseUrl,
-    ML_SERVICE_URL: `${baseUrl}/ml`,
-    COMMUNITY_SERVICE_URL: `${baseUrl}/community`,
-    PROFILE_SERVICE_URL: `${baseUrl}/profile`,
-    AI_CONTEXT_SERVICE_URL: `${baseUrl}/ai-context`,
-    AI_EVENT_PROCESSOR_URL: `${baseUrl}/ai-events`,
-    ASSISTANCE_ENGINE_URL: `${baseUrl}/assistance`,
-    MOOD_SERVICE_URL: `${baseUrl}/mood`,
-  // Keep chatbot pointing to gateway root; helper methods supply full path.
-  CHATBOT_SERVICE_URL: `${baseUrl}`,
+    // For custom calls, use origin-level base; endpoints will include /api/... paths
+    ML_SERVICE_URL: origin,
+    COMMUNITY_SERVICE_URL: origin,
+    PROFILE_SERVICE_URL: origin,
+    AI_CONTEXT_SERVICE_URL: origin,
+    AI_EVENT_PROCESSOR_URL: origin,
+    ASSISTANCE_ENGINE_URL: origin,
+    MOOD_SERVICE_URL: origin,
+    // Keep chatbot pointing to origin; helper methods supply full path.
+    CHATBOT_SERVICE_URL: origin,
   };
 };
 

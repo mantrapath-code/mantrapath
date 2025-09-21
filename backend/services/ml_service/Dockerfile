@@ -14,6 +14,23 @@ COPY services/ml_service/requirements.txt .
 # Install Python dependencies
 RUN pip install --no-cache-dir -r requirements.txt
 
+# Pre-download required NLTK data to avoid runtime network calls
+RUN python - <<'PY'
+import nltk
+packages = [
+  'vader_lexicon',
+  'punkt',
+  'stopwords',
+  'averaged_perceptron_tagger',
+  'wordnet'
+]
+for p in packages:
+  try:
+    nltk.download(p)
+  except Exception as e:
+    print(f"Warning: failed to download {p}: {e}")
+PY
+
 # Copy shared modules
 COPY shared /app/shared
 

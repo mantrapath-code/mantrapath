@@ -3,7 +3,7 @@
 // Frontend Auth Integration Test
 // This script tests the authentication flow from frontend perspective
 
-const API_BASE_URL = 'http://localhost:8000'
+const API_BASE_URL = 'http://139.84.213.185:8000'
 
 async function testAuthFlow() {
   console.log('🔍 Testing Frontend Authentication Integration...\n')
