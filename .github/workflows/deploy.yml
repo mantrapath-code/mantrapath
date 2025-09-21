@@ -38,7 +38,7 @@ env:
 jobs:
   # Pre-deployment checks and validation
   validate:
-    runs-on: [self-hosted, Linux, X64]
+    runs-on: ubuntu-latest
     outputs:
       deploy-backend: ${{ steps.changes.outputs.backend }}
       deploy-frontend: ${{ steps.changes.outputs.frontend }}
@@ -102,7 +102,7 @@ jobs:
   # Main deployment job
   deploy:
     needs: validate
-    runs-on: [self-hosted, Linux, X64]
+    runs-on: ubuntu-latest
     environment: ${{ github.event.inputs.environment || 'production' }}
     steps:
     - name: 📥 Checkout code
