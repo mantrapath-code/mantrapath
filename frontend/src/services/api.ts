@@ -1027,7 +1027,7 @@ class ApiService {
       streak_count: number
       difficulty_rating?: number
       created_at: string
-    }>>(`/community/forums/challenges/${challengeId}/progress?days=${days}` , {}, COMMUNITY_SERVICE_URL)
+    }>>(`/community/forums/challenges/${challengeId}/progress?days=${days}`, {}, COMMUNITY_SERVICE_URL)
   }
 
   async getChallengeLeaderboard(challengeId: string, limit: number = 10) {
