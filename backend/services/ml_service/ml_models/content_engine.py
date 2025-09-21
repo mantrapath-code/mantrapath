@@ -532,9 +532,22 @@ class NotificationContentEngine:
                     # Extract emotional keywords
                     keywords = self._extract_emotional_keywords(text)
                     emotional_analysis["emotional_keywords"].extend(keywords)
-            # If we have text but NLTK not available, raise to surface misconfiguration
+            # If we have text but NLTK not available, use fallback sentiment analysis
             elif text_data:
-                raise RuntimeError("Text data provided but NLTK sentiment analyzer unavailable")
+                # Use simple sentiment fallback methods for each text entry
+                for text in text_data:
+                    fallback_score = self._simple_sentiment_score(text)
+                    combined_score = {
+                        'compound': fallback_score,
+                        'positive': max(fallback_score, 0),
+                        'negative': abs(min(fallback_score, 0)),
+                        'neutral': 1.0 - abs(fallback_score),
+                        'textblob_polarity': fallback_score,
+                        'textblob_subjectivity': 0.5  # Default/unknown
+                    }
+                    emotional_analysis["sentiment_scores"].append(combined_score)
+                    keywords = self._extract_emotional_keywords(text)
+                    emotional_analysis["emotional_keywords"].extend(keywords)
             
             # Analyze mood score trends if available
             if mood_entries:
