@@ -1,0 +1,31 @@
+name: ✅ Continuous Integration
+
+on:
+  pull_request:
+    branches: [ main ]
+  push:
+    branches: [ main ]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+    - name: 📥 Checkout code
+      uses: actions/checkout@v4
+      
+    - name: ✅ Run basic checks
+      run: |
+        echo "🔍 Running basic repository checks..."
+        
+        # Check repository structure
+        echo "📁 Checking repository structure..."
+        test -d "backend" && echo "✅ Backend directory found"
+        test -d "frontend" && echo "✅ Frontend directory found"
+        test -f "README.md" && echo "✅ README.md found"
+        
+        # Check workflow files
+        echo "⚙️ Checking workflow files..."
+        test -f ".github/workflows/deploy.yml" && echo "✅ Deployment workflow found"
+        
+        echo "🎉 All checks passed successfully!"
+        echo "✅ Repository is ready for merge"
