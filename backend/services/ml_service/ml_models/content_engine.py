@@ -67,7 +67,17 @@ class NotificationContentEngine:
         
         # NLP and sentiment analysis components (required)
         if not NLTK_AVAILABLE:
-            raise RuntimeError("NLTK data not available - ensure Docker image preloads corpora")
+            raise RuntimeError(
+                "NLTK data not available. Please ensure the following corpora are installed: "
+                "'vader_lexicon', 'stopwords', 'punkt', 'wordnet'.\n"
+                "You can install them by running the following in a Python shell:\n"
+                "    import nltk\n"
+                "    nltk.download('vader_lexicon')\n"
+                "    nltk.download('stopwords')\n"
+                "    nltk.download('punkt')\n"
+                "    nltk.download('wordnet')\n"
+                "See https://www.nltk.org/data.html for more information."
+            )
         self.sentiment_analyzer = SentimentIntensityAnalyzer()
         self.lemmatizer = WordNetLemmatizer()
         self.stop_words = set(stopwords.words('english'))
