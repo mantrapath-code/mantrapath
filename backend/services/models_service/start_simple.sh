@@ -1,8 +1,8 @@
 #!/bin/bash
-"""
-Simple Models Service Startup
-Starts the service without trying to download models first
-"""
+#
+# Simple Models Service Startup
+# Starts the service without trying to download models first
+#
 
 echo "🚀 Starting Models Service (Minimal Mode)"
 echo "========================================"

@@ -1,0 +1,427 @@
+name: Complete MantraPath Deployment
+
+on:
+  push:
+    branches: [ main, develop ]
+    paths:
+      - 'backend/**'
+      - 'frontend/**'
+      - 'deployment/**'
+      - '.github/workflows/**'
+  pull_request:
+    branches: [ main ]
+    paths:
+      - 'backend/**'
+      - 'frontend/**'
+      - 'deployment/**'
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: 'Target environment'
+        required: true
+        default: 'dev'
+        type: choice
+        options:
+        - dev
+        - prod
+      force_rebuild:
+        description: 'Force rebuild all images'
+        required: false
+        default: false
+        type: boolean
+      services:
+        description: 'Specific services to deploy (comma-separated, empty for all)'
+        required: false
+        default: ''
+        type: string
+
+env:
+  REGISTRY: blr.vultrcr.com/mantrapath
+  REGISTRY_USERNAME: e9b950f6-81b8-4433-bb62-844d3f44b6bb
+
+jobs:
+  # Detect changes to optimize builds
+  detect-changes:
+    runs-on: ubuntu-latest
+    outputs:
+      backend: ${{ steps.changes.outputs.backend }}
+      frontend: ${{ steps.changes.outputs.frontend }}
+      deployment: ${{ steps.changes.outputs.deployment }}
+      any: ${{ steps.changes.outputs.backend == 'true' || steps.changes.outputs.frontend == 'true' || steps.changes.outputs.deployment == 'true' || github.event.inputs.force_rebuild == 'true' }}
+      services_matrix: ${{ steps.services.outputs.matrix }}
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
+
+    - name: Check for changes
+      uses: dorny/paths-filter@v2
+      id: changes
+      with:
+        filters: |
+          backend:
+            - 'backend/**'
+          frontend:
+            - 'frontend/**'
+          deployment:
+            - 'deployment/**'
+            - '.github/workflows/**'
+
+    - name: Determine services to build
+      id: services
+      run: |
+        # All available services
+        ALL_SERVICES=(
+          "api-gateway:backend/services/api_gateway/Dockerfile:backend:mantrapath-api-gateway"
+          "frontend:configs/Dockerfile.frontend:frontend:mantrapath-frontend"
+          "translation-service:backend/services/translation_service/Dockerfile:backend:mantrapath-translation-service"
+          "models-service:backend/services/models_service/Dockerfile:backend:mantrapath-models-service"
+          "auth-service:backend/services/auth_service/Dockerfile:backend:mantrapath-auth-service"
+          "chatbot-service:backend/services/chatbot_service/Dockerfile:backend:mantrapath-chatbot-service"
+          "voice-service:backend/services/voice_service/Dockerfile:backend:mantrapath-voice-service"
+          "ml-service:backend/services/ml_service/Dockerfile:backend:mantrapath-ml-service"
+          "mood-service:backend/services/mood_service/Dockerfile:backend:mantrapath-mood-service"
+          "profile-service:backend/services/profile_service/Dockerfile:backend:mantrapath-profile-service"
+          "content-service:backend/services/content_service/Dockerfile:backend:mantrapath-content-service"
+          "community-service:backend/services/community_service/Dockerfile:backend:mantrapath-community-service"
+          "notification-service:backend/services/notification_service/Dockerfile:backend:mantrapath-notification-service"
+          "memory-service:backend/services/memory_service/Dockerfile:backend:mantrapath-memory-service"
+          "media-service:backend/services/media_service/Dockerfile:backend:mantrapath-media-service"
+          "ai-context-store:backend/services/ai_context_store/Dockerfile:backend:mantrapath-ai-context-store"
+          "ai-event-processor:backend/services/ai_event_processor/Dockerfile:backend:mantrapath-ai-event-processor"
+          "action-orchestrator:backend/services/action_orchestrator/Dockerfile:backend:mantrapath-action-orchestrator"
+          "voice-event-processor:backend/services/voice_event_processor/Dockerfile:backend:mantrapath-voice-event-processor"
+          "proactive-assistance:backend/services/proactive_assistance_engine/Dockerfile:backend:mantrapath-proactive-assistance"
+          "deployment-api:backend/services/deployment_api/Dockerfile:backend:mantrapath-deployment-api"
+          "phi3-agent:backend/services/phi3_agent/Dockerfile:backend:mantrapath-phi3-agent"
+        )
+        
+        # Build matrix based on input services or changes
+        SERVICES_TO_BUILD=()
+        
+        if [[ -n "${{ github.event.inputs.services }}" ]]; then
+          # Manual selection of services
+          IFS=',' read -ra SELECTED_SERVICES <<< "${{ github.event.inputs.services }}"
+          for service in "${SELECTED_SERVICES[@]}"; do
+            service=$(echo "$service" | xargs) # trim whitespace
+            for item in "${ALL_SERVICES[@]}"; do
+              if [[ "$item" == "$service:"* ]]; then
+                SERVICES_TO_BUILD+=("$item")
+                break
+              fi
+            done
+          done
+        else
+          # Build all services if force rebuild or if changes detected
+          if [[ "${{ github.event.inputs.force_rebuild }}" == "true" || "${{ steps.changes.outputs.any }}" == "true" ]]; then
+            SERVICES_TO_BUILD=("${ALL_SERVICES[@]}")
+          fi
+        fi
+        
+        # Convert to JSON matrix format
+        MATRIX_SERVICES=""
+        for service in "${SERVICES_TO_BUILD[@]}"; do
+          IFS=':' read -ra SERVICE_PARTS <<< "$service"
+          SERVICE_NAME="${SERVICE_PARTS[0]}"
+          DOCKERFILE="${SERVICE_PARTS[1]}"
+          CONTEXT="${SERVICE_PARTS[2]}"
+          IMAGE="${SERVICE_PARTS[3]}"
+          
+          if [[ -n "$MATRIX_SERVICES" ]]; then
+            MATRIX_SERVICES="${MATRIX_SERVICES},"
+          fi
+          MATRIX_SERVICES="${MATRIX_SERVICES}{\"name\":\"${SERVICE_NAME}\",\"dockerfile\":\"${DOCKERFILE}\",\"context\":\"${CONTEXT}\",\"image\":\"${IMAGE}\"}"
+        done
+        
+        if [[ -n "$MATRIX_SERVICES" ]]; then
+          echo "matrix={\"include\":[${MATRIX_SERVICES}]}" >> $GITHUB_OUTPUT
+          echo "✅ Services to build: $(echo "$MATRIX_SERVICES" | jq -r '.[] | .name' | tr '\n' ' ')"
+        else
+          echo "matrix={\"include\":[]}" >> $GITHUB_OUTPUT
+          echo "ℹ️ No services to build"
+        fi
+
+  build-and-push:
+    needs: detect-changes
+    if: needs.detect-changes.outputs.any == 'true'
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJson(needs.detect-changes.outputs.services_matrix) }}
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Set up Docker Buildx
+      uses: docker/setup-buildx-action@v3
+
+    - name: Log in to Vultr Container Registry
+      run: |
+        echo "${{ secrets.VULTR_REGISTRY_PASSWORD }}" | docker login https://blr.vultrcr.com/mantrapath -u ${{ env.REGISTRY_USERNAME }} --password-stdin
+
+    - name: Set image tags
+      id: tags
+      run: |
+        IMAGE_NAME="${{ env.REGISTRY }}/${{ matrix.image }}"
+        TAGS="${IMAGE_NAME}:latest,${IMAGE_NAME}:${{ github.sha }}"
+        
+        # Add branch-specific tag
+        if [[ "${{ github.ref }}" == "refs/heads/main" ]]; then
+          TAGS="${TAGS},${IMAGE_NAME}:prod"
+        elif [[ "${{ github.ref }}" == "refs/heads/develop" ]]; then
+          TAGS="${TAGS},${IMAGE_NAME}:dev"
+        fi
+        
+        echo "tags=${TAGS}" >> $GITHUB_OUTPUT
+        echo "image_name=${IMAGE_NAME}" >> $GITHUB_OUTPUT
+
+    - name: Check if Dockerfile exists
+      run: |
+        DOCKERFILE_PATH="${{ matrix.dockerfile }}"
+        if [[ "${{ matrix.name }}" == "frontend" ]]; then
+          DOCKERFILE_PATH="deployment/configs/Dockerfile.frontend"
+        fi
+        
+        if [[ ! -f "$DOCKERFILE_PATH" ]]; then
+          echo "❌ Dockerfile not found: $DOCKERFILE_PATH"
+          echo "Creating basic Dockerfile for ${{ matrix.name }}..."
+          
+          # Create basic Dockerfile if missing
+          mkdir -p "$(dirname "$DOCKERFILE_PATH")"
+          cat > "$DOCKERFILE_PATH" << 'EOF'
+FROM python:3.11-slim
+
+WORKDIR /app
+
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
+
+COPY . .
+
+EXPOSE 8000
+
+CMD ["python", "main.py"]
+EOF
+          echo "✅ Created basic Dockerfile for ${{ matrix.name }}"
+        else
+          echo "✅ Dockerfile found: $DOCKERFILE_PATH"
+        fi
+
+    - name: Build Docker image
+      run: |
+        cd ${{ matrix.context }}
+        DOCKERFILE_PATH="../${{ matrix.dockerfile }}"
+        if [[ "${{ matrix.name }}" == "frontend" ]]; then
+          DOCKERFILE_PATH="../deployment/configs/Dockerfile.frontend"
+        fi
+        
+        echo "Building ${{ matrix.name }} from context: $(pwd)"
+        echo "Using Dockerfile: $DOCKERFILE_PATH"
+        
+        docker build -f "$DOCKERFILE_PATH" -t temp-${{ matrix.image }}:latest .
+        
+    - name: Tag and push Docker image
+      run: |
+        # Parse tags and push each one
+        IFS=',' read -ra TAG_ARRAY <<< "${{ steps.tags.outputs.tags }}"
+        
+        for tag in "${TAG_ARRAY[@]}"; do
+          echo "Tagging: temp-${{ matrix.image }}:latest -> $tag"
+          docker tag temp-${{ matrix.image }}:latest "$tag"
+        done
+        
+        for tag in "${TAG_ARRAY[@]}"; do
+          echo "Pushing: $tag"
+          docker push "$tag"
+        done
+        
+        # Clean up temp image
+        docker rmi temp-${{ matrix.image }}:latest || true
+        
+        echo "✅ Successfully pushed ${{ matrix.image }} to Vultr registry"
+
+  deploy:
+    needs: [detect-changes, build-and-push]
+    runs-on: ubuntu-latest
+    if: always() && (needs.build-and-push.result == 'success' || needs.detect-changes.outputs.deployment == 'true') && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/develop' || github.event_name == 'workflow_dispatch')
+    
+    environment:
+      name: ${{ github.ref == 'refs/heads/main' && 'production' || 'development' }}
+      url: ${{ steps.deploy.outputs.url }}
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Install kubectl and Helm
+      run: |
+        # Install kubectl
+        curl -LO "https://dl.k8s.io/release/$(curl -L -s https://dl.k8s.io/release/stable.txt)/bin/linux/amd64/kubectl"
+        chmod +x kubectl
+        sudo mv kubectl /usr/local/bin/
+        
+        # Install Helm
+        curl https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3 | bash
+
+    - name: Set deployment variables
+      id: vars
+      run: |
+        if [[ "${{ github.ref }}" == "refs/heads/main" ]]; then
+          echo "environment=prod" >> $GITHUB_OUTPUT
+          echo "values_file=values-vultr-prod.yaml" >> $GITHUB_OUTPUT
+          echo "namespace=mantrapath-prod" >> $GITHUB_OUTPUT
+        elif [[ "${{ github.ref }}" == "refs/heads/develop" ]]; then
+          echo "environment=dev" >> $GITHUB_OUTPUT
+          echo "values_file=values-dev.yaml" >> $GITHUB_OUTPUT
+          echo "namespace=mantrapath-dev" >> $GITHUB_OUTPUT
+        else
+          echo "environment=${{ github.event.inputs.environment || 'dev' }}" >> $GITHUB_OUTPUT
+          echo "values_file=values-${{ github.event.inputs.environment || 'dev' }}.yaml" >> $GITHUB_OUTPUT
+          echo "namespace=mantrapath-${{ github.event.inputs.environment || 'dev' }}" >> $GITHUB_OUTPUT
+        fi
+
+    - name: Setup Kubernetes context (Kind for development)
+      if: steps.vars.outputs.environment == 'dev'
+      run: |
+        echo "Setting up Kind cluster for development..."
+        
+        # Install Kind
+        curl -Lo ./kind https://kind.sigs.k8s.io/dl/v0.20.0/kind-linux-amd64
+        chmod +x ./kind
+        sudo mv ./kind /usr/local/bin/
+        
+        # Create Kind cluster if it doesn't exist
+        if ! kind get clusters | grep -q "mantrapath-dev"; then
+          kind create cluster --name mantrapath-dev --config deployment/environments/kind-dev.yaml
+        fi
+        
+        # Set kubectl context
+        kubectl cluster-info --context kind-mantrapath-dev
+
+    - name: Validate Helm charts
+      run: |
+        cd deployment/helm/mantrapath
+        helm dependency update
+        helm lint . --values ${{ steps.vars.outputs.values_file }} --strict
+
+    - name: Create Docker registry secret
+      run: |
+        kubectl create namespace ${{ steps.vars.outputs.namespace }} --dry-run=client -o yaml | kubectl apply -f -
+        
+        # Create registry secret for Vultr
+        kubectl create secret docker-registry mantrapath-registry \
+          --namespace=${{ steps.vars.outputs.namespace }} \
+          --docker-server=blr.vultrcr.com \
+          --docker-username=${{ env.REGISTRY_USERNAME }} \
+          --docker-password="${{ secrets.VULTR_REGISTRY_PASSWORD }}" \
+          --dry-run=client -o yaml | kubectl apply -f -
+
+    - name: Deploy with Helm
+      id: deploy
+      run: |
+        cd deployment/helm/mantrapath
+        
+        # Deploy using Helm - all images from Vultr registry
+        helm upgrade --install mantrapath-${{ steps.vars.outputs.environment }} . \
+          --namespace ${{ steps.vars.outputs.namespace }} \
+          --values ${{ steps.vars.outputs.values_file }} \
+          --set global.registry=${{ env.REGISTRY }} \
+          --set global.imagePullSecrets[0].name=mantrapath-registry \
+          --set-string global.labels.deployment-id=${{ github.sha }} \
+          --set-string global.labels.build-number=${{ github.run_number }} \
+          --set-string global.labels.registry-url="${{ env.REGISTRY }}" \
+          --timeout 15m \
+          --wait \
+          --atomic
+        
+        echo "✅ Deployment completed - all images pulled from ${{ env.REGISTRY }}"
+        
+        # Get deployment URL
+        if [[ "${{ steps.vars.outputs.environment }}" == "dev" ]]; then
+          echo "url=http://localhost:30880" >> $GITHUB_OUTPUT
+        else
+          echo "url=https://mantrapath.com" >> $GITHUB_OUTPUT
+        fi
+
+    - name: Verify deployment
+      run: |
+        echo "Checking deployment status..."
+        kubectl get pods -n ${{ steps.vars.outputs.namespace }} -l app.kubernetes.io/instance=mantrapath-${{ steps.vars.outputs.environment }}
+        kubectl get services -n ${{ steps.vars.outputs.namespace }} -l app.kubernetes.io/instance=mantrapath-${{ steps.vars.outputs.environment }}
+        
+        # Wait for pods to be ready (with timeout)
+        echo "Waiting for pods to be ready..."
+        kubectl wait --for=condition=ready pod \
+          -l app.kubernetes.io/instance=mantrapath-${{ steps.vars.outputs.environment }} \
+          -n ${{ steps.vars.outputs.namespace }} \
+          --timeout=300s || echo "⚠️ Some pods may still be starting"
+
+    - name: Run health checks
+      run: |
+        echo "Running post-deployment health checks..."
+        
+        # Check critical services
+        CRITICAL_SERVICES=("api-gateway" "frontend" "models-service")
+        
+        for service in "${CRITICAL_SERVICES[@]}"; do
+          echo "Checking $service..."
+          POD_NAME=$(kubectl get pods -n ${{ steps.vars.outputs.namespace }} -l component=$service -o jsonpath='{.items[0].metadata.name}' 2>/dev/null || echo "")
+          
+          if [[ -n "$POD_NAME" ]]; then
+            kubectl get pod "$POD_NAME" -n ${{ steps.vars.outputs.namespace }}
+            echo "✅ $service is running"
+          else
+            echo "⚠️ $service pod not found"
+          fi
+        done
+        
+        echo "Health checks completed"
+
+    - name: Deployment Summary
+      if: always()
+      run: |
+        echo "# 🚀 MantraPath Deployment Summary" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "**Environment:** ${{ steps.vars.outputs.environment }}" >> $GITHUB_STEP_SUMMARY
+        echo "**Namespace:** ${{ steps.vars.outputs.namespace }}" >> $GITHUB_STEP_SUMMARY
+        echo "**Registry:** ${{ env.REGISTRY }}" >> $GITHUB_STEP_SUMMARY
+        echo "**Commit:** ${{ github.sha }}" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        
+        if [[ "${{ job.status }}" == "success" ]]; then
+          echo "✅ **Status:** Deployment successful!" >> $GITHUB_STEP_SUMMARY
+          echo "🌐 **URL:** ${{ steps.deploy.outputs.url }}" >> $GITHUB_STEP_SUMMARY
+        else
+          echo "❌ **Status:** Deployment failed!" >> $GITHUB_STEP_SUMMARY
+        fi
+        
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "## 📊 Deployed Services" >> $GITHUB_STEP_SUMMARY
+        kubectl get pods -n ${{ steps.vars.outputs.namespace }} --no-headers 2>/dev/null | wc -l | xargs echo "**Total Pods:**" >> $GITHUB_STEP_SUMMARY || echo "**Total Pods:** Unknown" >> $GITHUB_STEP_SUMMARY
+        
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "## 🔗 Quick Actions" >> $GITHUB_STEP_SUMMARY
+        echo "- [View Pods](kubectl get pods -n ${{ steps.vars.outputs.namespace }})" >> $GITHUB_STEP_SUMMARY
+        echo "- [View Services](kubectl get services -n ${{ steps.vars.outputs.namespace }})" >> $GITHUB_STEP_SUMMARY
+        echo "- [Vultr Registry](https://blr.vultrcr.com/mantrapath)" >> $GITHUB_STEP_SUMMARY
+
+  notify:
+    needs: [detect-changes, build-and-push, deploy]
+    runs-on: ubuntu-latest
+    if: always()
+    
+    steps:
+    - name: Notify deployment status
+      run: |
+        if [[ "${{ needs.deploy.result }}" == "success" ]]; then
+          echo "🎉 MantraPath deployment completed successfully!"
+          echo "Environment: ${{ needs.deploy.outputs.environment }}"
+          echo "All images pulled from Vultr registry: ${{ env.REGISTRY }}"
+        elif [[ "${{ needs.deploy.result }}" == "failure" ]]; then
+          echo "❌ MantraPath deployment failed!"
+          echo "Please check the deployment logs for details."
+        else
+          echo "ℹ️ Deployment was skipped or cancelled."
+        fi

@@ -17,5 +17,5 @@ ENV PYTHONPATH=/app
 
 EXPOSE 8004
 
-# Use the production chatbot service with Phi-3 integration
+# Production chatbot service
 CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8004"]

@@ -64,7 +64,7 @@ class ChatbotConfig:
         
         # Models Service Configuration
         models_service = ServiceConfig(
-            url=os.getenv("MODELS_SERVICE_URL", "http://models-service:8085"),
+            url=os.getenv("MODELS_SERVICE_URL", "http://localhost:8081"),
             timeout=int(os.getenv("MODELS_SERVICE_TIMEOUT", "30")),
             max_retries=int(os.getenv("MODELS_SERVICE_MAX_RETRIES", "3")),
             enabled=os.getenv("MODELS_SERVICE_ENABLED", "true").lower() == "true",

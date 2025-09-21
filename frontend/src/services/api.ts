@@ -221,7 +221,7 @@ class ApiService {
 
   // Auth methods
   async login(emailOrUsername: string, password: string) {
-    const response = await this.request<{access_token: string, refresh_token: string}>('/auth/login', {
+    const response = await this.request<{access_token: string, refresh_token: string}>('/api/auth/login', {
       method: 'POST',
       body: JSON.stringify({ email_or_username: emailOrUsername, password }),
     })
@@ -247,7 +247,7 @@ class ApiService {
       access_token?: string
       refresh_token?: string
       token_type?: string
-    }>('/auth/register', {
+    }>('/api/auth/register', {
       method: 'POST',
       body: JSON.stringify(userData),
     })
@@ -277,7 +277,7 @@ class ApiService {
       is_active: boolean
       is_verified: boolean
       role: string
-    }>('/me')
+    }>('/api/auth/me')
   }
 
   logout() {

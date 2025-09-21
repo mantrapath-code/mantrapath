@@ -26,14 +26,6 @@ from .context_analyzer import ContextAnalyzer, ConversationContext
 # Initialize logger first
 logger = logging.getLogger(__name__)
 
-# Phi-3 Mini Agent Integration
-try:
-    from ..agent_service import Phi3AgentService
-    AGENT_AVAILABLE = True
-except ImportError:
-    logger.warning("Phi-3 agent service not available - using fallback mode")
-    AGENT_AVAILABLE = False
-
 @dataclass
 class IntelligentResponse:
     """
@@ -166,7 +158,8 @@ class ResponseGenerator:
             
         except Exception as e:
             logger.error(f"Error generating intelligent response for user {user_id}: {str(e)}")
-            return await self._generate_fallback_response(user_message, user_id)
+            # Do not fabricate responses; surface the error to the caller
+            raise
 
     async def _enhance_with_context(
         self, 
@@ -287,51 +280,7 @@ class ResponseGenerator:
         except Exception as e:
             logger.error(f"Error tracking response for user {user_id}: {str(e)}")
 
-    async def _generate_fallback_response(
-        self, 
-        user_message: str, 
-        user_id: str
-    ) -> IntelligentResponse:
-        """
-        Generate fallback response when intelligent generation fails
-        
-        Args:
-            user_message (str): User's message
-            user_id (str): User identifier
-            
-        Returns:
-            IntelligentResponse: Fallback response
-        """
-        logger.warning(f"Generating fallback response for user {user_id}")
-        
-        # Simple fallback logic based on basic keyword detection
-        message_lower = user_message.lower()
-        
-        if any(word in message_lower for word in ["crisis", "help", "urgent"]):
-            response_text = ("I can see this is urgent for you. While I'm experiencing some "
-                           "technical difficulties, I want you to know that support is available. "
-                           "Please consider reaching out to a crisis helpline if you need immediate help.")
-            intervention_type = "crisis_fallback"
-            crisis_detected = True
-        else:
-            response_text = ("I'm here to listen and support you. I'm experiencing some technical "
-                           "issues right now, but I want you to know that your feelings matter. "
-                           "Can you tell me more about what's on your mind?")
-            intervention_type = "general_fallback"
-            crisis_detected = False
-        
-        return IntelligentResponse(
-            response_text=response_text,
-            tone="supportive_fallback",
-            intervention_type=intervention_type,
-            crisis_detected=crisis_detected,
-            confidence_score=0.3,
-            context_used={"fallback_reason": "intelligent_generation_failed"},
-            generation_metadata={
-                "fallback_used": True,
-                "timestamp": datetime.utcnow().isoformat()
-            }
-        )
+    # Fallback generation removed to avoid mock-like responses
 
     async def get_response_analytics(self, user_id: str) -> Dict[str, Any]:
         """

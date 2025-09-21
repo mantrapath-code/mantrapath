@@ -37,6 +37,14 @@ from shared.database import get_db, engine
 from shared.models import ChatSession, ChatMessage, Base
 from shared.auth import get_current_user
 
+# Import our intelligent engine components
+from src.intelligent_engine import (
+    MoodAwareResponder, 
+    ServiceIntegrator, 
+    ContextAnalyzer, 
+    ResponseGenerator
+)
+
 # Configure logging
 logging.basicConfig(
     level=logging.INFO,
@@ -250,7 +258,7 @@ async def get_conversation_history(
 
 async def detect_language(text: str, http_client: httpx.AsyncClient) -> Dict[str, Any]:
     """
-    Detect language using models service with Phi-3
+    Detect language using models service
     
     Args:
         text (str): Text to analyze for language detection

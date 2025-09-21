@@ -5,11 +5,16 @@
 
 import { getAuthToken } from '../utils/auth'
 
+// Get environment-aware API base URL
+const getApiBaseUrl = () => {
+  return import.meta.env.VITE_API_GATEWAY_URL || import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000';
+};
+
 // Real Backend Service Endpoints - Sprint 2
 const BACKEND_API_ENDPOINTS = {
   // API Gateway (Port 8000) - Primary entry point
   gateway: {
-    base: 'http://localhost:8000',
+    base: getApiBaseUrl(),
     health: '/api/v3/health/enhanced',
     voiceCommand: '/api/v3/voice/command',
     metrics: '/api/v3/metrics/performance'
@@ -17,28 +22,28 @@ const BACKEND_API_ENDPOINTS = {
   
   // AI Context Store (Port 8013) - via API Gateway
   context: {
-    base: 'http://localhost:8000/ai-context',
+    base: `${getApiBaseUrl()}/ai-context`,
     root: '/',
     metrics: '/metrics'
   },
   
   // AI Event Processor (Port 8014) - via API Gateway
   aiEvents: {
-    base: 'http://localhost:8000/ai-events',
+    base: `${getApiBaseUrl()}/ai-events`,
     health: '/health',
     metrics: '/metrics'
   },
   
   // Voice Event Processor (Port 8015) - via API Gateway
   voiceEvents: {
-    base: 'http://localhost:8000/voice-events',
+    base: `${getApiBaseUrl()}/voice-events`,
     health: '/health',
     metrics: '/metrics'
   },
   
   // Proactive Assistance Engine (Port 8018) - via API Gateway
   assistance: {
-    base: 'http://localhost:8000/assistance',
+    base: `${getApiBaseUrl()}/assistance`,
     evaluate: (userId: string) => `/api/v3/assistance/evaluate/${userId}`,
     status: (userId: string) => `/api/v3/assistance/status/${userId}`,
     trigger: (userId: string) => `/api/v3/assistance/trigger/${userId}`,
@@ -52,14 +57,14 @@ const BACKEND_API_ENDPOINTS = {
   
   // Notification Service (Port 8007) - via API Gateway
   notifications: {
-    base: 'http://localhost:8000/notifications',
+    base: `${getApiBaseUrl()}/notifications`,
     health: '/health',
     // WebSocket primary: /ws/{user_id}
   },
   
   // Mood Service (Port 8002) - via API Gateway
   mood: {
-    base: 'http://localhost:8000/mood',
+    base: `${getApiBaseUrl()}/mood`,
     health: '/health',
     entries: '/api/v3/mood/entries',
     patterns: '/api/v3/mood/patterns',
@@ -68,7 +73,7 @@ const BACKEND_API_ENDPOINTS = {
   
   // Chatbot Service (Port 8004) - via API Gateway
   chatbot: {
-    base: 'http://localhost:8000/chatbot',
+    base: `${getApiBaseUrl()}/chatbot`,
     health: '/health',
     chat: '/api/v3/chat',
     sessions: '/api/v3/chat/sessions'

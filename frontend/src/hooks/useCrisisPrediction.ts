@@ -72,7 +72,7 @@ interface AlertSummary {
 
 // API Service class
 class CrisisPredictionAPI {
-  private baseUrl = import.meta.env.VITE_API_URL || 'http://localhost:8000'
+  private baseUrl = import.meta.env.VITE_API_GATEWAY_URL || import.meta.env.VITE_API_URL || 'http://localhost:8000'
   
   private async makeRequest<T>(endpoint: string, options: RequestInit = {}): Promise<T> {
     const token = localStorage.getItem('mantrapath_token')

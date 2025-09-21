@@ -257,20 +257,24 @@ async def analyze_sentiment(
         raise HTTPException(status_code=500, detail=str(e))
 
 @router.post("/nlp/embeddings")
-async def get_embeddings(
-    text: str = Form(...),
-    model_name: str = Form("sentence_transformers")
-):
-    """Get text embeddings"""
+async def get_embeddings(request: Dict[str, Any]):
+    """Get text embeddings via TEI backend."""
     try:
         from main import nlp_engine
-        
+
         if not nlp_engine:
             raise HTTPException(status_code=503, detail="NLP engine not initialized")
-        
-        result = await nlp_engine.get_embeddings(text=text, model_name=model_name)
+
+        text = request.get("text") or request.get("input") or request.get("message")
+        if text is None:
+            raise HTTPException(status_code=400, detail="Missing 'text' field")
+
+        model_name = request.get("model") or request.get("model_name") or "tei"
+        result = await nlp_engine.get_embeddings(text=str(text), model_name=str(model_name))
         return result
-        
+
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"Embeddings error: {e}")
         raise HTTPException(status_code=500, detail=str(e))
