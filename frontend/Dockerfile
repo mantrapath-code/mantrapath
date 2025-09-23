@@ -7,7 +7,12 @@ WORKDIR /app
 COPY package*.json ./
 
 # Install dependencies (include dev dependencies for build tools like tsc and vite)
-RUN npm ci
+# Use npm ci when a lockfile is present; otherwise fall back to npm install
+RUN if [ -f package-lock.json ]; then \
+			npm ci --no-audit --no-fund; \
+		else \
+			npm install --no-audit --no-fund; \
+		fi
 
 # Copy source code
 COPY . .
