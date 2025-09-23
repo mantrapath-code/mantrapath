@@ -14,14 +14,15 @@ RUN apt-get update && apt-get install -y \
     gcc \
     && rm -rf /var/lib/apt/lists/*
 
-# Copy requirements first for better caching
-COPY requirements.txt .
+# Copy service-specific requirements first for better caching
+COPY services/deployment_api/requirements.txt ./requirements.txt
 
 # Install Python dependencies
 RUN pip install --no-cache-dir -r requirements.txt
 
 # Copy source code
-COPY src/ ./src/
+COPY services/deployment_api/src/ ./src/
+COPY shared/ ./shared/
 
 # Create non-root user
 RUN useradd --create-home --shell /bin/bash app \

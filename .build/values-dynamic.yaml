@@ -1,0 +1,60 @@
+# Dynamically generated values for detected cluster: microk8s
+global:
+  registry: "localhost:32000"
+  namespace: "mantrapath"
+  cluster:
+    type: "microk8s"
+    storageClass: "microk8s-hostpath"
+    ingressClass: "public"
+
+# Override storage class
+persistence:
+  storageClass: "microk8s-hostpath"
+
+# Override ingress class
+ingress:
+  className: "public"
+  hosts:
+    - host: mantrapath.local
+      paths:
+        - path: /
+          pathType: Prefix
+          service: frontend
+          port: 80
+        - path: /api
+          pathType: Prefix
+          service: api-gateway
+          port: 8000
+
+# Cluster-specific configurations
+# Development cluster overrides
+global:
+  imagePullPolicy: IfNotPresent
+
+# Reduced resources for local development
+backend:
+  defaultResources:
+    requests:
+      cpu: 50m
+      memory: 128Mi
+    limits:
+      cpu: 200m
+      memory: 256Mi
+
+infrastructure:
+  postgres:
+    resources:
+      requests:
+        cpu: 50m
+        memory: 128Mi
+      limits:
+        cpu: 200m
+        memory: 256Mi
+  redis:
+    resources:
+      requests:
+        cpu: 25m
+        memory: 64Mi
+      limits:
+        cpu: 100m
+        memory: 128Mi

@@ -1,0 +1,122 @@
+# Example production compose referencing GHCR images.
+# Adjust environment and volumes as needed for your deployment.
+
+version: "3.9"
+
+x-image:
+  &service-image
+  image: ghcr.io/${OWNER:-mantrapath-code}/${REPO:-mantrapath}-SERVICE_TAG:${TAG:-latest}
+  # Replace SERVICE_TAG with actual service suffixes below per service
+
+services:
+  api-gateway:
+    image: ghcr.io/${OWNER:-mantrapath-code}/${REPO:-mantrapath}-api-gateway:${TAG:-latest}
+    ports:
+      - "8000:8000"
+    environment:
+      - DATABASE_URL=${DATABASE_URL}
+      - REDIS_URL=${REDIS_URL}
+      - AUTH_SERVICE_URL=http://auth-service:8001
+      - PROFILE_SERVICE_URL=http://profile-service:8002
+      - MOOD_SERVICE_URL=http://mood-service:8003
+      - CHATBOT_SERVICE_URL=http://chatbot-service:8004
+      - CONTENT_SERVICE_URL=http://content-service:8005
+      - COMMUNITY_SERVICE_URL=http://community-service:8006
+      - NOTIFICATION_SERVICE_URL=http://notification-service:8007
+      - ML_SERVICE_URL=http://ml-service:8008
+      - MEDIA_SERVICE_URL=http://media-service:8009
+    depends_on:
+      - auth-service
+      - profile-service
+      - mood-service
+      - chatbot-service
+      - content-service
+      - community-service
+      - notification-service
+      - ml-service
+      - media-service
+
+  auth-service:
+    image: ghcr.io/${OWNER:-mantrapath-code}/${REPO:-mantrapath}-auth-service:${TAG:-latest}
+    ports:
+      - "8001:8001"
+
+  profile-service:
+    image: ghcr.io/${OWNER:-mantrapath-code}/${REPO:-mantrapath}-profile-service:${TAG:-latest}
+    ports:
+      - "8002:8002"
+
+  mood-service:
+    image: ghcr.io/${OWNER:-mantrapath-code}/${REPO:-mantrapath}-mood-service:${TAG:-latest}
+    ports:
+      - "8003:8003"
+
+  chatbot-service:
+    image: ghcr.io/${OWNER:-mantrapath-code}/${REPO:-mantrapath}-chatbot-service:${TAG:-latest}
+    ports:
+      - "8004:8004"
+
+  content-service:
+    image: ghcr.io/${OWNER:-mantrapath-code}/${REPO:-mantrapath}-content-service:${TAG:-latest}
+    ports:
+      - "8005:8005"
+
+  community-service:
+    image: ghcr.io/${OWNER:-mantrapath-code}/${REPO:-mantrapath}-community-service:${TAG:-latest}
+    ports:
+      - "8006:8006"
+
+  notification-service:
+    image: ghcr.io/${OWNER:-mantrapath-code}/${REPO:-mantrapath}-notification-service:${TAG:-latest}
+    ports:
+      - "8007:8007"
+
+  ml-service:
+    image: ghcr.io/${OWNER:-mantrapath-code}/${REPO:-mantrapath}-ml-service:${TAG:-latest}
+    ports:
+      - "8008:8008"
+
+  media-service:
+    image: ghcr.io/${OWNER:-mantrapath-code}/${REPO:-mantrapath}-media-service:${TAG:-latest}
+    ports:
+      - "8009:8009"
+
+  # Remaining backend services
+  action-orchestrator:
+    image: ghcr.io/${OWNER:-mantrapath-code}/${REPO:-mantrapath}-action-orchestrator:${TAG:-latest}
+
+  ai-context-store:
+    image: ghcr.io/${OWNER:-mantrapath-code}/${REPO:-mantrapath}-ai-context-store:${TAG:-latest}
+
+  ai-event-processor:
+    image: ghcr.io/${OWNER:-mantrapath-code}/${REPO:-mantrapath}-ai-event-processor:${TAG:-latest}
+
+  deployment-api:
+    image: ghcr.io/${OWNER:-mantrapath-code}/${REPO:-mantrapath}-deployment-api:${TAG:-latest}
+
+  memory-service:
+    image: ghcr.io/${OWNER:-mantrapath-code}/${REPO:-mantrapath}-memory-service:${TAG:-latest}
+
+  models-service:
+    image: ghcr.io/${OWNER:-mantrapath-code}/${REPO:-mantrapath}-models-service:${TAG:-latest}
+
+  phi3-agent:
+    image: ghcr.io/${OWNER:-mantrapath-code}/${REPO:-mantrapath}-phi3-agent:${TAG:-latest}
+
+  proactive-assistance-engine:
+    image: ghcr.io/${OWNER:-mantrapath-code}/${REPO:-mantrapath}-proactive-assistance-engine:${TAG:-latest}
+
+  translation-service:
+    image: ghcr.io/${OWNER:-mantrapath-code}/${REPO:-mantrapath}-translation-service:${TAG:-latest}
+
+  voice-event-processor:
+    image: ghcr.io/${OWNER:-mantrapath-code}/${REPO:-mantrapath}-voice-event-processor:${TAG:-latest}
+
+  voice-service:
+    image: ghcr.io/${OWNER:-mantrapath-code}/${REPO:-mantrapath}-voice-service:${TAG:-latest}
+
+  # Frontend
+  frontend:
+    image: ghcr.io/${OWNER:-mantrapath-code}/${REPO:-mantrapath}-frontend:${TAG:-latest}
+    ports:
+      - "5173:80"

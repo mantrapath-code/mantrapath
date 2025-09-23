@@ -19,14 +19,15 @@ RUN apt-get update && apt-get install -y \
     wget \
     && rm -rf /var/lib/apt/lists/*
 
-# Copy requirements first for better Docker layer caching
-COPY requirements.txt .
+# Copy service-specific requirements first for better Docker layer caching
+COPY services/voice_service/requirements.txt ./requirements.txt
 
 # Install Python dependencies
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Copy the application code
-COPY . .
+# Copy the application code (service-only)
+COPY services/voice_service/ .
+COPY shared/ ./shared/
 
 # Create logs directory
 RUN mkdir -p /app/logs

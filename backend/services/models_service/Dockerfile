@@ -36,16 +36,15 @@ RUN apt-get update && apt-get install -y \
     && rm -rf /var/lib/apt/lists/*
 
 # Install Python dependencies
-COPY requirements.txt .
+COPY services/models_service/requirements.txt ./requirements.txt
 RUN pip install --no-cache-dir -r requirements.txt
 
 # Copy application code
-COPY . .
+COPY services/models_service/ ./
+COPY shared/ ./shared/
 
-# Copy startup scripts
-COPY start_simple.sh ./start_simple.sh
-COPY start_full.sh ./start_full.sh
-RUN chmod +x ./start_simple.sh ./start_full.sh
+# Ensure startup scripts are executable
+RUN chmod +x ./start_simple.sh ./start_full.sh || true
 
 # Create models directory
 RUN mkdir -p models cache logs

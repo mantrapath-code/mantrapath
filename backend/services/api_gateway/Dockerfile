@@ -17,8 +17,8 @@ RUN apt-get update && apt-get install -y \
     pkg-config \
     && rm -rf /var/lib/apt/lists/*
 
-# Copy requirements first for better caching
-COPY requirements.txt .
+# Copy service-specific requirements first for better caching
+COPY services/api_gateway/requirements.txt ./requirements.txt
 
 # Install Python dependencies
 RUN pip install --no-cache-dir -r requirements.txt
@@ -26,14 +26,14 @@ RUN pip install --no-cache-dir -r requirements.txt
 # Create necessary directories
 RUN mkdir -p /app/src /app/config /app/logs /app/cache /app/models
 
-# Copy source code
+# Copy source code (service-only)
 COPY services/api_gateway/src/ ./src/
 COPY services/api_gateway/config/ ./config/
 
 # Copy shared modules (required for authentication)
 COPY shared/ ./shared/
 
-# Copy V3 enhanced configuration files
+# Copy required global config files from backend/config
 COPY config/voice_config.yaml ./config/
 COPY config/cultural_config.yaml ./config/
 COPY config/performance_config.yaml ./config/
