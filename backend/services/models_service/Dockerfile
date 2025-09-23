@@ -1,10 +1,11 @@
+# syntax=docker/dockerfile:1.6
 FROM python:3.11-slim
 
 # Set working directory
 WORKDIR /app
 
 # Install system dependencies for audio processing and TTS
-RUN apt-get update && apt-get install -y \
+RUN apt-get update && apt-get install -y --no-install-recommends \
     # Audio processing
     ffmpeg \
     sox \
@@ -35,9 +36,23 @@ RUN apt-get update && apt-get install -y \
     git \
     && rm -rf /var/lib/apt/lists/*
 
-# Install Python dependencies
+# Install Python dependencies (with retry and cache)
+SHELL ["/bin/bash", "-o", "pipefail", "-c"]
+ENV PIP_DEFAULT_TIMEOUT=120 \
+        PIP_DISABLE_PIP_VERSION_CHECK=1
 COPY services/models_service/requirements.txt ./requirements.txt
-RUN pip install --no-cache-dir -r requirements.txt
+RUN --mount=type=cache,target=/root/.cache/pip \
+        set -euo pipefail; \
+        for i in {1..3}; do \
+            echo "[models_service] pip install attempt $i"; \
+            if python -m pip install --upgrade pip && pip install -r requirements.txt; then \
+                break; \
+            fi; \
+            if [[ $i -eq 3 ]]; then \
+                echo "[models_service] pip install failed after $i attempts" >&2; exit 1; \
+            fi; \
+            sleep $((i*5)); \
+        done
 
 # Copy application code
 COPY services/models_service/ ./

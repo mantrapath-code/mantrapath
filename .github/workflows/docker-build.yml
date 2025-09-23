@@ -11,6 +11,10 @@ on:
         description: "Optional service directory name under backend/services to force-build (e.g., api_gateway)"
         required: false
         type: string
+      build_all:
+        description: "If true, build all services regardless of changes"
+        required: false
+        type: boolean
 
 permissions:
   contents: read
@@ -85,6 +89,7 @@ jobs:
           set -euo pipefail
 
           FORCE_SERVICE="${{ inputs.force_service }}"
+          BUILD_ALL="${{ inputs.build_all }}"
           CHANGED_JSON='${{ steps.changed.outputs.all }}'
           echo "$CHANGED_JSON" | jq '.' >/dev/null 2>&1 || CHANGED_JSON='[]'
 
@@ -106,6 +111,11 @@ jobs:
             services+=("$svc_dir")
           done < <(find backend/services -mindepth 2 -maxdepth 2 -type f -name Dockerfile -print0 | sort -z)
 
+          # Deduplicate service names in case of any path duplicates
+          if [[ ${#services[@]} -gt 0 ]]; then
+          mapfile -t services < <(printf '%s\n' "${services[@]}" | awk 'NF' | sort -u)
+          fi
+
           # Optionally include frontend if Dockerfile exists
           if [[ -f frontend/Dockerfile ]]; then
             services+=("frontend")
@@ -113,7 +123,9 @@ jobs:
 
           declare -a to_build=()
 
-          if [[ -n "$FORCE_SERVICE" ]]; then
+          if [[ "$BUILD_ALL" == "true" || "$BUILD_ALL" == "1" ]]; then
+            to_build=("${services[@]}")
+          elif [[ -n "$FORCE_SERVICE" ]]; then
             to_build+=("$FORCE_SERVICE")
           elif [[ ${#CHANGED[@]} -eq 0 ]]; then
             to_build=()
