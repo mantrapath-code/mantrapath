@@ -93,3 +93,7 @@ cypress/screenshots/
 *.local
 public/uploads/
 src/temp/
+
+# Allow utility library to be committed (root .gitignore ignores 'lib/')
+!src/lib/
+!src/lib/**
