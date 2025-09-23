@@ -76,7 +76,7 @@ jobs:
         run: |
           set -euo pipefail
           git --no-pager diff --name-only "${{ steps.diff.outputs.BASE_SHA }}" "${{ steps.diff.outputs.HEAD_SHA }}" | tee /tmp/changed_files.txt
-          echo "all=$(jq -Rs 'split("\n") | map(select(length>0))' /tmp/changed_files.txt)" >> "$GITHUB_OUTPUT"
+          echo "all=$(jq -c -Rs 'split("\n") | map(select(length>0))' /tmp/changed_files.txt)" >> "$GITHUB_OUTPUT"
 
       - name: Generate build matrix
         id: set-matrix
@@ -168,10 +168,11 @@ jobs:
           done
 
           count=${#to_build[@]}
-          echo "matrix=$json" >> "$GITHUB_OUTPUT"
+          json_compact=$(echo "$json" | jq -c '.')
+          echo "matrix=$json_compact" >> "$GITHUB_OUTPUT"
           echo "count=$count" >> "$GITHUB_OUTPUT"
           echo "Services to build: $count"
-          echo "$json" | jq -C .
+          echo "$json_compact" | jq -C .
 
   build:
     name: Build and push images
