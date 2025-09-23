@@ -117,7 +117,7 @@ jobs:
               dockerfile="frontend/Dockerfile"
               image_suffix="frontend"
             else
-              context="."
+              context="backend"
               dockerfile="backend/services/$svc/Dockerfile"
               image_suffix="$(echo "$svc" | tr '_' '-')"
             fi
