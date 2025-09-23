@@ -55,6 +55,27 @@ pytest-asyncio==0.21.1
 
 ---
 
+## Voice Service Analysis (COMPLETED - Minimal Build Verified)
+
+### Results
+
+| Version | Image Size | Build Time | Dependencies | Health/Tests |
+|---------|------------|------------|--------------|--------------|
+| Original | 1.43GB | ~78s | Full `requirements.txt` (includes librosa/soundfile/scipy/dev deps) | ✅ /health OK |
+| Minimal | 279MB | ~14s | `requirements.min.txt` (no librosa/soundfile/scipy/dev deps) | ✅ /health OK |
+
+Notes:
+- VoiceEnhancer reports healthy with basic features; advanced resampling depends on librosa which is excluded in minimal build.
+- Container logs show no errors; one Pydantic protected_namespaces warning in request model (non-blocking).
+- Redis is optional; if absent, service falls back to memory as designed.
+
+### Artifacts
+- `backend/services/voice_service/requirements.min.txt`
+- `backend/services/voice_service/Dockerfile.minimal`
+
+### Recommendation
+- Use minimal build in environments where advanced audio processing (librosa/scipy) is not required. Switch to original for full audio tooling support.
+
 ## Auth Service Analysis (COMPLETED)
 
 ### Results
@@ -65,6 +86,24 @@ pytest-asyncio==0.21.1
 The auth service was already well-optimized with only necessary dependencies.
 
 ---
+
+## Voice Event Processor Analysis (COMPLETED - Minimal Build Verified)
+
+### Results
+
+| Version | Image Size | Build Time | Dependencies | Health/Tests |
+|---------|------------|------------|--------------|--------------|
+| Original | 6.64GB | ~181s | Full `requirements.txt` (audio stack + ML) | ✅ /health OK |
+| Minimal | 190MB | ~8s | `requirements.min.txt` (FastAPI + websockets via uvicorn) | ✅ /health OK |
+
+Notes:
+- Minimal build excludes heavy audio/ML deps (librosa, soundfile, scipy, webrtcvad, pyaudio, torch/torchaudio/transformers) and DB/messaging clients.
+- Current `main.py` relies only on FastAPI/WebSocket core—the minimal image fully supports health and base endpoints.
+- Use the original build where real audio processing or emotion detection is required.
+
+### Artifacts
+- `backend/services/voice_event_processor/requirements.min.txt`
+- `backend/services/voice_event_processor/Dockerfile.minimal`
 
 ## API Gateway Analysis (COMPLETED) 
 
@@ -112,7 +151,48 @@ structlog>=24.1.0
 1. [✅] auth_service - Already minimal
 2. [✅] api_gateway - Optimized (63% reduction)
 3. [✅] translation_service - Ultra-optimized (96% reduction)  
-4. [ ] chatbot_service
-5. [ ] notification_service
-6. [ ] profile_service
-... (continue with all services)
+4. [🚧] ml_service - In progress (minimal requirements + Dockerfile prepared)
+5. [ ] voice_service
+6. [ ] voice_event_processor
+7. [ ] action_orchestrator
+8. [ ] community_service
+9. [ ] profile_service
+10. [ ] deployment_api
+11. [ ] mood_service
+
+---
+
+## ML Service Analysis (COMPLETED - Minimal Build Verified)
+
+### Goal
+Reduce heavy optional ML dependencies while keeping all endpoints responsive and tests green. Provide two builds: original (full) and minimal (lean).
+
+### Changes
+- Added `requirements.min.txt` excluding heavy libs: tensorflow, prophet, matplotlib, seaborn, pmdarima, celery, flower, dill, psycopg2-binary.
+- Added `Dockerfile.minimal` to build with the minimal set.
+- Kept NLTK data pre-download to satisfy content engine requirements.
+
+### Expected Behavior
+- CrisisPredictionSystem will run in fallback mode when advanced libs are absent; endpoints should still respond with valid assessments.
+- Unit/integration tests should pass as long as they do not hard-require TensorFlow/Prophet.
+
+### Results
+
+| Version | Image Size | Build Time | Dependencies | Health/Tests |
+|---------|------------|------------|--------------|--------------|
+| Original | 2.71GB | ~104s | Full `requirements.txt` | ✅ /health OK |
+| Minimal | 1.00GB | ~48s | `requirements.min.txt` | ✅ /health OK; 1 test passed |
+
+Notes:
+- CrisisPredictionSystem runs in fallback mode (no TensorFlow/Prophet) on minimal build but endpoints remain healthy.
+- NLTK corpora are pre-downloaded; content engine is ready.
+- Redis not required; service falls back to in-memory cache when Redis is absent.
+
+### Verification
+- Built both images and compared sizes/time.
+- Launched minimal container and validated `/health` returns OK.
+- Executed `test_health_check` inside container: 1 passed in 0.20s.
+
+### Artifacts
+- `backend/services/ml_service/requirements.min.txt`
+- `backend/services/ml_service/Dockerfile.minimal`
