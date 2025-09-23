@@ -1,70 +1,22 @@
-# Translation Service Dependencies
-
-# HTTP clients for API calls
-aiohttp==3.9.1
-httpx==0.25.2
-
-# Core Framework
+# Ultra minimal requirements (no AI/ML models - uses remote services only)
+# Core Framework (FastAPI + Pydantic)
 fastapi==0.104.1
 uvicorn[standard]==0.24.0
 pydantic==2.5.0
-pydantic-settings==2.1.0
 
-# Database & Caching
-sqlalchemy==2.0.23
-redis==5.0.1
-alembic==1.13.1
-
-# System Monitoring
-psutil==5.9.8
-
-# Authentication & Security
-python-jose[cryptography]==3.3.0
-python-multipart==0.0.6
-passlib[bcrypt]==1.7.4
-
-# Translation Services
-requests==2.31.0
-# googletrans==4.0.0rc1  # Commented out due to httpx version conflict
-
-# AI Translation Models - IndicTrans2 Distilled
-transformers==4.36.2
-torch==2.1.1
-sentencepiece==0.1.99
-sacremoses==0.0.53
-
-# Language Processing & Detection
-langdetect==1.0.9
-# polyglot==16.7.4  # Commented out - has dependency issues
-
-# Text Processing
-spacy==3.7.2
-nltk==3.8.1
-# indicnlp==0.62  # Commented out - not available, using alternative approaches
-
-# Quality & Performance
-textstat==0.7.3
-sacrebleu==2.3.1
-
-# Background Tasks & Async
-celery==5.3.4
-asyncio-throttle==1.0.2
-
-# Monitoring & Logging
-prometheus-client==0.19.0
-structlog==23.2.0
-
-# Development & Testing
-pytest==7.4.3
-pytest-asyncio==0.21.1
-pytest-cov==4.1.0
-pytest-mock==3.12.0
-
-# HTTP & I/O
+# HTTP clients (used in translators)
 httpx==0.25.2
 aiohttp==3.9.1
 
-# Utilities
-aiofiles==23.2.1
-python-dotenv==1.0.0
-pycountry==24.6.1
+# Caching & Database (used in coordinators)
+redis==5.0.1
+
+# Language detection (used in bhashini_translator)
+langdetect==1.0.9
+
+# Basic HTTP requests (used by testers)
+requests==2.31.0
+
+# Development & Testing (optional - can be removed for production)
+pytest==7.4.3
+pytest-asyncio==0.21.1

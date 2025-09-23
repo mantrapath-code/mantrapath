@@ -2,7 +2,12 @@ FROM python:3.11-slim
 
 WORKDIR /app
 
-# Copy service-specific requirements first
+# Install minimal system dependencies
+RUN apt-get update && apt-get install -y \
+    curl \
+    && rm -rf /var/lib/apt/lists/*
+
+# Copy minimal requirements
 COPY services/content_service/requirements.txt /app/requirements.txt
 RUN pip install --no-cache-dir -r requirements.txt
 
@@ -15,6 +20,11 @@ COPY services/content_service /app/
 # Add the app directory to Python path
 ENV PYTHONPATH=/app
 
-EXPOSE 8005
+EXPOSE 8012
 
-CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8005"]
+# Health check
+HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
+    CMD curl -f http://localhost:8012/health || exit 1
+
+# Production content service
+CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8012"]

@@ -12,7 +12,10 @@ from pathlib import Path
 from typing import Dict, List, Optional, Union, Any
 import numpy as np
 import librosa
-import torch
+try:
+    import torch  # Optional; used for some STT models
+except Exception:
+    torch = None
 
 logger = logging.getLogger(__name__)
 

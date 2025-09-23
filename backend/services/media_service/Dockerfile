@@ -2,27 +2,19 @@ FROM python:3.11-slim
 
 WORKDIR /app
 
-# Install system dependencies including libmagic and minimal OpenCV requirements
-RUN apt-get update && \
-    apt-get install -y --no-install-recommends \
+# Install system dependencies for image processing
+RUN apt-get update && apt-get install -y \
+    curl \
     libmagic1 \
-    libmagic-dev \
+    libgl1-mesa-glx libglib2.0-0 libsm6 libxext6 libxrender-dev libgomp1 \
+    && rm -rf /var/lib/apt/lists/* 2>/dev/null || \
+    apt-get update && apt-get install -y \
+    curl \
+    libmagic1 \
     libglib2.0-0 \
-    libsm6 \
-    libxext6 \
-    libxrender-dev \
-    libgomp1 \
-    libgtk-3-0 \
-    libavcodec-dev \
-    libavformat-dev \
-    libswscale-dev \
-    libv4l-dev \
-    gfortran \
-    libblas3 \
-    liblapack3 \
     && rm -rf /var/lib/apt/lists/*
 
-# Copy service-specific requirements first
+# Copy minimal requirements
 COPY services/media_service/requirements.txt /app/requirements.txt
 RUN pip install --no-cache-dir -r requirements.txt
 
@@ -35,6 +27,14 @@ COPY services/media_service /app/
 # Add the app directory to Python path
 ENV PYTHONPATH=/app
 
-EXPOSE 8009
+# Create media storage directory
+RUN mkdir -p /app/uploads /app/media
 
-CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8009"]
+EXPOSE 8006
+
+# Health check
+HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
+    CMD curl -f http://localhost:8006/health || exit 1
+
+# Production media service
+CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8006"]

@@ -14,7 +14,10 @@ from pathlib import Path
 from typing import Dict, List, Optional, Union, Any
 import numpy as np
 import soundfile as sf
-import torch
+try:
+    import torch  # Optional; used for device checks in some TTS flows
+except Exception:
+    torch = None
 
 logger = logging.getLogger(__name__)
 

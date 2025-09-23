@@ -1,45 +1,55 @@
+# Media Service - Minimal requirements based on actual usage
+
+# Core Framework
 fastapi==0.104.1
 uvicorn[standard]==0.24.0
 pydantic==2.4.2
-pydantic-settings==2.0.3
+
+# Database & ORM
 sqlalchemy==2.0.23
-alembic==1.12.1
 psycopg2-binary==2.9.7
-redis==5.0.1
+alembic==1.12.1
+
+# File handling & uploads
+aiofiles==23.2.1
+python-multipart==0.0.6
+python-magic==0.4.27
+
+# Image processing (REQUIRED - actively used)
+Pillow==10.1.0
+opencv-python-headless==4.8.1.78
+numpy==1.24.4
+
+# Storage providers (if cloud storage used)
+boto3==1.34.0
+minio==7.2.0
+
+# HTTP client
+httpx==0.25.2
+
+# Authentication & Security
 python-jose[cryptography]==3.3.0
 pyjwt==2.8.0
 passlib[bcrypt]==1.7.4
-python-multipart==0.0.6
-jinja2==3.1.2
-aiofiles==23.2.1
-httpx==0.25.2
-websockets==12.0
-python-dotenv==1.0.0
-loguru==0.7.2
-prometheus-client==0.19.0
-structlog==23.2.0
-python-magic==0.4.27
-Pillow==10.1.0
 
-# Storage providers
-boto3==1.34.0
-botocore==1.34.0
-minio==7.2.0
-
-# Media processing
-opencv-python-headless==4.8.1.78
-librosa==0.10.1
-pydub==0.25.1
-moviepy==1.0.3
-scipy==1.11.4
-numpy==1.24.4
-
-# Background processing
+# Background processing (if async media processing used)
 celery==5.3.4
-kombu==5.3.4
 
-# Security
-clamd==1.0.2
+# Environment configuration
+python-dotenv==1.0.0
 
-# Monitoring
-sentry-sdk[fastapi]==1.38.0
+# Logging
+loguru==0.7.2
+
+# REMOVED - Not used based on analysis:
+# redis==5.0.1                    # Not imported in main.py
+# websockets==12.0                # No WebSocket usage found
+# jinja2==3.1.2                   # No template rendering
+# librosa==0.10.1                 # No audio processing imports
+# pydub==0.25.1                   # No audio processing imports  
+# moviepy==1.0.3                  # No video processing imports
+# scipy==1.11.4                   # Not directly imported
+# clamd==1.0.2                    # No antivirus imports found
+# prometheus-client==0.19.0       # No metrics imports
+# structlog==23.2.0               # Using loguru
+# sentry-sdk[fastapi]==1.38.0     # No sentry imports found

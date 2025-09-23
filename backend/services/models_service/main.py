@@ -16,7 +16,10 @@ import json
 from datetime import datetime
 import os
 from typing import Dict, List, Optional, Any
-import torch
+try:
+    import torch  # Optional; used for GPU status and some models
+except Exception:  # ImportError or other issues
+    torch = None
 import psutil
 
 from models.stt_engine import STTEngine
@@ -162,8 +165,15 @@ async def health_check():
 @app.get("/status")
 async def get_status():
     """Detailed service status"""
-    gpu_available = torch.cuda.is_available()
-    gpu_count = torch.cuda.device_count() if gpu_available else 0
+    gpu_available = False
+    gpu_count = 0
+    if torch is not None:
+        try:
+            gpu_available = torch.cuda.is_available()
+            gpu_count = torch.cuda.device_count() if gpu_available else 0
+        except Exception:
+            gpu_available = False
+            gpu_count = 0
     
     status = {
         "service": "models_service",
@@ -188,12 +198,15 @@ async def get_status():
     }
     
     # Get GPU memory info
-    if gpu_available:
+    if gpu_available and torch is not None:
         for i in range(gpu_count):
-            props = torch.cuda.get_device_properties(i)
-            status["hardware"]["gpu_memory_gb"].append(
-                round(props.total_memory / (1024**3), 2)
-            )
+            try:
+                props = torch.cuda.get_device_properties(i)
+                status["hardware"]["gpu_memory_gb"].append(
+                    round(props.total_memory / (1024**3), 2)
+                )
+            except Exception:
+                break
     
     return status
 

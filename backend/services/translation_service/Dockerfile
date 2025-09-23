@@ -4,13 +4,10 @@ WORKDIR /app
 
 # Install system dependencies including curl for health checks
 RUN apt-get update && apt-get install -y \
-    gcc \
-    g++ \
-    git \
     curl \
     && rm -rf /var/lib/apt/lists/*
 
-# Copy service-specific requirements first
+# Copy ultra minimal requirements first
 COPY services/translation_service/requirements.txt /app/requirements.txt
 RUN pip install --no-cache-dir -r requirements.txt
 
