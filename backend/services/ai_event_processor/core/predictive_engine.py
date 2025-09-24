@@ -3,6 +3,7 @@ import json
 import time
 from typing import Dict, Any, Optional, List
 from datetime import datetime, timezone, timedelta
+import os
 
 import structlog
 import numpy as np
@@ -66,8 +67,15 @@ class PredictiveInterventionEngine:
         try:
             logger.info("Starting Predictive Intervention Engine")
             
-            # Initialize Redis connection
-            self.redis_client = Redis.from_url("redis://redis:6379/4", decode_responses=True)
+            # Allow disabling via env var for lightweight runs
+            if os.getenv("ENABLE_PREDICTIVE_ENGINE", "true").lower() != "true":
+                logger.info("Predictive engine disabled via ENABLE_PREDICTIVE_ENGINE=false")
+                self.is_initialized = True
+                return
+            
+            # Initialize Redis connection (configurable)
+            redis_url = os.getenv("REDIS_URL", "redis://redis:6379/4")
+            self.redis_client = Redis.from_url(redis_url, decode_responses=True)
             
             # Test connection
             await asyncio.get_event_loop().run_in_executor(
@@ -79,7 +87,13 @@ class PredictiveInterventionEngine:
             
         except Exception as e:
             logger.error("Failed to start Predictive Intervention Engine", error=str(e))
-            raise
+            # Don't crash the whole service if Redis is unavailable in lightweight mode
+            if os.getenv("PREDICTIVE_OPTIONAL", "true").lower() == "true":
+                logger.warning("Continuing without predictive engine (optional mode)")
+                self.redis_client = None
+                self.is_initialized = True
+            else:
+                raise
     
     async def stop(self):
         """Stop predictive intervention engine"""

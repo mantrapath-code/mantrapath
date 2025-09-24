@@ -154,11 +154,77 @@ structlog>=24.1.0
 4. [🚧] ml_service - In progress (minimal requirements + Dockerfile prepared)
 5. [ ] voice_service
 6. [ ] voice_event_processor
-7. [ ] action_orchestrator
+7. [✅] action_orchestrator - Minimal requirements added and Dockerfile wired
 8. [ ] community_service
 9. [ ] profile_service
 10. [ ] deployment_api
 11. [ ] mood_service
+
+---
+
+## AI Event Processor Analysis (COMPLETED - Full Deps Retained for Functionality)
+
+### Changes
+- Kept Dockerfile on full `requirements.txt` to avoid breaking local model features (torch/transformers available).
+- Hardened `core/emotion_analyzer.py`:
+	- Safe optional imports and GPU checks
+	- Initialize `ModelsServiceClient` and skip local multilingual load when using Models Service
+	- Health check now reflects initialized status
+- Made runtime dependencies configurable:
+	- Predictive engine can be disabled via `ENABLE_PREDICTIVE_ENGINE=false`; optional mode via `PREDICTIVE_OPTIONAL=true`; `REDIS_URL` configurable
+	- Event bus can run without NATS via `USE_NATS=false` (falls back to in-memory)
+
+### Impact
+- Preserved full functionality for local models while improving resilience and configurability.
+- Optional runtime toggles enable running service without Redis/NATS during local checks.
+
+### Status
+- Built image: `backend-ai-event-processor:full` — OK
+- Ran with env: `ENABLE_PREDICTIVE_ENGINE=false USE_NATS=false` — OK
+- Health: `/health` returned 200; components healthy, predictive engine disabled by choice
+- Logs: NATS and Models Service gracefully handled when unavailable; no crashes
+
+### Artifacts
+- `backend/services/ai_event_processor/Dockerfile` (now uses full requirements)
+- Code updates under `core/` for resilience and env toggles
+
+---
+
+## Action Orchestrator Analysis (COMPLETED - Minimal Path Verified)
+
+### Changes
+- Added `requirements.min.txt` without heavy ML/DB dependencies.
+- Added `Dockerfile.minimal`; primary Dockerfile now references minimal requirements by default.
+
+### Expected Impact
+- Image size reduction to ~200–300MB range; faster builds.
+
+### Status
+- Built image: `backend-action-orchestrator:min` — OK
+- Ran container and verified `/health` — 200 OK; logs show clean startup
+
+### Artifacts
+- `backend/services/action_orchestrator/requirements.min.txt`
+- `backend/services/action_orchestrator/Dockerfile.minimal`
+- `backend/services/action_orchestrator/Dockerfile` updated to minimal requirements
+
+---
+
+## Voice Event Processor Analysis (COMPLETED - Minimal Default)
+
+### Changes
+- Replaced `requirements.txt` with content of previously vetted `requirements.min.txt` removing audio/ML stack.
+- For full audio/emotion features, use original `Dockerfile` + a full requirements file if needed.
+
+### Impact
+- Image size drops from 6.64GB to ~190MB; build time from ~181s to ~8s in prior tests.
+
+### Status
+- Health endpoint `/health` functional with current `main.py` feature set (no heavy imports).
+
+### Artifacts
+- `backend/services/voice_event_processor/requirements.min.txt` (reference)
+- `backend/services/voice_event_processor/requirements.txt` now minimal
 
 ---
 

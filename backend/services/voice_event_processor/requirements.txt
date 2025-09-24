@@ -1,46 +1,16 @@
-# Voice Event Processor Dependencies
+# Minimal runtime dependencies for Voice Event Processor
+
+# Core Framework
 fastapi==0.104.1
-uvicorn[standard]==0.24.0
+uvicorn[standard]==0.24.0  # includes websockets support
 pydantic==2.5.0
-python-multipart==0.0.6
-websockets==12.0
 
-# Audio processing for real-time streams
-librosa==0.10.1
-soundfile==0.12.1
-numpy==1.24.3
-scipy==1.11.4
-
-# Voice Activity Detection and Audio Processing
-webrtcvad==2.0.10
-pyaudio==0.2.11
-speechbrain==0.5.16
-
-# Real-time streaming and events
-asyncio-nats-client==0.11.5
-aioredis==2.0.1
-redis==5.0.1
-
-# Database and messaging
-asyncpg==0.29.0
-sqlalchemy[asyncio]==2.0.23
-alembic==1.13.1
-
-# HTTP client for service integration
-httpx==0.25.2
-aiohttp==3.9.1
-
-# Configuration and utilities
-python-dotenv==1.0.0
-pyyaml==6.0.1
-structlog==23.2.0
-
-# Voice emotion recognition
-torch==2.1.0
-torchaudio==2.1.0
-transformers==4.36.0
-
-# Development and testing
+# Testing (optional)
 pytest==7.4.3
 pytest-asyncio==0.21.1
-pytest-cov==4.1.0
+
+# Notes:
+# - Excludes heavy/optional: librosa, soundfile, numpy, scipy, webrtcvad, pyaudio,
+#   speechbrain, torch/torchaudio/transformers, redis/aioredis, asyncpg/sqlalchemy/alembic,
+#   http clients, dotenv, pyyaml, structlog. The current app does not import them.
+# - WebSocket functionality is provided via Starlette/Uvicorn with the [standard] extras.
