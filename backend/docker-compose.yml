@@ -517,8 +517,8 @@ services:
       - LOG_LEVEL=INFO
       - ENVIRONMENT=development
       # Service Integration URLs
-      - CHATBOT_SERVICE_URL=http://chatbot-service:${CHATBOT_SERVICE_PORT:-8003}
-      - MOOD_SERVICE_URL=http://mood-service:${MOOD_SERVICE_PORT:-8004}
+      - CHATBOT_SERVICE_URL=http://chatbot-service:${CHATBOT_SERVICE_PORT:-8004}
+      - MOOD_SERVICE_URL=http://mood-service:${MOOD_SERVICE_PORT:-8003}
       - ANALYTICS_SERVICE_URL=http://analytics-service:${ANALYTICS_SERVICE_PORT:-8008}
       # Indian Language Support
       - DEFAULT_LANGUAGE=hi

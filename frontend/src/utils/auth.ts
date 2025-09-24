@@ -37,3 +37,14 @@ export function isAuthenticated(): boolean {
   const token = getAuthToken()
   return !!token
 }
+
+/**
+ * Development helper to set a valid token for testing
+ */
+export function setDevToken(): void {
+  if (isDevMode()) {
+    const devToken = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIyNmU2NzE2YS1lNGJkLTRmMmYtYTBiYi1lYzc0MjkwMjEyMmYiLCJlbWFpbCI6InNhQGdtYWlsLmNvbSIsInJvbGUiOiJ1c2VyIiwiZXhwIjoxNzU4NzUzMDM3LCJ0eXBlIjoiYWNjZXNzIn0.rCMzher_zuFCdlIGl4NnIUQwfUq7AzVkP9TWqSjcS2k'
+    setAuthToken(devToken)
+    console.log('Dev token set for testing')
+  }
+}

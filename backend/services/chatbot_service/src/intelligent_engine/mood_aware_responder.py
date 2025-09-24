@@ -1,4 +1,4 @@
- """
+"""
 Mood-Aware Responder Module
 
 This module provides intelligent, mood-aware response generation for the MantraPath chatbot.
@@ -25,6 +25,9 @@ from enum import Enum
 
 # HTTP client for MantraPath services
 import httpx
+
+# Mood service integration
+from src.clients.mood_service_client import mood_service_client
 
 # Configure logging
 logger = logging.getLogger(__name__)
@@ -107,21 +110,25 @@ class MoodAwareResponder:
         self.crisis_keywords = self._load_crisis_keywords()
         self.therapeutic_responses = self._load_therapeutic_responses()
         
+        # Initialize mood service client for direct mood tracking
+        self.mood_client = MoodServiceClient()
+        
         # Configuration settings
         self.crisis_threshold = 3.0  # Mood score threshold for crisis detection
         self.distress_threshold = 5.0  # Mood score threshold for distress detection
         
         # MantraPath service URLs from environment
-        self.models_service_url = os.getenv('MODELS_SERVICE_URL', 'http://localhost:8081')
+        # Defaults prefer Docker service discovery; can be overridden via env
+        self.models_service_url = os.getenv('MODELS_SERVICE_URL', 'http://models-service:8080')
         # Remove deprecated phi4 agent URL attribute
         # self.phi4_agent_url = os.getenv('PHI4_AGENT_URL', 'http://localhost:8016')
-        self.ai_context_store_url = os.getenv('AI_CONTEXT_STORE_URL', 'http://localhost:8006')
-        self.memory_service_url = os.getenv('MEMORY_SERVICE_URL', 'http://localhost:8017')
+        self.ai_context_store_url = os.getenv('AI_CONTEXT_STORE_URL', 'http://ai-context-store:8013')
+        self.memory_service_url = os.getenv('MEMORY_SERVICE_URL', 'http://memory-service:8017')
         
         # Prioritize models service only
         self.use_models_service_first = True
         
-        logger.info("MoodAwareResponder initialized with centralized models service priority")
+        logger.info("MoodAwareResponder initialized with centralized models service priority and mood client")
 
     async def generate_mood_aware_response(
         self, 
@@ -146,6 +153,11 @@ class MoodAwareResponder:
             
             if crisis_detected:
                 return await self._generate_crisis_response(user_message, mood_context)
+            
+            # Step 1.5: Analyze message for implicit mood tracking (async, non-blocking)
+            asyncio.create_task(self._analyze_and_track_mood_from_message(
+                user_message, user_id, conversation_history
+            ))
             
             # Step 2: Determine emotional context
             emotional_context = await self._analyze_emotional_context(user_message, mood_context)
@@ -903,3 +915,141 @@ Please provide a thoughtful, empathetic response that addresses the user's needs
                 base["maintenance_support"]["default"],
             ],
         }
+
+    async def _analyze_and_track_mood_from_message(
+        self, 
+        user_message: str, 
+        user_id: str, 
+        conversation_history: List[Dict]
+    ) -> None:
+        """
+        Analyze user message for implicit mood indicators and create mood entry if appropriate
+        
+        This method runs asynchronously in the background to avoid blocking response generation.
+        It analyzes the user's message for emotional content and automatically creates mood
+        entries when significant emotional indicators are detected.
+        
+        Args:
+            user_message (str): The user's message text
+            user_id (str): User identifier
+            conversation_history (List[Dict]): Recent conversation context
+        """
+        try:
+            # Only track if message contains significant emotional content
+            if not self._should_track_mood_from_message(user_message):
+                return
+            
+            logger.debug(f"Analyzing message for implicit mood tracking: {user_message[:50]}...")
+            
+            # Analyze emotions in the message
+            emotion_analysis = await self.mood_client.analyze_text_emotion(user_message)
+            if not emotion_analysis:
+                return
+            
+            # Extract relevant emotions and confidence
+            emotions = emotion_analysis.get('emotions', {})
+            if not emotions:
+                return
+            
+            # Create mood entry with context from conversation
+            context_notes = f"Detected from conversation: '{user_message[:100]}...'"
+            if conversation_history:
+                context_notes += f" (conversation context: {len(conversation_history)} messages)"
+            
+            # Create mood entry with detected emotions
+            mood_entry_data = {
+                "mood_score": self._calculate_mood_score_from_emotions(emotions),
+                "emotions": emotions,
+                "notes": context_notes,
+                "entry_type": "conversation_detected",
+                "context_source": "chatbot_conversation"
+            }
+            
+            await self.mood_client.create_mood_entry(user_id, mood_entry_data)
+            logger.info(f"Created automatic mood entry for user {user_id} from conversation")
+            
+        except Exception as e:
+            # Don't let mood tracking errors affect the main conversation flow
+            logger.error(f"Error in automatic mood tracking: {str(e)}")
+
+    def _should_track_mood_from_message(self, message: str) -> bool:
+        """
+        Determine if a message contains significant emotional content worth tracking
+        
+        Args:
+            message (str): User message
+            
+        Returns:
+            bool: True if message should trigger mood tracking
+        """
+        message_lower = message.lower().strip()
+        
+        # Skip very short messages
+        if len(message_lower) < 10:
+            return False
+        
+        # Skip greetings and small talk
+        greeting_patterns = [
+            "hi", "hello", "hey", "good morning", "good afternoon", "good evening",
+            "how are you", "thanks", "thank you", "bye", "goodbye", "see you"
+        ]
+        
+        if any(pattern in message_lower for pattern in greeting_patterns) and len(message_lower) < 30:
+            return False
+        
+        # Look for emotional indicators
+        emotional_indicators = [
+            # Positive emotions
+            "feel", "feeling", "felt", "emotion", "happy", "sad", "excited", "worried",
+            "anxious", "stressed", "calm", "peaceful", "frustrated", "angry", "proud",
+            "grateful", "disappointed", "hopeful", "scared", "confident", "overwhelmed",
+            
+            # Mood descriptors
+            "mood", "energy", "tired", "exhausted", "energetic", "motivated", "down",
+            "up", "better", "worse", "improving", "struggling", "difficult", "easy",
+            
+            # Life situation indicators
+            "today was", "had a", "going through", "dealing with", "coping with",
+            "challenging", "stressful", "wonderful", "terrible", "amazing", "awful"
+        ]
+        
+        return any(indicator in message_lower for indicator in emotional_indicators)
+
+    def _calculate_mood_score_from_emotions(self, emotions: Dict[str, float]) -> float:
+        """
+        Calculate a mood score (1-10) based on detected emotions
+        
+        Args:
+            emotions (Dict[str, float]): Emotion scores from GoEmotions model
+            
+        Returns:
+            float: Mood score between 1-10
+        """
+        # Define emotion weights (positive emotions increase score, negative decrease)
+        emotion_weights = {
+            # Very positive
+            'joy': 3.0, 'love': 2.5, 'admiration': 2.0, 'amusement': 2.0, 'approval': 1.5,
+            'caring': 1.5, 'excitement': 2.0, 'gratitude': 2.0, 'optimism': 2.0, 'pride': 1.5,
+            'relief': 1.5, 'surprise': 1.0,
+            
+            # Negative emotions
+            'sadness': -2.5, 'anger': -2.0, 'annoyance': -1.5, 'disappointment': -2.0,
+            'disapproval': -1.0, 'disgust': -1.5, 'embarrassment': -1.0, 'fear': -2.0,
+            'grief': -3.0, 'nervousness': -1.5, 'remorse': -1.5, 'confusion': -0.5,
+            
+            # Neutral or mixed
+            'curiosity': 0.5, 'desire': 0.5, 'realization': 0.0, 'neutral': 0.0
+        }
+        
+        # Calculate weighted score
+        total_weight = 0
+        for emotion, confidence in emotions.items():
+            if emotion in emotion_weights:
+                total_weight += emotion_weights[emotion] * confidence
+        
+        # Convert to 1-10 scale (base 5.5, then adjust)
+        base_score = 5.5
+        adjusted_score = base_score + (total_weight * 1.5)  # Scale the adjustment
+        
+        # Ensure score is within valid range
+        return max(1.0, min(10.0, adjusted_score))

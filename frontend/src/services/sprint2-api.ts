@@ -66,17 +66,19 @@ const BACKEND_API_ENDPOINTS = {
   mood: {
     base: `${getApiBaseUrl()}/mood`,
     health: '/health',
-    entries: '/api/v3/mood/entries',
-    patterns: '/api/v3/mood/patterns',
-    insights: '/api/v3/mood/insights'
+    // Align with API Gateway router rules (supports /mood/* or /api/v1/mood/*)
+    entries: '/api/v1/mood/entries',
+    patterns: '/api/v1/mood/patterns',
+    insights: '/api/v1/mood/insights'
   },
   
   // Chatbot Service (Port 8004) - via API Gateway
   chatbot: {
     base: `${getApiBaseUrl()}/chatbot`,
     health: '/health',
-    chat: '/api/v3/chat',
-    sessions: '/api/v3/chat/sessions'
+    // API Gateway routes chatbot under /api/chatbot/* (and /chat/*)
+    chat: '/api/chatbot/chat',
+    sessions: '/api/chatbot/chat/sessions'
   }
 }
 

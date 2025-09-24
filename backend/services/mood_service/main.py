@@ -1,112 +1,126 @@
 """
-MantraPath Mood Service
-Real-time mood tracking and emotion analysis service
-"""
-import logging
-from fastapi import FastAPI, HTTPException
-from fastapi.middleware.cors import CORSMiddleware
-from pydantic import BaseModel
-from typing import Optional, List, Dict, Any
-import uvicorn
-from datetime import datetime
-import os
+MantraPath Mood Service - AI-powered emotion detection and mood tracking
 
-# Setup logging
-logging.basicConfig(level=logging.INFO)
+A modular, production-ready service for:
+- Emotion detection using GoEmotions AI model
+- Mood tracking and analytics
+- Memory service integration for chatbot context
+- Real-time mood pattern analysis
+"""
+
+import logging
+import uvicorn
+from contextlib import asynccontextmanager
+from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import RedirectResponse
+
+from src.core.config import settings
+from src.api import mood_router, health_router
+from shared.database import create_tables
+from src.services import memory_integration_service
+
+# Configure logging
+logging.basicConfig(
+    level=logging.INFO if not settings.debug else logging.DEBUG,
+    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+)
+
 logger = logging.getLogger(__name__)
 
-# FastAPI app
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """Application lifespan management."""
+    logger.info(f"Starting {settings.service_name} v{settings.version}")
+    
+    # Create database tables
+    try:
+        create_tables()
+        logger.info("Database tables created/verified")
+    except Exception as e:
+        logger.error(f"Failed to create database tables: {e}")
+        raise
+    
+    # Startup complete
+    logger.info(f"Mood Service started on {settings.host}:{settings.port}")
+    
+    yield
+    
+    # Cleanup
+    logger.info("Shutting down Mood Service")
+    try:
+        await memory_integration_service.cleanup()
+    except Exception as e:
+        logger.error(f"Error during cleanup: {e}")
+
+
+# Create FastAPI application
 app = FastAPI(
     title="MantraPath Mood Service",
-    description="Real-time mood tracking and emotion analysis",
-    version="1.0.0"
+    description=__doc__,
+    version=settings.version,
+    lifespan=lifespan,
+    docs_url="/docs",
+    redoc_url="/redoc"
 )
 
 # CORS middleware
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=["*"],  # Configure appropriately for production
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
-# Models
-class MoodEntry(BaseModel):
-    mood_level: int
-    energy_level: int
-    stress_level: int
-    sleep_quality: int
-    notes: Optional[str] = None
-    timestamp: Optional[datetime] = None
+# Include routers
+app.include_router(mood_router)
+app.include_router(health_router)
 
-class MoodResponse(BaseModel):
-    id: str
-    mood_level: int
-    energy_level: int
-    stress_level: int
-    sleep_quality: int
-    notes: Optional[str]
-    timestamp: datetime
-    emotion_analysis: Optional[Dict[str, Any]] = None
 
-# Health check endpoint
+@app.get("/")
+async def root():
+    """Root endpoint redirects to documentation."""
+    return RedirectResponse(url="/docs")
+
+
 @app.get("/health")
-async def health_check():
-    """Health check endpoint"""
+async def health_root():
+    """Simple health check at root level for Docker and monitoring."""
     return {"status": "healthy", "service": "mood-service"}
 
-# Mood endpoints
-@app.post("/mood", response_model=MoodResponse)
-async def create_mood_entry(mood_entry: MoodEntry):
-    """Create a new mood entry"""
-    # For now, just return a mock response
-    # In real implementation, this would save to database
-    mood_id = f"mood_{datetime.now().timestamp()}"
-    
-    return MoodResponse(
-        id=mood_id,
-        mood_level=mood_entry.mood_level,
-        energy_level=mood_entry.energy_level,
-        stress_level=mood_entry.stress_level,
-        sleep_quality=mood_entry.sleep_quality,
-        notes=mood_entry.notes,
-        timestamp=mood_entry.timestamp or datetime.now(),
-        emotion_analysis={"primary_emotion": "neutral", "confidence": 0.7}
-    )
 
-@app.get("/mood/{mood_id}", response_model=MoodResponse)
-async def get_mood_entry(mood_id: str):
-    """Get a specific mood entry"""
-    # Mock response for now
-    return MoodResponse(
-        id=mood_id,
-        mood_level=7,
-        energy_level=6,
-        stress_level=4,
-        sleep_quality=8,
-        notes="Feeling good today",
-        timestamp=datetime.now(),
-        emotion_analysis={"primary_emotion": "happy", "confidence": 0.8}
-    )
+@app.get("/favicon.ico", include_in_schema=False)
+async def favicon():
+    """Handle favicon requests."""
+    return {"message": "No favicon"}
 
-@app.get("/mood", response_model=List[MoodResponse])
-async def get_mood_history(limit: int = 10):
-    """Get mood history"""
-    # Mock response for now
-    return [
-        MoodResponse(
-            id=f"mood_{i}",
-            mood_level=7,
-            energy_level=6,
-            stress_level=4,
-            sleep_quality=8,
-            notes=f"Mock entry {i}",
-            timestamp=datetime.now(),
-            emotion_analysis={"primary_emotion": "neutral", "confidence": 0.7}
-        ) for i in range(limit)
-    ]
+
+# Legacy endpoints for backward compatibility
+@app.post("/mood", include_in_schema=False)
+async def create_mood_legacy():
+    """Legacy endpoint - redirects to new API."""
+    return RedirectResponse(url="/api/v1/mood/entries", status_code=301)
+
+
+@app.get("/mood", include_in_schema=False)
+async def get_mood_legacy():
+    """Legacy endpoint - redirects to new API."""
+    return RedirectResponse(url="/api/v1/mood/entries", status_code=301)
+
+
+@app.post("/analyze", include_in_schema=False)
+async def analyze_legacy():
+    """Legacy endpoint - redirects to new API."""
+    return RedirectResponse(url="/api/v1/mood/analyze", status_code=301)
+
 
 if __name__ == "__main__":
-    port = int(os.getenv("MOOD_SERVICE_PORT", 8003))
-    uvicorn.run(app, host="0.0.0.0", port=port)
+    uvicorn.run(
+        "main:app",
+        host=settings.host,
+        port=settings.port,
+        reload=settings.debug,
+        log_level="info" if not settings.debug else "debug"
+    )

@@ -12,6 +12,7 @@ import { DevelopmentBanner } from "@/components/common"
 import { ProfileDashboard } from "@/components/profile"
 import { EnhancedInsightsPage } from "@/pages/EnhancedInsightsPage"
 import { AchievementsPage } from "@/pages/AchievementsPage"
+import { MoodTestPage } from "@/pages/MoodTestPage"
 import { ProactiveAssistancePanel } from "@/components/assistance"
 import { SidebarLayout } from "@/components/layout/SidebarLayout"
 import { AuthProvider, useAuth } from "@/hooks/useAuth"
@@ -200,6 +201,15 @@ function AppContent() {
             animate={{ opacity: 1, y: 0 }}
           >
             <AchievementsPage />
+          </motion.div>
+        )
+      case "mood-test":
+        return (
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+          >
+            <MoodTestPage />
           </motion.div>
         )
       case "journal":

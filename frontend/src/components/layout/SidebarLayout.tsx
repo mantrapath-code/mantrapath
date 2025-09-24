@@ -88,6 +88,13 @@ export function SidebarLayout({
       group: "wellness"
     },
     {
+      id: "mood-test",
+      label: "Mood Service Test",
+      icon: <Brain size={20} />,
+      group: "wellness",
+      badge: "NEW"
+    },
+    {
       id: "journal",
       label: "Journal",
       icon: <BookOpen size={20} />,
