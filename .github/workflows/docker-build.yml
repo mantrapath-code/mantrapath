@@ -260,7 +260,7 @@ jobs:
           platforms: linux/amd64,linux/arm64
           tags: ${{ steps.meta.outputs.tags }}
           cache-from: type=gha,scope=mantrapath-${{ matrix.image_suffix }}
-          cache-to: type=gha,mode=max,scope=mantrapath-${{ matrix.image_suffix }}
+          cache-to: type=gha,mode=max,scope=mantrapath-${{ matrix.image_suffix }},ignore-error=true
           provenance: false
 
   deploy:
