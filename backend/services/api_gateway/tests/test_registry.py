@@ -1,6 +1,15 @@
 """
-Test Service Registry functionality
+Test Serfrom core.service_registry import ServiceRegistry, ServiceInstance, ServiceStatus
+
+# Test service URLs - configurable via environment
+TEST_SERVICE_URL = os.getenv("TEST_SERVICE_URL", "http://test-service:8080")
+TEST_SERVICE_UNHEALTHY_URL = os.getenv("TEST_SERVICE_UNHEALTHY_URL", "http://test-service-2:8081")
+TEST_SERVICE_UPDATED_URL = os.getenv("TEST_SERVICE_UPDATED_URL", "http://test-service-updated:9090")
+
+@pytest.mark.asyncio
+class TestServiceRegistry:Registry functionality
 """
+import os
 import pytest
 import sys
 from pathlib import Path
@@ -23,7 +32,7 @@ class TestServiceRegistry:
         service = ServiceInstance(
             id="test-service-1",
             name="test-service",
-            url="http://localhost:8080",
+            url=TEST_SERVICE_URL,
             health_path="/health"
         )
         
@@ -41,7 +50,7 @@ class TestServiceRegistry:
         service = ServiceInstance(
             id="test-service-1",
             name="test-service",
-            url="http://localhost:8080"
+            url=TEST_SERVICE_URL
         )
         
         await registry.register_service(service)
@@ -57,14 +66,14 @@ class TestServiceRegistry:
         healthy_service = ServiceInstance(
             id="healthy-1",
             name="test-service",
-            url="http://localhost:8080",
+            url=TEST_SERVICE_URL,
             status=ServiceStatus.HEALTHY
         )
         
         unhealthy_service = ServiceInstance(
             id="unhealthy-1",
             name="test-service",
-            url="http://localhost:8081",
+            url=TEST_SERVICE_UNHEALTHY_URL,
             status=ServiceStatus.UNHEALTHY
         )
         
@@ -82,7 +91,7 @@ class TestServiceRegistry:
         service = ServiceInstance(
             id="test-service-1",
             name="test-service",
-            url="http://localhost:8080",
+            url=TEST_SERVICE_URL,
             weight=1
         )
         
@@ -92,7 +101,7 @@ class TestServiceRegistry:
         updated_service = ServiceInstance(
             id="test-service-1",
             name="test-service",
-            url="http://localhost:9090",
+            url=TEST_SERVICE_UPDATED_URL,
             weight=2
         )
         
@@ -100,5 +109,5 @@ class TestServiceRegistry:
         
         services = registry.get_all_services()
         assert len(services["test-service"]) == 1
-        assert services["test-service"][0].url == "http://localhost:9090"
+        assert services["test-service"][0].url == TEST_SERVICE_UPDATED_URL
         assert services["test-service"][0].weight == 2

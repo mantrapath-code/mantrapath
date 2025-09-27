@@ -1,6 +1,7 @@
 """
 Test configuration and fixtures for Action Orchestrator Service
 """
+import os
 import pytest
 import asyncio
 from unittest.mock import AsyncMock, MagicMock
@@ -9,16 +10,16 @@ from typing import Dict, Any, List, Optional
 # Test configuration
 TEST_CONFIG: Dict[str, Any] = {
     "database_url": "sqlite:///test.db",
-    "redis_url": "redis://localhost:6379/15",  # Test database
-    "nats_url": "nats://localhost:4222",
+    "redis_url": os.getenv("REDIS_TEST_URL", "redis://redis:6379/15"),  # Test database
+    "nats_url": os.getenv("NATS_TEST_URL", "nats://nats-server:4222"),
     "service_urls": {
-        "mood_service": "http://localhost:8001",
-        "journal_service": "http://localhost:8002", 
-        "chatbot_service": "http://localhost:8003",
-        "profile_service": "http://localhost:8004",
-        "community_service": "http://localhost:8005",
-        "analytics_service": "http://localhost:8006",
-        "notification_service": "http://localhost:8007"
+        "mood_service": os.getenv("MOOD_SERVICE_TEST_URL", "http://mood-service:8003"),
+        "journal_service": os.getenv("JOURNAL_SERVICE_TEST_URL", "http://content-service:8005"), 
+        "chatbot_service": os.getenv("CHATBOT_SERVICE_TEST_URL", "http://chatbot-service:8004"),
+        "profile_service": os.getenv("PROFILE_SERVICE_TEST_URL", "http://profile-service:8002"),
+        "community_service": os.getenv("COMMUNITY_SERVICE_TEST_URL", "http://community-service:8006"),
+        "analytics_service": os.getenv("ANALYTICS_SERVICE_TEST_URL", "http://ml-service:8008"),
+        "notification_service": os.getenv("NOTIFICATION_SERVICE_TEST_URL", "http://notification-service:8007")
     },
     "jwt_secret": "test-secret-key",
     "max_workflow_steps": 5,

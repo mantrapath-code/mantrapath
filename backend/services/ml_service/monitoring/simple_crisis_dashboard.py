@@ -5,6 +5,7 @@ Works with existing FastAPI endpoints without additional UI dependencies
 
 import json
 import logging
+import os
 from datetime import datetime, timedelta
 from typing import Dict, List, Any, Optional
 from collections import defaultdict, deque
@@ -29,8 +30,8 @@ class SimpleCrisisDashboard:
         # Initialize Redis if available
         if REDIS_AVAILABLE:
             try:
-                # Try Docker service name first, fallback to localhost for development
-                redis_urls = ["redis://redis:6379", "redis://localhost:6379"]
+                # Use environment variable or default to Docker service name
+                redis_urls = [os.getenv("REDIS_URL", "redis://redis:6379")]
                 for redis_url in redis_urls:
                     try:
                         self.redis_client = redis.from_url(redis_url, decode_responses=True)

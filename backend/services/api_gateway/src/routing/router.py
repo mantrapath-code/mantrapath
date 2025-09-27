@@ -182,9 +182,20 @@ class RequestRouter:
                 auth_required=True
             ),
             
-            # Chatbot Service Routes
+            # Chatbot Health Route - Public (must come before general /api/chatbot/.* route)
             RouteRule(
-                path_pattern=r"^/chat/.*",
+                path_pattern=r"^/api/chatbot/health/?$",
+                methods=[HTTPMethod.GET],
+                service_name="chatbot",
+                strip_prefix=False,
+                timeout=30,
+                retries=2,
+                auth_required=False  # Public endpoint for health checks
+            ),
+            
+            # Chatbot Service API Routes (more specific routes must come first)
+            RouteRule(
+                path_pattern=r"^/api/chatbot/.*",
                 methods=[HTTPMethod.GET, HTTPMethod.POST, HTTPMethod.PUT, HTTPMethod.DELETE],
                 service_name="chatbot",
                 strip_prefix=False,
@@ -193,9 +204,9 @@ class RequestRouter:
                 auth_required=True
             ),
             
-            # Chatbot Service API Routes
+            # Chatbot Service Routes
             RouteRule(
-                path_pattern=r"^/api/chatbot/.*",
+                path_pattern=r"^/chat/.*",
                 methods=[HTTPMethod.GET, HTTPMethod.POST, HTTPMethod.PUT, HTTPMethod.DELETE],
                 service_name="chatbot",
                 strip_prefix=False,
@@ -320,43 +331,8 @@ class RequestRouter:
                 auth_required=True  # Re-enabled
             ),
             
-            # Models Service Routes (NEW - BK-008 Integration)
-            RouteRule(
-                path_pattern=r"^/api/v1/models/.*",
-                methods=[HTTPMethod.GET, HTTPMethod.POST, HTTPMethod.PUT, HTTPMethod.DELETE],
-                service_name="models",
-                strip_prefix=False,
-                timeout=120,  # Longer timeout for AI model processing
-                retries=1,
-                auth_required=True
-            ),
-            RouteRule(
-                path_pattern=r"^/api/v1/stt/.*",
-                methods=[HTTPMethod.POST],
-                service_name="models",
-                strip_prefix=False,
-                timeout=120,  # Longer timeout for STT processing
-                retries=1,
-                auth_required=True
-            ),
-            RouteRule(
-                path_pattern=r"^/api/v1/tts/.*",
-                methods=[HTTPMethod.POST],
-                service_name="models",
-                strip_prefix=False,
-                timeout=120,  # Longer timeout for TTS processing
-                retries=1,
-                auth_required=True
-            ),
-            RouteRule(
-                path_pattern=r"^/api/v1/nlp/.*",
-                methods=[HTTPMethod.POST],
-                service_name="models",
-                strip_prefix=False,
-                timeout=120,  # Longer timeout for NLP processing
-                retries=1,
-                auth_required=True
-            ),
+
+
             
             # AI Event Processor Routes
             RouteRule(

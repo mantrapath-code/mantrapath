@@ -49,7 +49,8 @@ services:
     networks:
       - mantrapath-network
     healthcheck:
-      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:8222/healthz"]
+      # Use internal DNS name (nats) instead of localhost
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://nats:8222/healthz"]
       interval: 30s
       timeout: 10s
       retries: 5
@@ -142,7 +143,8 @@ services:
       - mantrapath-network
     restart: unless-stopped
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:${API_GATEWAY_PORT}/health/live"]
+      # Internal DNS reference
+      test: ["CMD", "curl", "-f", "http://api-gateway:8000/health/live"]
       interval: 30s
       timeout: 10s
       retries: 3
@@ -304,7 +306,7 @@ services:
       - mantrapath-network
     restart: unless-stopped
     healthcheck:
-      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8004/health')"]
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://chatbot-service:8004/health')"]
       interval: 30s
       timeout: 10s
       retries: 5
@@ -403,7 +405,7 @@ services:
       - mantrapath-network
     restart: unless-stopped
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8008/health"]
+      test: ["CMD", "curl", "-f", "http://ml-service:8008/health"]
       interval: 30s
       timeout: 10s
       retries: 3
@@ -441,7 +443,7 @@ services:
       - mantrapath-network
     restart: unless-stopped
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8013/health"]
+      test: ["CMD", "curl", "-f", "http://ai-context-store:8013/health"]
       interval: 30s
       timeout: 10s
       retries: 3
@@ -494,7 +496,8 @@ services:
       - mantrapath-network
     restart: unless-stopped
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8010/health"]
+      # Use internal service DNS name instead of localhost for consistency
+      test: ["CMD", "curl", "-f", "http://translation-service:8010/health"]
       interval: 30s
       timeout: 10s
       retries: 3
@@ -537,7 +540,8 @@ services:
       - mantrapath-network
     restart: unless-stopped
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8011/health"]
+      # Use internal DNS name (voice-service) instead of localhost for consistency
+      test: ["CMD", "curl", "-f", "http://voice-service:8011/health"]
       interval: 30s
       timeout: 10s
       retries: 3
@@ -556,7 +560,6 @@ services:
       - DATABASE_URL=postgresql://mantrapath:mantrapath123@postgres:5432/mantrapath
       - REDIS_URL=redis://redis:6379
       - JWT_SECRET_KEY=${JWT_SECRET_KEY:-your-super-secret-jwt-key-change-in-production}
-      - OPENAI_API_KEY=${OPENAI_API_KEY}
       - ORCHESTRATOR_PORT=${ACTION_ORCHESTRATOR_PORT}
       - AUTH_SERVICE_URL=http://auth-service:${AUTH_SERVICE_PORT}
       - PROFILE_SERVICE_URL=http://profile-service:${PROFILE_SERVICE_PORT}
@@ -579,7 +582,7 @@ services:
       - mantrapath-network
     restart: unless-stopped
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8012/health"]
+      test: ["CMD", "curl", "-f", "http://action-orchestrator:8012/health"]
       interval: 30s
       timeout: 10s
       retries: 3
@@ -627,7 +630,7 @@ services:
       - mantrapath-network
     restart: unless-stopped
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8014/health"]
+      test: ["CMD", "curl", "-f", "http://ai-event-processor:8014/health"]
       interval: 30s
       timeout: 10s
       retries: 3
@@ -684,7 +687,7 @@ services:
       - mantrapath-network
     restart: unless-stopped
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8018/health"]
+      test: ["CMD", "curl", "-f", "http://proactive-assistance-engine:8018/health"]
       interval: 30s
       timeout: 10s
       retries: 3
@@ -730,7 +733,7 @@ services:
       - mantrapath-network
     restart: unless-stopped
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8015/health"]
+      test: ["CMD", "curl", "-f", "http://voice-event-processor:8015/health"]
       interval: 30s
       timeout: 10s
       retries: 3
@@ -806,7 +809,7 @@ services:
       - mantrapath-network
     restart: unless-stopped
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8017/health/live"]
+      test: ["CMD", "curl", "-f", "http://memory-service:8017/health/live"]
       interval: 30s
       timeout: 10s
       retries: 3
@@ -871,7 +874,7 @@ services:
       - mantrapath-network
     restart: unless-stopped
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:80/"]
+      test: ["CMD", "curl", "-f", "http://frontend:80/"]
       interval: 30s
       timeout: 10s
       retries: 3
@@ -898,6 +901,58 @@ services:
   #     - api-gateway
   #   restart: unless-stopped
 
+  # Models Service - AI/ML model hosting and processing
+  models-service:
+    build:
+      context: .
+      dockerfile: services/models_service/Dockerfile
+    ports:
+      - "${MODELS_SERVICE_EXTERNAL_PORT:-8081}:${MODELS_SERVICE_INTERNAL_PORT:-8080}"
+    env_file:
+      - .env
+    environment:
+      - SERVICE_NAME=models_service
+      - SERVICE_PORT=${MODELS_SERVICE_INTERNAL_PORT:-8080}
+      - MODELS_SERVICE_HOST=0.0.0.0
+      - MODELS_SERVICE_PORT=${MODELS_SERVICE_INTERNAL_PORT:-8080}
+      - DEBUG=true
+      - USE_GPU=false  # Set to true if GPU available
+      - TORCH_DEVICE=cpu
+      - MODELS_DIR=/app/models
+      - CACHE_DIR=/app/cache
+      - LOGS_DIR=/app/logs
+      # Model preferences for Voice Service
+      - DEFAULT_STT_MODEL=whisper_tiny  # Fast startup
+      - DEFAULT_TTS_MODEL=coqui_hi     # High quality Hindi
+      - WHISPER_MODEL_SIZE=tiny        # Start with small, upgrade later
+      - COQUI_MODEL_NAME=coqui_hi      # Hindi focus
+      - VOSK_ENABLE=true               # Enable Vosk for fast STT
+      - RASA_ENABLE=false              # Disable dialogue management for now
+      # Hardware settings
+      - MAX_GPU_MEMORY=0.8
+      - MAX_CONCURRENT_REQUESTS=10
+      - MODEL_CACHE_SIZE=5
+      # Network and service discovery
+      - DATABASE_URL=postgresql://mantrapath:mantrapath123@postgres:5432/mantrapath
+      - REDIS_URL=redis://redis:6379/4
+      - JWT_SECRET_KEY=${JWT_SECRET_KEY:-your-super-secret-jwt-key-change-in-production}
+    volumes:
+      # Persist models and cache
+      - models_data:/app/models
+      - models_cache:/app/cache
+      - ./services/models_service/logs:/app/logs
+    networks:
+      - mantrapath-network
+    depends_on:
+      - postgres
+      - redis
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://models-service:8080/health"]
+      interval: 30s
+      timeout: 15s
+      retries: 3
+      start_period: 60s
+
 volumes:
   postgres_data:
   agent_redis_data:
@@ -905,6 +960,8 @@ volumes:
   ai_models_cache:
   voice_models:    # NEW - Voice Service Vosk models
   voice_audio:     # NEW - Voice Service audio files
+  models_data:     # NEW - Models Service data
+  models_cache:    # NEW - Models Service cache
 
 
 networks:

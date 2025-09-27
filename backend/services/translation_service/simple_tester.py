@@ -6,11 +6,14 @@ Test any language pair supported by the translation service
 Usage: python simple_tester.py
 """
 import json
+import os
 import sys
 import requests
 
 # Service configuration
-SERVICE_URL = "http://localhost:9001"
+# Prefer environment variable so this script works both inside and outside Docker.
+# Default now points to the docker-compose service DNS name instead of localhost.
+SERVICE_URL = os.getenv("TRANSLATION_SERVICE_URL", "http://translation-service:8010")
 
 class TranslationTester:
     def __init__(self):

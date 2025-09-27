@@ -20,11 +20,12 @@ COPY services/content_service /app/
 # Add the app directory to Python path
 ENV PYTHONPATH=/app
 
-EXPOSE 8012
+EXPOSE 8005
 
 # Health check
+# Health check aligned to standardized port 8005
 HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
-    CMD curl -f http://localhost:8012/health || exit 1
+    CMD curl -f http://content-service:8005/health || exit 1
 
 # Production content service
-CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8012"]
+CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8005"]

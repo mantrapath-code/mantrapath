@@ -291,18 +291,20 @@ python main.py
 
 ### Testing
 ```bash
-# Upload a test image
-curl -X POST "http://localhost:8009/api/v1/media/upload" \
+# Upload a test image (internal DNS)
+curl -X POST "media-service:8021/api/v1/media/upload" \
   -H "Authorization: Bearer your-jwt-token" \
   -F "file=@test.jpg" \
   -F "alt_text=Test image" \
   -F "is_public=true"
 
 # Get file details
-curl "http://localhost:8009/api/v1/media/{media_id}"
+curl "media-service:8021/api/v1/media/{media_id}"
 
 # Health check
-curl "http://localhost:8009/health"
+curl "media-service:8021/health"
+
+# Host examples (if ports exposed) prefix with http://localhost:8021 instead of media-service:8021
 ```
 
 ## Deployment

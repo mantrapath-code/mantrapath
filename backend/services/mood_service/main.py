@@ -16,7 +16,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import RedirectResponse
 
 from src.core.config import settings
-from src.api import mood_router, health_router
+from src.api import mood_router, health_router, actions_router
 from shared.database import create_tables
 from src.services import memory_integration_service
 
@@ -77,6 +77,7 @@ app.add_middleware(
 # Include routers
 app.include_router(mood_router)
 app.include_router(health_router)
+app.include_router(actions_router)  # Action Orchestrator integration
 
 
 @app.get("/")

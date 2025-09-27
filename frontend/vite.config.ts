@@ -29,7 +29,7 @@ export default defineConfig(({ mode }) => {
       },
       proxy: {
         '/api': {
-          target: env.VITE_API_GATEWAY_URL || 'http://localhost:8000',
+          target: env.VITE_API_GATEWAY_URL || 'http://api-gateway:8000',
           changeOrigin: true,
           secure: false,
           ws: true, // Enable WebSocket proxying

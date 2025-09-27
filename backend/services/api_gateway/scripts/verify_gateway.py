@@ -11,6 +11,7 @@ Tests the refined API Gateway functionality including:
 
 import asyncio
 import json
+import os
 import sys
 import time
 from typing import Dict, Any, List
@@ -27,7 +28,8 @@ logger = logging.getLogger(__name__)
 class APIGatewayTester:
     """Test the refined API Gateway functionality"""
     
-    def __init__(self, gateway_url: str = "http://localhost:8000"):
+    def __init__(self, gateway_url: str = None):
+        self.gateway_url = gateway_url or os.getenv("API_GATEWAY_URL", "http://api-gateway:8000")
         self.gateway_url = gateway_url
         self.client = httpx.AsyncClient(timeout=30.0)
         self.test_results: List[Dict[str, Any]] = []
@@ -221,7 +223,7 @@ class APIGatewayTester:
             response = await self.client.options(
                 f"{self.gateway_url}/health",
                 headers={
-                    "Origin": "http://localhost:5173",
+                    "Origin": os.getenv("FRONTEND_URL", "http://frontend:5173"),
                     "Access-Control-Request-Method": "GET"
                 }
             )
@@ -357,8 +359,8 @@ async def main():
     parser = argparse.ArgumentParser(description="API Gateway Verification Script")
     parser.add_argument(
         "--gateway-url",
-        default="http://localhost:8000",
-        help="API Gateway URL (default: http://localhost:8000)"
+        default=os.getenv("API_GATEWAY_URL", "http://api-gateway:8000"),
+        help="API Gateway URL (default: http://api-gateway:8000 or API_GATEWAY_URL env var)"
     )
     parser.add_argument(
         "--output",

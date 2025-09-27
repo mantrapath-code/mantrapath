@@ -4,6 +4,7 @@
  */
 
 import { sprint2ApiService, BACKEND_API_ENDPOINTS } from '../services/sprint2-api'
+import { chatbotApi } from '../services/chatbotApi'
 
 console.log('🚀 Sprint 2 Backend Integration Validation')
 console.log('==========================================')
@@ -127,9 +128,9 @@ async function validateChatbot() {
   console.log('\n💬 Testing Chatbot Service (Port 8004)...')
   
   try {
-    // Test chat sessions endpoint
-    console.log('   🗨️  Checking chat sessions...')
-    await sprint2ApiService.getChatSessions(TEST_USER_ID)
+  // Test chat sessions endpoint via new chatbotApi
+  console.log('   🗨️  Checking chat sessions (chatbotApi)...')
+  await chatbotApi.getSessions()
     
     console.log('🎯 Chatbot Service: OPERATIONAL')
     return true

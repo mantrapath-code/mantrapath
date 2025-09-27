@@ -41,7 +41,7 @@ USER appuser
 
 # Health check
 HEALTHCHECK --interval=30s --timeout=10s --start-period=30s --retries=3 \
-    CMD curl -f http://localhost:8012/health || exit 1
+    CMD curl -f http://action-orchestrator:8012/health || exit 1
 
 # Expose port
 EXPOSE 8012

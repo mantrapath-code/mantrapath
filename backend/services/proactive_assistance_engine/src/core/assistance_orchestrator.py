@@ -108,10 +108,11 @@ class ProactiveAssistanceOrchestrator:
         try:
             # Initialize service clients using environment variables for Docker networking
             import os
-            ai_event_url = os.getenv("AI_EVENT_PROCESSOR_URL", "http://localhost:8014")
-            context_store_url = os.getenv("AI_CONTEXT_STORE_URL", "http://localhost:8013")
-            cultural_url = os.getenv("CULTURAL_INTELLIGENCE_URL", "http://localhost:8017")
-            models_url = os.getenv("MODELS_SERVICE_URL", "http://localhost:8080")
+            # Use service DNS names inside Docker network; allow override via env
+            ai_event_url = os.getenv("AI_EVENT_PROCESSOR_URL", "http://ai-event-processor:8014")
+            context_store_url = os.getenv("AI_CONTEXT_STORE_URL", "http://ai-context-store:8013")
+            cultural_url = os.getenv("CULTURAL_INTELLIGENCE_URL", "http://cultural-intelligence:8017")
+            models_url = os.getenv("MODELS_SERVICE_URL", "http://models-service:8080")
             
             self.ai_event_client = AIEventProcessorClient(ai_event_url)
             self.context_store_client = AIContextStoreClient(context_store_url)

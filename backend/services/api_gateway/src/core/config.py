@@ -29,10 +29,10 @@ class GatewayConfig(BaseSettings):
     
     # CORS settings
     cors_origins: List[str] = Field(default_factory=lambda: [
-        os.getenv("FRONTEND_URL", "http://localhost:5173"),
+        os.getenv("FRONTEND_URL", "http://frontend:5173"),
         os.getenv("API_GATEWAY_URL", "http://api-gateway:8000"),
-        
-        "http://localhost:5174"  # Additional dev port
+        # Additional origins from environment (comma-separated)
+        *([origin.strip() for origin in os.getenv("CORS_ADDITIONAL_ORIGINS", "").split(",") if origin.strip()])
     ])
     cors_credentials: bool = Field(default=True)
     cors_methods: List[str] = Field(default=["*"])
@@ -128,7 +128,7 @@ class ServiceConfig(BaseSettings):
     ml_service_health_path: str = Field(default="/health")
     
     # Media Service
-    media_service_url: str = Field(default_factory=lambda: f"http://media-service:{os.getenv('MEDIA_SERVICE_PORT', '8009')}")
+    media_service_url: str = Field(default_factory=lambda: f"http://media-service:{os.getenv('MEDIA_SERVICE_PORT', '8021')}")
     media_service_health_path: str = Field(default="/health")
     
     # Translation Service (Fixed naming - was incorrectly mapped to content service) 
@@ -143,9 +143,7 @@ class ServiceConfig(BaseSettings):
     action_orchestrator_url: str = Field(default_factory=lambda: f"http://action-orchestrator:{os.getenv('ACTION_ORCHESTRATOR_PORT', '8012')}")
     action_orchestrator_health_path: str = Field(default="/health")
     
-    # Models Service (Fixed port conflict - was 8080, now using env var)
-    models_service_url: str = Field(default_factory=lambda: f"http://models-service:{os.getenv('MODELS_SERVICE_INTERNAL_PORT', '8080')}")
-    models_service_health_path: str = Field(default="/health")
+
     
     # AI Event Processor Service
     ai_event_processor_url: str = Field(default_factory=lambda: f"http://ai-event-processor:{os.getenv('AI_EVENT_PROCESSOR_PORT', '8014')}")
@@ -154,6 +152,22 @@ class ServiceConfig(BaseSettings):
     # AI Context Store Service
     ai_context_store_url: str = Field(default_factory=lambda: f"http://ai-context-store:{os.getenv('AI_CONTEXT_STORE_PORT', '8013')}")
     ai_context_store_health_path: str = Field(default="/health")
+    
+    # Proactive Assistance Engine Service
+    proactive_assistance_url: str = Field(default_factory=lambda: f"http://proactive-assistance-engine:{os.getenv('PROACTIVE_ASSISTANCE_PORT', '8018')}")
+    proactive_assistance_health_path: str = Field(default="/health")
+    
+    # Memory Service
+    memory_service_url: str = Field(default_factory=lambda: f"http://memory-service:{os.getenv('MEMORY_SERVICE_PORT', '8017')}")
+    memory_service_health_path: str = Field(default="/health/live")
+    
+    # Voice Event Processor Service
+    voice_event_processor_url: str = Field(default_factory=lambda: f"http://voice-event-processor:{os.getenv('VOICE_EVENT_PROCESSOR_PORT', '8015')}")
+    voice_event_processor_health_path: str = Field(default="/health")
+    
+    # Models Service (AI/ML model hosting)
+    models_service_url: str = Field(default_factory=lambda: f"http://models-service:{os.getenv('MODELS_SERVICE_INTERNAL_PORT', '8080')}")
+    models_service_health_path: str = Field(default="/health")
     
     model_config = {
         "env_file": ".env", 

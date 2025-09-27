@@ -13,7 +13,7 @@ import { motion, AnimatePresence } from "framer-motion"
 import { toast } from "sonner"
 import { communityApi } from "@/services/api"
 import { useAuth } from "@/hooks/useAuth"
-import { getRelativeTime, getDisplayName, formatFullDate } from "@/utils/timeUtils"
+import { formatRelativeTime, getDisplayName, formatFullDate } from "@/utils/timeUtils"
 
 interface ChallengeProgressData {
   id: string
@@ -717,7 +717,7 @@ export function EnhancedChallengeCard({ challenge, onJoin, onLeave, onRefresh }:
                             {member.name || `User${member.user_id}`}
                           </div>
                           <div className="text-sm text-muted-foreground">
-                            {member.completed_days} days completed • Joined {getRelativeTime(member.joined_at)} ago
+                            {member.completed_days} days completed • Joined {formatRelativeTime(member.joined_at)} ago
                           </div>
                           <div className="flex items-center gap-2 mt-1">
                             <div className="text-xs px-2 py-1 bg-green-100 text-green-700 rounded-full">
@@ -799,7 +799,7 @@ export function EnhancedChallengeCard({ challenge, onJoin, onLeave, onRefresh }:
                                 {getDisplayName(comment.author)}
                               </div>
                               <div className="text-xs text-muted-foreground">
-                                {getRelativeTime(comment.created_at)}
+                                {formatRelativeTime(comment.created_at)}
                               </div>
                             </div>
                           </div>
@@ -880,7 +880,7 @@ export function EnhancedChallengeCard({ challenge, onJoin, onLeave, onRefresh }:
                                       {getDisplayName(reply.author)}
                                     </div>
                                     <div className="text-xs text-muted-foreground">
-                                      {getRelativeTime(reply.created_at)}
+                                      {formatRelativeTime(reply.created_at)}
                                     </div>
                                   </div>
                                 </div>
@@ -911,7 +911,7 @@ export function EnhancedChallengeCard({ challenge, onJoin, onLeave, onRefresh }:
                                       {getDisplayName(reply.author)}
                                     </div>
                                     <div className="text-xs text-muted-foreground">
-                                      {getRelativeTime(reply.created_at)}
+                                      {formatRelativeTime(reply.created_at)}
                                     </div>
                                   </div>
                                 </div>

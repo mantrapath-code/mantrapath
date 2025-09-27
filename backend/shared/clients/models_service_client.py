@@ -16,7 +16,7 @@ logger = structlog.get_logger(__name__)
 class ModelsServiceClient:
     """Client for interacting with Models Service (Port 8085)"""
     
-    def __init__(self, base_url: str = "http://models-service:8085"):
+    def __init__(self, base_url: str = "http://models-service:8080"):
         self.base_url = base_url.rstrip('/')
         self.client = httpx.AsyncClient(
             timeout=httpx.Timeout(30.0, connect=10.0),

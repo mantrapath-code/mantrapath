@@ -38,7 +38,9 @@ class EnhancedLanguageDetector:
     """Enhanced language detection using multiple methods"""
     
     def __init__(self):
-        self.translation_service_url = "http://localhost:8005"  # Translation service
+    # Prefer explicit env var; fallback to Docker service DNS name (not localhost) for containerized deployment
+    import os
+    self.translation_service_url = os.getenv("TRANSLATION_SERVICE_URL", "http://translation-service:8010")  # Translation service authoritative port
         self.fallback_patterns = self._initialize_fallback_patterns()
     
     def _initialize_fallback_patterns(self) -> Dict[str, Dict[str, Any]]:

@@ -375,7 +375,6 @@ services:
       - DATABASE_URL={{ config.database.url }}
       - REDIS_URL={{ config.redis.url }}
       - JWT_SECRET_KEY=${JWT_SECRET_KEY}
-      - OPENAI_API_KEY=${OPENAI_API_KEY}
       - ELEVENLABS_API_KEY=${ELEVENLABS_API_KEY}
       - AUTH_SERVICE_URL={{ config.services.auth_service.url }}
       - PROFILE_SERVICE_URL={{ config.services.profile_service.url }}

@@ -54,9 +54,12 @@ class ServiceRegistry:
             ("translation", service_config.translation_service_url, service_config.translation_service_health_path),
             ("voice", service_config.voice_service_url, service_config.voice_service_health_path),
             ("action-orchestrator", service_config.action_orchestrator_url, service_config.action_orchestrator_health_path),
-            ("models", service_config.models_service_url, service_config.models_service_health_path),
             ("ai-events", service_config.ai_event_processor_url, service_config.ai_event_processor_health_path),
             ("ai-context", service_config.ai_context_store_url, service_config.ai_context_store_health_path),
+            ("proactive-assistance", service_config.proactive_assistance_url, service_config.proactive_assistance_health_path),
+            ("memory", service_config.memory_service_url, service_config.memory_service_health_path),
+            ("voice-events", service_config.voice_event_processor_url, service_config.voice_event_processor_health_path),
+            ("models", service_config.models_service_url, service_config.models_service_health_path),
         ]
         
         for name, url, health_path in services_config:

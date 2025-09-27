@@ -41,7 +41,9 @@ check_service_health() {
     
     log_info "Checking $service_name on port $port..."
     
-    if curl -f -s --max-time $timeout "http://localhost:$port$endpoint" >/dev/null 2>&1; then
+    # Use HEALTH_CHECK_HOST env var or default to localhost (for host-based checking)
+    local host="${HEALTH_CHECK_HOST:-localhost}"
+    if curl -f -s --max-time $timeout "http://$host:$port$endpoint" >/dev/null 2>&1; then
         log "✅ $service_name is healthy"
         return 0
     else

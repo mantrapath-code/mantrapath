@@ -60,7 +60,7 @@ def send_verification_email(email: str, token: str, username: str) -> bool:
         smtp_username = os.getenv("SMTP_USERNAME", "")
         smtp_password = os.getenv("SMTP_PASSWORD", "")
         from_email = os.getenv("FROM_EMAIL", smtp_username)
-        app_url = os.getenv("APP_URL", "http://localhost:5173")
+        app_url = os.getenv("APP_URL", "http://frontend:5173")
         
         # Get the API Gateway URL for verification
         api_gateway_url = os.getenv("VITE_API_GATEWAY_URL", os.getenv("API_GATEWAY_URL", "http://139.84.213.185:8000"))

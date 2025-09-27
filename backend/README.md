@@ -1446,9 +1446,8 @@ API_GATEWAY_PORT=8000
 AUTH_SERVICE_PORT=8001
 # ... all service ports defined
 
-# AI Services (Optional)
-OPENAI_API_KEY=your-openai-key
-ELEVENLABS_API_KEY=your-elevenlabs-key
+# AI Services (Optional - external APIs removed; self-hosted models preferred)
+# ELEVENLABS_API_KEY=your-elevenlabs-key
 
 # Development Settings
 SKIP_EMAIL_VERIFICATION=true

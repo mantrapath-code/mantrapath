@@ -43,8 +43,35 @@ export function isAuthenticated(): boolean {
  */
 export function setDevToken(): void {
   if (isDevMode()) {
-    const devToken = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIyNmU2NzE2YS1lNGJkLTRmMmYtYTBiYi1lYzc0MjkwMjEyMmYiLCJlbWFpbCI6InNhQGdtYWlsLmNvbSIsInJvbGUiOiJ1c2VyIiwiZXhwIjoxNzU4NzUzMDM3LCJ0eXBlIjoiYWNjZXNzIn0.rCMzher_zuFCdlIGl4NnIUQwfUq7AzVkP9TWqSjcS2k'
+    const devToken = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIyNmU2NzE2YS1lNGJkLTRmMmYtYTBiYi1lYzc0MjkwMjEyMmYiLCJlbWFpbCI6InNhQGdtYWlsLmNvbSIsInJvbGUiOiJ1c2VyIiwiZXhwIjoxNzU4NzgwODIxLCJ0eXBlIjoiYWNjZXNzIn0.sVOxX_CW5cpwy0ffjNKhem2aMrNS2La_m0wMRBFnUeY'
     setAuthToken(devToken)
-    console.log('Dev token set for testing')
+    console.log('✅ Dev token set for testing')
+    console.log('🔧 Token preview:', devToken.substring(0, 30) + '...')
+    return;
   }
+  console.log('⚠️ setDevToken only works in development mode')
+}
+
+/**
+ * Global debug function - can be called from browser console
+ */
+declare global {
+  interface Window {
+    setMoodToken: () => void;
+    debugAuth: () => void;
+  }
+}
+
+// Make functions available globally for debugging
+if (typeof window !== 'undefined') {
+  window.setMoodToken = setDevToken;
+  window.debugAuth = () => {
+    console.log('🔍 Auth Debug Info:');
+    console.log('📍 Environment:', isDevMode() ? 'Development' : 'Production');
+    console.log('🎫 Current token:', getAuthToken() ? 'Present' : 'Missing');
+    if (getAuthToken()) {
+      console.log('🎫 Token preview:', getAuthToken()!.substring(0, 30) + '...');
+    }
+    console.log('✨ To set token manually: window.setMoodToken()');
+  };
 }

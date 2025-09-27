@@ -133,7 +133,10 @@ class STTEngine:
         """Load Whisper model"""
         try:
             import whisper
-            
+
+            if not hasattr(whisper, "load_model"):
+                raise RuntimeError("Installed 'whisper' package does not expose load_model; ensure openai-whisper is installed")
+
             model_size = config.get("model_size", "medium")
             model = whisper.load_model(model_size)
             

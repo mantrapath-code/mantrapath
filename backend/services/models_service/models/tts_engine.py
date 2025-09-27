@@ -30,9 +30,10 @@ class TTSEngine:
         self.default_models: Dict[str, str] = {}
         
         # Language support mapping
+        # Order matters: put lightweight system engines (espeak) ahead of festival to avoid failing on missing festival.
         self.supported_languages = {
-            "en": ["coqui_xtts_v2", "festival_en", "espeak_en"],
-            "hi": ["coqui_xtts_v2", "coqui_hi", "festival_hi", "espeak_hi"],
+            "en": ["coqui_xtts_v2", "espeak_en", "festival_en"],
+            "hi": ["coqui_xtts_v2", "coqui_hi", "espeak_hi", "festival_hi"],
             "bn": ["coqui_bn", "espeak_bn"],
             "te": ["coqui_xtts_v2", "espeak_te"],
             "ta": ["coqui_xtts_v2", "espeak_ta"],
@@ -144,10 +145,13 @@ class TTSEngine:
             
             # Check if system command is available
             if engine == "espeak":
-                result = subprocess.run(["which", "espeak"], capture_output=True)
+                # Try espeak-ng first, then fall back to espeak
+                result = subprocess.run(["which", "espeak-ng"], capture_output=True)
                 if result.returncode != 0:
-                    logger.error("eSpeak not installed")
-                    return False
+                    result = subprocess.run(["which", "espeak"], capture_output=True)
+                    if result.returncode != 0:
+                        logger.error("eSpeak/eSpeak-NG not installed")
+                        return False
             elif engine == "festival":
                 result = subprocess.run(["which", "festival"], capture_output=True)
                 if result.returncode != 0:
@@ -356,7 +360,11 @@ class TTSEngine:
                 output_path = output_file.name
             
             if engine == "espeak":
-                cmd = ["espeak", "-w", output_path]
+                # Use espeak-ng if available, fall back to espeak
+                espeak_cmd = "espeak-ng"
+                if subprocess.run(["which", "espeak-ng"], capture_output=True).returncode != 0:
+                    espeak_cmd = "espeak"
+                cmd = [espeak_cmd, "-w", output_path]
                 
                 # Set language/voice
                 if language == "hi":

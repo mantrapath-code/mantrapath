@@ -5,21 +5,22 @@ import websockets
 import json
 import time
 from datetime import datetime, timezone
+from ...config import test_service_url
 
 class TestSprint2Integration:
     """Integration tests for Sprint 2 Backend Services"""
     
     @pytest.fixture
     def ai_processor_url(self):
-        return "http://localhost:8014"
+        return test_service_url("ai_events")
     
     @pytest.fixture
     def voice_processor_url(self):
-        return "http://localhost:8015"
+        return test_service_url("voice_events")
     
     @pytest.fixture
     def api_gateway_url(self):
-        return "http://localhost:8000"
+        return test_service_url("api_gateway")
     
     @pytest.mark.asyncio
     async def test_ai_event_processor_health(self, ai_processor_url):

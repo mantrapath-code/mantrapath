@@ -21,7 +21,7 @@ COPY services/proactive_assistance_engine/ .
 
 # Health check
 HEALTHCHECK --interval=30s --timeout=10s --start-period=60s --retries=3 \
-    CMD curl -f http://localhost:8018/health || exit 1
+    CMD curl -f http://proactive-assistance-engine:8018/health || exit 1
 
 EXPOSE 8018
 

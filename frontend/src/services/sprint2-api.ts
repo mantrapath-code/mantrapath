@@ -7,7 +7,7 @@ import { getAuthToken } from '../utils/auth'
 
 // Get environment-aware API base URL
 const getApiBaseUrl = () => {
-  return import.meta.env.VITE_API_GATEWAY_URL || import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000';
+  return import.meta.env.VITE_API_GATEWAY_URL || import.meta.env.VITE_API_BASE_URL || 'http://api-gateway:8000';
 };
 
 // Real Backend Service Endpoints - Sprint 2
@@ -231,22 +231,7 @@ class Sprint2ApiService {
     )
   }
 
-  // Chatbot Service API calls (Port 8004)
-  async sendChatMessage(message: string, sessionId?: string): Promise<any> {
-    return this.makeRequest(
-      `${BACKEND_API_ENDPOINTS.chatbot.base}${BACKEND_API_ENDPOINTS.chatbot.chat}`,
-      {
-        method: 'POST',
-        body: JSON.stringify({ message, session_id: sessionId })
-      }
-    )
-  }
-
-  async getChatSessions(userId: string): Promise<any> {
-    return this.makeRequest(
-      `${BACKEND_API_ENDPOINTS.chatbot.base}${BACKEND_API_ENDPOINTS.chatbot.sessions}?user_id=${userId}`
-    )
-  }
+  // Chatbot Service API calls (Port 8004) - deprecated methods removed; use chatbotApi.ts
 
   // Health checks for all services
   async checkServiceHealth(): Promise<Record<string, any>> {

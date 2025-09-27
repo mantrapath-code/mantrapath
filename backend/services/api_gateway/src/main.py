@@ -1,11 +1,12 @@
 """
-MantraPath API Gateway V3 Enhanced - Main Application
-Voice-enabled, AI-powered, culturally-aware service orchestration platform
+MantraPath API Gateway - Main Application
+Self-hosted, AI-powered service orchestration platform
 """
 
 import uuid
 import logging
 import time
+import asyncio
 from typing import Dict, Any, Optional
 from contextlib import asynccontextmanager
 
@@ -16,7 +17,7 @@ from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from fastapi.middleware.trustedhost import TrustedHostMiddleware
 from fastapi.middleware.gzip import GZipMiddleware
 
-# V3 Enhanced Imports
+# Core Imports
 from src.core.config import gateway_config, service_config
 from src.core.models import ProxyRequest, HTTPMethod
 from src.registry import ServiceRegistry
@@ -24,7 +25,7 @@ from src.routing import RequestRouter, LoadBalancerFactory, RequestProxy
 from src.middleware import RateLimiter, get_client_identifier, CircuitBreaker
 from src.health import HealthChecker
 
-# V3 Enhanced Components
+# Enhanced Components
 from src.middleware.voice_routing import VoiceRoutingMiddleware
 from src.middleware.ai_context import AIContextMiddleware
 from src.middleware.cultural_context import CulturalContextMiddleware
@@ -66,7 +67,7 @@ structlog.configure(
 
 logger = structlog.get_logger(__name__)
 
-# Global V3 Enhanced Components
+# Global Components
 service_registry = ServiceRegistry()
 request_router = RequestRouter()
 load_balancer = LoadBalancerFactory.create_load_balancer(gateway_config.load_balancing_strategy)
@@ -75,7 +76,7 @@ rate_limiter = RateLimiter()
 circuit_breaker = CircuitBreaker()
 health_checker = HealthChecker(service_registry, circuit_breaker)
 
-# V3 Enhanced Services
+# Enhanced Services
 voice_router = VoiceCommandRouter()
 ai_context_manager = AIContextManager()
 cultural_manager = CulturalContextManager()
@@ -90,9 +91,9 @@ security = HTTPBearer(auto_error=False)
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    """Application lifespan manager for V3 Enhanced Gateway"""
+    """Application lifespan manager"""
     # Startup
-    logger.info("🚀 Starting MantraPath API Gateway V3 Enhanced...")
+    logger.info("🚀 Starting MantraPath API Gateway...")
     
     # Initialize core services
     await service_registry.start()
@@ -105,28 +106,28 @@ async def lifespan(app: FastAPI):
     await cultural_manager.initialize()
     await websocket_manager.initialize()
     
-    logger.info("✅ API Gateway V3 Enhanced started successfully")
+    logger.info("✅ API Gateway started successfully")
     
     yield
     
     # Shutdown
-    logger.info("🛑 Shutting down API Gateway V3 Enhanced...")
+    logger.info("🛑 Shutting down API Gateway...")
     await websocket_manager.shutdown()
     await performance_monitor.stop()
     await cache_manager.close()
     await service_registry.stop()
-    logger.info("✅ API Gateway V3 Enhanced shutdown complete")
+    logger.info("✅ API Gateway shutdown complete")
 
 
-# Create FastAPI application with V3 enhancements
+# Create FastAPI application with clean architecture
 app = FastAPI(
-    title="MantraPath API Gateway V3 Enhanced",
-    description="Voice-enabled, AI-powered, culturally-aware service orchestration platform",
-    version="3.0.0",
+    title="MantraPath API Gateway",
+    description="Self-hosted, AI-powered service orchestration platform",
+    version="1.0.0",
     lifespan=lifespan,
-    docs_url="/api/v3/docs",
-    redoc_url="/api/v3/redoc",
-    openapi_url="/api/v3/openapi.json"
+    docs_url="/docs",
+    redoc_url="/redoc",
+    openapi_url="/openapi.json"
 )
 
 # Add V3 Enhanced Middleware Stack
@@ -148,14 +149,14 @@ app.add_middleware(AIContextMiddleware, ai_context_manager=ai_context_manager)
 app.add_middleware(VoiceRoutingMiddleware, voice_router=voice_router)
 
 
-# V3 Enhanced Health Endpoints
-@app.get("/api/v3/health/enhanced")
-async def enhanced_health_check():
-    """Enhanced health check with V3 features"""
+# Clean Health Endpoints
+@app.get("/api/health/detailed")
+async def detailed_health_check():
+    """Detailed health check with all subsystems"""
     try:
         return {
             "status": "healthy",
-            "version": "3.0.0-enhanced",
+            "version": "1.0.0",
             "timestamp": time.time(),
             "features": {
                 "voice_routing": await voice_router.health_check(),
@@ -167,12 +168,12 @@ async def enhanced_health_check():
             "services": await health_checker.gateway_health()
         }
     except Exception as e:
-        logger.error("Enhanced health check failed", error=str(e))
+        logger.error("Detailed health check failed", error=str(e))
         return JSONResponse(
             status_code=500,
             content={
                 "status": "unhealthy",
-                "version": "3.0.0-enhanced",
+                "version": "1.0.0",
                 "timestamp": time.time(),
                 "error": str(e)
             }
@@ -214,36 +215,94 @@ async def readiness_check():
     return await health_checker.readiness_check()
 
 
-@app.get("/api/health")
-async def api_health_check():
-    """API health check endpoint for frontend compatibility"""
-    return {
-        "status": "healthy",
-        "service": "api-gateway",
-        "timestamp": time.time()
-    }
-
-
-@app.get("/api/v3/health/voice")
+@app.get("/api/health/voice")
 async def voice_system_health():
     """Voice system specific health check"""
     return await voice_router.detailed_health_check()
 
 
-@app.get("/api/v3/health/ai-context")
+@app.get("/api/health/ai-context")
 async def ai_context_health():
     """AI context system health check"""
     return await ai_context_manager.detailed_health_check()
 
 
-@app.get("/api/v3/health/cultural")
+@app.get("/api/health/cultural")
 async def cultural_system_health():
     """Cultural intelligence system health check"""
     return await cultural_manager.detailed_health_check()
 
 
-# V3 Enhanced Voice Command Endpoints
-@app.post("/api/v3/voice/command", response_model=VoiceResponse)
+@app.get("/api/services/status")
+async def services_status(
+    credentials: HTTPAuthorizationCredentials = Depends(security)
+):
+    """Return current status of all registered backend services (auth required).
+
+    Provides a snapshot of each service instance including:
+      - name
+      - url
+      - status (HEALTHY / UNHEALTHY)
+      - last_health_check timestamp (ISO) if available
+      - failure_count
+    """
+    # Authenticate user
+    user_context = await authenticate_user(credentials)
+    
+    services = service_registry.get_all_services()
+    result = {}
+    for name, instances in services.items():
+        result[name] = []
+        for inst in instances:
+            result[name].append({
+                "id": inst.id,
+                "url": inst.url,
+                "status": inst.status.value if hasattr(inst.status, 'value') else str(inst.status),
+                "last_health_check": inst.last_health_check.isoformat() if getattr(inst, 'last_health_check', None) else None,
+                "failure_count": getattr(inst, 'failure_count', None),
+            })
+    return {"timestamp": time.time(), "services": result}
+
+
+# Observability Endpoints
+@app.get("/api/metrics")
+async def metrics(
+    credentials: HTTPAuthorizationCredentials = Depends(security)
+):
+    """Get system metrics (auth required)"""
+    user_context = await authenticate_user(credentials)
+    return await performance_monitor.get_metrics()
+
+
+@app.get("/api/metrics/voice")
+async def voice_metrics(
+    credentials: HTTPAuthorizationCredentials = Depends(security)
+):
+    """Get voice command processing metrics (auth required)"""
+    user_context = await authenticate_user(credentials)
+    return await performance_monitor.get_voice_metrics()
+
+
+@app.get("/api/metrics/cultural")
+async def cultural_metrics(
+    credentials: HTTPAuthorizationCredentials = Depends(security)
+):
+    """Get cultural adaptation metrics (auth required)"""
+    user_context = await authenticate_user(credentials)
+    return await performance_monitor.get_cultural_metrics()
+
+
+@app.get("/api/metrics/services")
+async def service_metrics(
+    credentials: HTTPAuthorizationCredentials = Depends(security)
+):
+    """Get per-service performance metrics (auth required)"""
+    user_context = await authenticate_user(credentials)
+    return await health_checker.get_service_metrics()
+
+
+# Voice Command Endpoints
+@app.post("/api/voice/command", response_model=VoiceResponse)
 async def process_voice_command(
     voice_command: VoiceCommand,
     request: Request,
@@ -363,8 +422,8 @@ async def process_voice_command(
         )
 
 
-# V3 Enhanced WebSocket Endpoint for Real-time Voice Streaming
-@app.websocket("/api/v3/voice/stream")
+# WebSocket Endpoints
+@app.websocket("/api/voice/stream")
 async def voice_streaming_websocket(websocket: WebSocket):
     """WebSocket endpoint for real-time voice streaming"""
     connection_id = str(uuid.uuid4())
@@ -468,18 +527,18 @@ async def cultural_metrics():
     return await performance_monitor.get_cultural_metrics()
 
 
-# Enhanced Service Proxy with V3 Features
+# Service Proxy Endpoints  
 @app.api_route(
-    "/api/v3/service/{service_name}/{path:path}",
+    "/api/service/{service_name}/{path:path}",
     methods=["GET", "POST", "PUT", "DELETE", "PATCH", "HEAD", "OPTIONS"]
 )
-async def enhanced_service_proxy(
+async def service_proxy(
     service_name: str,
     path: str,
     request: Request,
     credentials: Optional[HTTPAuthorizationCredentials] = Depends(security)
 ):
-    """Enhanced service proxy with V3 features"""
+    """Proxy requests to backend services"""
     request_id = str(uuid.uuid4())
     start_time = time.time()
     

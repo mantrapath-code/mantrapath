@@ -330,7 +330,7 @@ sequenceDiagram
 - **Transformers**: Pre-trained language models
 - **scikit-learn**: Machine learning algorithms
 - **NLTK/spaCy**: Natural language processing
-- **OpenAI API**: Advanced language models
+- Local language model stack (external OpenAI API removed)
 
 ### **3. Infrastructure Technologies**
 - **Docker**: Containerization

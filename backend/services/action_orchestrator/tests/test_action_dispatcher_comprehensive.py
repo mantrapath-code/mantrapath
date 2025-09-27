@@ -368,7 +368,7 @@ class TestActionDispatcherComprehensive:
             
             assert mood_url == "http://mood:8003"
             assert content_url == "http://content:8005"
-            assert unknown_url == "http://localhost:8000"  # Default
+            assert unknown_url == "http://api-gateway:8000"  # Default to internal DNS
 
     async def test_close(self, dispatcher):
         """Test closing dispatcher"""

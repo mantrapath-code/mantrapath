@@ -1,49 +1,56 @@
-"""
-Test script for language preferences API endpoints
-Tests GET and PUT operations with user Ramesh (Dev@#123)
+"""Legacy test script for language preferences API endpoints.
+
+Refactored to use dynamic service URL configuration (no hardcoded localhost).
+Kept for backward compatibility while newer test_lang_prefs.py provides
+an updated/cleaner version. This file now delegates URL resolution via
+tests.config so it won't reintroduce localhost usage.
 """
 
-import requests
+from typing import Dict, Any, Optional
+import os
 import json
-from datetime import datetime
+import requests
 
-# Configuration
-BASE_URL = "http://localhost:8002"  # Profile service port
-TEST_USER = {
-    "username": "Ramesh",
-    "password": "Dev@#123"
-}
+from .config import PROFILE_BASE, AUTH_BASE
 
-def create_test_user() -> Dict[str, Any]:
-    """Create a test user and return auth token"""
-    # First try to register
+# Configuration (user credentials can be overridden via env for local runs)
+TEST_USER_EMAIL = os.getenv("TEST_LANG_PREF_USER_EMAIL", "legacy_lang_pref_user@example.com")
+TEST_USER_PASSWORD = os.getenv("TEST_LANG_PREF_USER_PASSWORD", "Dev@#123")
+
+BASE_URL = PROFILE_BASE  # Profile service base
+
+def create_test_user() -> Optional[Dict[str, Any]]:
+    """Create (idempotent) and authenticate a test user; return auth payload.
+
+    Falls back gracefully if user already exists.
+    """
     register_data = {
         "email": TEST_USER_EMAIL,
-        "username": "testuser",
+        "username": TEST_USER_EMAIL.split("@")[0],
         "password": TEST_USER_PASSWORD,
         "first_name": "Test",
         "last_name": "User"
     }
-    
-    # Try registration (might fail if user exists)
+
+    # Attempt registration
     try:
-        response = requests.post(f"http://localhost:8001/api/auth/register", json=register_data)
-        print(f"Registration: {response.status_code}")
-    except:
-        print("Registration failed or user exists")
-    
-    # Login to get token
-    login_data = {
-        "email": TEST_USER_EMAIL,
-        "password": TEST_USER_PASSWORD
-    }
-    
-    response = requests.post(f"http://localhost:8001/api/auth/login", json=login_data)
+        reg_resp = requests.post(f"{AUTH_BASE}/api/auth/register", json=register_data, timeout=15)
+        print(f"Registration attempt: {reg_resp.status_code}")
+    except Exception as e:
+        print(f"Registration request failed: {e}")
+
+    # Login
+    login_data = {"email": TEST_USER_EMAIL, "password": TEST_USER_PASSWORD}
+    try:
+        response = requests.post(f"{AUTH_BASE}/api/auth/login", json=login_data, timeout=15)
+    except Exception as e:
+        print(f"Login request error: {e}")
+        return None
+
     if response.status_code == 200:
         return response.json()
-    else:
-        print(f"Login failed: {response.status_code} - {response.text}")
-        return None
+    print(f"Login failed: {response.status_code} - {response.text}")
+    return None
 
 def test_language_preferences():
     """Test language preference CRUD operations"""
@@ -82,7 +89,7 @@ def test_language_preferences():
     }
     
     response = requests.put(f"{BASE_URL}/api/profile/language-preferences", 
-                          json=update_data, headers=headers)
+                            json=update_data, headers=headers)
     print(f"Status: {response.status_code}")
     if response.status_code == 200:
         updated_prefs = response.json()
@@ -105,7 +112,7 @@ def test_language_preferences():
     }
     
     response = requests.put(f"{BASE_URL}/api/profile/language-preferences", 
-                          json=normalize_data, headers=headers)
+                            json=normalize_data, headers=headers)
     print(f"Status: {response.status_code}")
     if response.status_code == 200:
         normalized_prefs = response.json()
@@ -125,7 +132,7 @@ def test_language_preferences():
     }
     
     response = requests.put(f"{BASE_URL}/api/profile/language-preferences", 
-                          json=invalid_data, headers=headers)
+                            json=invalid_data, headers=headers)
     print(f"Status: {response.status_code}")
     if response.status_code == 422:  # Validation error expected
         print("✅ Validation working - rejected invalid language")
@@ -142,7 +149,7 @@ def test_language_preferences():
     }
     
     response = requests.put(f"{BASE_URL}/api/profile/language-preferences", 
-                          json=arabic_data, headers=headers)
+                            json=arabic_data, headers=headers)
     print(f"Status: {response.status_code}")
     if response.status_code == 200:
         arabic_prefs = response.json()

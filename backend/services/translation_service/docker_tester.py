@@ -8,9 +8,12 @@ import json
 import time
 import sys
 from typing import Dict, Optional, Any
+import os
 
 class DockerTranslationTester:
-    def __init__(self, base_url: str = "http://localhost:8010"):
+    def __init__(self, base_url: str = None):
+        if base_url is None:
+            base_url = os.getenv("TRANSLATION_SERVICE_URL", "http://translation-service:8010")
         self.base_url = base_url
         self.session_stats = {
             "total_tests": 0,
@@ -318,7 +321,7 @@ def main():
     if len(sys.argv) > 1:
         base_url = sys.argv[1]
     else:
-        base_url = "http://localhost:8010"
+        base_url = os.getenv("TRANSLATION_SERVICE_URL", "http://translation-service:8010")
     
     tester = DockerTranslationTester(base_url)
     tester.print_header()

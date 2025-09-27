@@ -26,8 +26,8 @@ from enum import Enum
 # HTTP client for MantraPath services
 import httpx
 
-# Mood service integration
-from src.clients.mood_service_client import mood_service_client
+# Mood service integration - import class for instantiation and shared singleton
+from src.clients.mood_service_client import MoodServiceClient, mood_service_client  # Mood service integration
 
 # Configure logging
 logger = logging.getLogger(__name__)
@@ -109,32 +109,31 @@ class MoodAwareResponder:
         self.response_templates = self._load_response_templates()
         self.crisis_keywords = self._load_crisis_keywords()
         self.therapeutic_responses = self._load_therapeutic_responses()
-        
-        # Initialize mood service client for direct mood tracking
+
+        # Initialize mood service client (dedicated instance; could also reuse singleton mood_service_client)
         self.mood_client = MoodServiceClient()
-        
+
         # Configuration settings
         self.crisis_threshold = 3.0  # Mood score threshold for crisis detection
         self.distress_threshold = 5.0  # Mood score threshold for distress detection
-        
+
         # MantraPath service URLs from environment
         # Defaults prefer Docker service discovery; can be overridden via env
         self.models_service_url = os.getenv('MODELS_SERVICE_URL', 'http://models-service:8080')
-        # Remove deprecated phi4 agent URL attribute
-        # self.phi4_agent_url = os.getenv('PHI4_AGENT_URL', 'http://localhost:8016')
         self.ai_context_store_url = os.getenv('AI_CONTEXT_STORE_URL', 'http://ai-context-store:8013')
         self.memory_service_url = os.getenv('MEMORY_SERVICE_URL', 'http://memory-service:8017')
-        
+
         # Prioritize models service only
         self.use_models_service_first = True
-        
+
         logger.info("MoodAwareResponder initialized with centralized models service priority and mood client")
 
     async def generate_mood_aware_response(
-        self, 
-        user_message: str, 
+        self,
+        user_message: str,
         mood_context: MoodContext,
-        conversation_history: Optional[List[Dict[str, Any]]] = None
+        conversation_history: Optional[List[Dict[str, Any]]] = None,
+        user_id: Optional[str] = None,
     ) -> MoodAwareResponse:
         """
         Generate a mood-aware response based on user message and mood context
@@ -155,9 +154,12 @@ class MoodAwareResponder:
                 return await self._generate_crisis_response(user_message, mood_context)
             
             # Step 1.5: Analyze message for implicit mood tracking (async, non-blocking)
-            asyncio.create_task(self._analyze_and_track_mood_from_message(
-                user_message, user_id, conversation_history
-            ))
+            if user_id:
+                asyncio.create_task(
+                    self._analyze_and_track_mood_from_message(
+                        user_message, user_id, conversation_history or []
+                    )
+                )
             
             # Step 2: Determine emotional context
             emotional_context = await self._analyze_emotional_context(user_message, mood_context)

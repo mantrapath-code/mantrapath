@@ -399,7 +399,8 @@ export function VoiceMoodEntry({
       formData.append('audio', audioBlob, 'voice-sample.webm')
       formData.append('detect_language', 'true')
       
-      const response = await fetch('http://localhost:8011/stt', {
+  const voiceBase = import.meta.env.VITE_VOICE_SERVICE_URL || 'http://voice-service:8011'
+  const response = await fetch(`${voiceBase}/stt`, {
         method: 'POST',
         body: formData
       })
@@ -435,7 +436,8 @@ export function VoiceMoodEntry({
       
       // Try to use the voice service's emotion analysis
       try {
-        const response = await fetch('http://localhost:8011/emotion-analysis', {
+  const voiceBase = import.meta.env.VITE_VOICE_SERVICE_URL || 'http://voice-service:8011'
+  const response = await fetch(`${voiceBase}/emotion-analysis`, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json'

@@ -55,11 +55,7 @@ export function formatRelativeTime(dateString: string): string {
   }
 }
 
-/**
- * Legacy alias for backward compatibility - maintains existing imports
- * @deprecated Use formatRelativeTime instead
- */
-export const getRelativeTime = formatRelativeTime
+// Removed deprecated alias getRelativeTime (use formatRelativeTime directly)
 
 /**
  * Get a readable username from user data

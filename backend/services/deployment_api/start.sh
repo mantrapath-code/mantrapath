@@ -59,19 +59,19 @@ RATE_LIMIT_ENABLED=true
 DEFAULT_RATE_LIMIT=1000
 FRONTEND_ENGINEER_LIMIT=500
 
-# Service Discovery
-API_GATEWAY_URL=http://localhost:8000
-VOICE_SERVICE_URL=http://localhost:8011
-MODELS_SERVICE_URL=http://localhost:8085
-COMMUNITY_SERVICE_URL=http://localhost:8012
-ML_SERVICE_URL=http://localhost:8013
+# Service Discovery (configurable for both local dev and container environments)
+API_GATEWAY_URL=\${API_GATEWAY_URL:-http://api-gateway:8000}
+VOICE_SERVICE_URL=\${VOICE_SERVICE_URL:-http://voice-service:8011}
+MODELS_SERVICE_URL=\${MODELS_SERVICE_URL:-http://models-service:8080}
+COMMUNITY_SERVICE_URL=\${COMMUNITY_SERVICE_URL:-http://community-service:8006}
+ML_SERVICE_URL=\${ML_SERVICE_URL:-http://ml-service:8008}
 
 # Redis Configuration
-REDIS_URL=redis://localhost:6380
+REDIS_URL=\${REDIS_URL:-redis://redis:6380}
 REDIS_DB=0
 
 # Database Configuration
-DATABASE_URL=postgresql://deployment_user:deployment_password@localhost:5433/mantrapath_deployment
+DATABASE_URL=\${DATABASE_URL:-postgresql://deployment_user:deployment_password@database:5433/mantrapath_deployment}
 EOF
     echo "✅ .env file created. Please update the values as needed."
 fi
@@ -83,8 +83,8 @@ mkdir -p database
 
 # Start the service
 echo "🚀 Starting Deployment API Service on port 8086..."
-echo "📚 API Documentation available at: http://localhost:8086/docs"
-echo "🔍 Health check available at: http://localhost:8086/health"
+echo "📚 API Documentation available at: http://\${DEPLOYMENT_API_HOST:-0.0.0.0}:8086/docs"
+echo "🔍 Health check available at: http://\${DEPLOYMENT_API_HOST:-0.0.0.0}:8086/health"
 echo "⏹️  Press Ctrl+C to stop the service"
 
 # Start the service with uvicorn

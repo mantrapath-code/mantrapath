@@ -30,11 +30,12 @@ ENV PYTHONPATH=/app
 # Create media storage directory
 RUN mkdir -p /app/uploads /app/media
 
-EXPOSE 8006
+EXPOSE 8021
 
 # Health check
+# Health check aligned to standardized port 8021
 HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
-    CMD curl -f http://localhost:8006/health || exit 1
+    CMD curl -f http://media-service:8021/health || exit 1
 
 # Production media service
-CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8006"]
+CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8021"]

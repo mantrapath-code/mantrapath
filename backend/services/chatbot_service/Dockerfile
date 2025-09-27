@@ -24,7 +24,7 @@ EXPOSE 8004
 
 # Health check
 HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
-    CMD curl -f http://localhost:8004/health || exit 1
+    CMD curl -f http://chatbot-service:8004/health || exit 1
 
 # Production chatbot service
 CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8004"]

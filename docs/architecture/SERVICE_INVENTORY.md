@@ -50,7 +50,7 @@
 
 10. **Media Service**: Port 8009
     - Docker service: `media-service`
-    - Environment var: `MEDIA_SERVICE_PORT`
+   - Environment var: `MEDIA_SERVICE_PORT` (default 8021)
 
 11. **Translation Service**: Port 8010
     - Docker service: `translation-service`

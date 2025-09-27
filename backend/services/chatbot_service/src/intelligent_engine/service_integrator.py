@@ -85,7 +85,7 @@ class ServiceIntegrator:
             'profile_service': 'http://profile-service:8002', 
             'ml_service': 'http://ml-service:8008',
             'community_service': 'http://community-service:8006',
-            'content_service': 'http://content-service:8010'
+            'content_service': 'http://content-service:8005'
         }
         
         # HTTP client configuration
@@ -169,42 +169,37 @@ class ServiceIntegrator:
         Returns:
             MoodContext: Current mood context and patterns
         """
+        # NOTE: Original implementation used deprecated endpoints that do not exist in mood service.
+        # We now align with mood_service/src/api/mood_routes.py definitions.
         try:
+            token = None
+            # Allow internal token for authenticated service-to-service calls
+            import os
+            token = os.getenv('INTERNAL_SERVICE_TOKEN') or os.getenv('SERVICE_AUTH_TOKEN')
+            headers = {"Authorization": f"Bearer {token}"} if token else {}
+
             async with httpx.AsyncClient(timeout=self.http_timeout) as client:
-                # Get current mood summary
-                mood_response = await client.get(
-                    f"{self.service_urls['mood_service']}/api/v1/analytics/mood-summary",
-                    params={"user_id": user_id}
+                # Fetch analytics overview
+                analytics_resp = await client.get(
+                    f"{self.service_urls['mood_service']}/api/v1/mood/analytics/overview",
+                    headers=headers
                 )
-                mood_response.raise_for_status()
-                mood_data = mood_response.json()
-                
-                # Get recent mood entries
-                entries_response = await client.get(
-                    f"{self.service_urls['mood_service']}/api/v1/mood/",
-                    params={"user_id": user_id, "limit": 7}
+                analytics_data = analytics_resp.json() if analytics_resp.status_code == 200 else {}
+
+                # Fetch recent mood entries (authenticated)
+                entries_resp = await client.get(
+                    f"{self.service_urls['mood_service']}/api/v1/mood/entries",
+                    headers=headers,
+                    params={"limit": 7}
                 )
-                entries_response.raise_for_status()
-                recent_entries = entries_response.json()
-                
-                # Get emotional weather if available
-                try:
-                    weather_response = await client.get(
-                        f"{self.service_urls['mood_service']}/api/v1/mood/emotional-weather",
-                        params={"user_id": user_id}
-                    )
-                    weather_data = weather_response.json() if weather_response.status_code == 200 else {}
-                except:
-                    weather_data = {}
-                
-                # Process mood data into context
-                return self._process_mood_data(mood_data, recent_entries, weather_data)
-                
-        except httpx.HTTPStatusError as e:
-            logger.error(f"HTTP error fetching mood context for user {user_id}: {e}")
-            return await self._generate_default_mood_context(user_id)
+                entries = entries_resp.json() if entries_resp.status_code == 200 else []
+
+                # There is currently no emotional-weather endpoint; derive simple weather heuristics
+                weather_data = self._derive_emotional_weather(analytics_data, entries)
+
+                return self._process_mood_data(analytics_data, entries, weather_data)
         except Exception as e:
-            logger.error(f"Error fetching mood context for user {user_id}: {str(e)}")
+            logger.error(f"Error fetching mood context for user {user_id}: {e}")
             return await self._generate_default_mood_context(user_id)
 
     async def _get_user_profile(self, user_id: str) -> UserProfile:
@@ -320,9 +315,9 @@ class ServiceIntegrator:
             return {}
 
     def _process_mood_data(
-        self, 
-        mood_summary: Dict, 
-        recent_entries: List[Dict], 
+        self,
+        analytics: Dict,
+        recent_entries: List[Dict],
         weather_data: Dict
     ) -> MoodContext:
         """
@@ -336,8 +331,15 @@ class ServiceIntegrator:
         Returns:
             MoodContext: Structured mood context
         """
-        # Extract current mood score
-        current_mood = mood_summary.get('current_mood_score', 5.0)
+        # Extract current mood score (prefer most recent entry, fallback to average)
+        current_mood = 5.0
+        if recent_entries:
+            try:
+                current_mood = float(recent_entries[0].get('mood_score', 5.0))
+            except Exception:
+                current_mood = 5.0
+        else:
+            current_mood = analytics.get('average_mood', 5.0)
         
         # Determine mood trend
         if len(recent_entries) >= 2:
@@ -355,8 +357,8 @@ class ServiceIntegrator:
             trend = "insufficient_data"
         
         # Extract other metrics
-        stress_level = mood_summary.get('average_stress', 5)
-        energy_level = mood_summary.get('average_energy', 5)
+        stress_level = analytics.get('stress_average', 5) or analytics.get('average_stress', 5)
+        energy_level = analytics.get('energy_average', 5) or analytics.get('average_energy', 5)
         
         # Determine emotional context
         if current_mood <= 3:
@@ -375,6 +377,12 @@ class ServiceIntegrator:
         # Get last mood entry timestamp
         last_entry = datetime.fromisoformat(recent_entries[0]['created_at'].replace('Z', '+00:00')) if recent_entries else datetime.utcnow()
         
+        pattern_insights = {
+            "recent_patterns": analytics.get('recent_patterns', []),
+            "mood_distribution": analytics.get('mood_distribution', {}),
+            "improvement_trend": analytics.get('improvement_trend')
+        }
+
         return MoodContext(
             current_mood_score=current_mood,
             mood_trend=trend,
@@ -384,8 +392,32 @@ class ServiceIntegrator:
             risk_factors=risk_factors,
             protective_factors=protective_factors,
             last_mood_entry=last_entry,
-            mood_pattern_insights=mood_summary.get('patterns', {})
+            mood_pattern_insights=pattern_insights
         )
+
+    def _derive_emotional_weather(self, analytics: Dict, entries: List[Dict]) -> Dict[str, Any]:
+        """Heuristic derivation of emotional weather/risk factors until dedicated endpoint exists."""
+        risk_factors = []
+        protective_factors = []
+        avg = analytics.get('average_mood')
+        if avg is not None:
+            try:
+                if avg < 4:
+                    risk_factors.append('low_mood_trend')
+                elif avg > 7.5:
+                    protective_factors.append('positive_mood')
+            except Exception:
+                pass
+        stress_avg = analytics.get('stress_average') or analytics.get('average_stress')
+        if stress_avg and stress_avg > 7:
+            risk_factors.append('high_stress')
+        # Protective factor: consistent entries
+        if len(entries) >= 5:
+            protective_factors.append('consistent_tracking')
+        return {
+            'risk_factors': risk_factors,
+            'protective_factors': protective_factors
+        }
 
     def _handle_service_result(self, result: Any, service_name: str) -> Any:
         """

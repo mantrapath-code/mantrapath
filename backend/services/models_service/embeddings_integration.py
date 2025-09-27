@@ -69,7 +69,3 @@ class EmbeddingsClient:
 
 # Global instance
 embeddings_client = EmbeddingsClient()
-
-
-
-

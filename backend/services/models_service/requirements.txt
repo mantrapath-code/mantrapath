@@ -14,7 +14,8 @@ soundfile==0.12.1
 pydub==0.25.1
 
 # STT backends
-whisper==1.1.10
+# Use official openai-whisper package (import name remains 'whisper')
+openai-whisper==20231117
 vosk==0.3.45
 
 # TTS backends

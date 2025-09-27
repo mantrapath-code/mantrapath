@@ -4,7 +4,7 @@
  */
 
 import { getServiceUrls } from '../config/api-config'
-import { getAuthToken } from '../utils/auth'
+import { getAuthToken, setDevToken, isDevMode } from '../utils/auth'
 import { processApiError } from '../utils/errorHandling'
 
 const serviceUrls = getServiceUrls();
@@ -34,14 +34,26 @@ export interface MoodAnalytics {
   energy_average?: number;
   mood_distribution: Record<string, number>;
   recent_patterns: any[];
+  current_streak?: number;
+  longest_streak?: number;
+  emotion_distribution?: Record<string, number>;
+  improvement_trend?: number;
+  last_entry_date?: string;
 }
 
-export interface EmotionAnalysis {
-  dominant_emotion: string;
-  dominant_sentiment: string;
-  emotions: Record<string, number>;
-  sentiment_scores: Record<string, number>;
-  confidence: number;
+// Align with backend MoodAnalysisResult schema
+export interface TopEmotion {
+  emotion: string;
+  sentiment: string; // positive | negative | ambiguous | neutral
+  confidence: number; // percentage (0-100)
+  color?: string;
+}
+
+export interface EmotionAnalysisResult {
+  top_emotions: TopEmotion[];
+  primary_emotion: string;
+  primary_sentiment: string;
+  confidence_score: number; // percentage (0-100)
 }
 
 export interface MoodContext {
@@ -62,8 +74,15 @@ class MoodServiceClient {
   private token: string | null = null;
 
   constructor() {
-    // Use API Gateway URL for all mood service requests
-    this.baseUrl = `${serviceUrls.API_BASE_URL}`;
+  // Use API Gateway URL (resolved via config) and avoid hardcoded localhost fallbacks
+  this.baseUrl = `${serviceUrls.API_BASE_URL}`.replace(/\/$/, '')
+    
+    // Auto-set dev token in development mode if no token exists
+    if (isDevMode() && !getAuthToken()) {
+      console.log('Development mode: Auto-setting authentication token');
+      setDevToken();
+    }
+    
     this.refreshToken();
   }
 
@@ -73,7 +92,23 @@ class MoodServiceClient {
 
   private async makeRequest<T>(endpoint: string, options: RequestInit = {}): Promise<T> {
     try {
-      const url = `${this.baseUrl}${endpoint}`;
+      // Refresh token before each request to ensure we have the latest
+      this.refreshToken();
+      
+      // Normalize endpoint to avoid double /api (common bug we observed)
+      let normalizedEndpoint = endpoint
+      if (this.baseUrl.endsWith('/api') && endpoint.startsWith('/api/')) {
+        normalizedEndpoint = endpoint.replace('/api', '') // remove the first /api
+      }
+      const url = `${this.baseUrl}${normalizedEndpoint}`
+      
+      if (isDevMode()) {
+        console.log(`[MoodService] Making request to: ${url}`);
+        console.log(`[MoodService] Token available: ${!!this.token}`);
+        if (this.token) {
+          console.log(`[MoodService] Token preview: ${this.token.substring(0, 20)}...`);
+        }
+      }
       
       const defaultOptions: RequestInit = {
         headers: {
@@ -85,6 +120,9 @@ class MoodServiceClient {
       const response = await fetch(url, { ...defaultOptions, ...options });
 
       if (!response.ok) {
+        if (isDevMode()) {
+          console.error(`[MoodService] Request failed with status ${response.status}`);
+        }
         const errorData = await response.json().catch(() => ({ message: 'Unknown error' }));
         throw new Error(errorData.detail || errorData.message || `HTTP ${response.status}`);
       }
@@ -152,10 +190,14 @@ class MoodServiceClient {
   }
 
   // Emotion Analysis
-  async analyzeEmotion(text: string): Promise<EmotionAnalysis> {
-    return this.makeRequest<EmotionAnalysis>('/api/v1/mood/analyze', {
+  async analyzeEmotion(text: string, include_mood_entry: boolean = false, mood_score?: number): Promise<EmotionAnalysisResult> {
+    const payload: Record<string, any> = { text, include_mood_entry }
+    if (include_mood_entry && mood_score) {
+      payload.mood_score = mood_score
+    }
+    return this.makeRequest<EmotionAnalysisResult>('/api/v1/mood/analyze', {
       method: 'POST',
-      body: JSON.stringify({ text }),
+      body: JSON.stringify(payload),
     });
   }
 

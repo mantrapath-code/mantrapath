@@ -12,35 +12,37 @@ class HealthCheckerService:
     """Service for checking health of all backend services"""
     
     def __init__(self):
+        import os
+        # Prefer env overrides; fall back to Docker DNS service names, not localhost
         self.services = {
             "api_gateway": {
-                "url": "http://localhost:8000/health",
+                "url": os.getenv("API_GATEWAY_HEALTH_URL", "http://api-gateway:8000/health"),
                 "name": "API Gateway",
                 "port": 8000,
                 "critical": True
             },
             "voice_service": {
-                "url": "http://localhost:8011/health",
+                "url": os.getenv("VOICE_SERVICE_HEALTH_URL", "http://voice-service:8011/health"),
                 "name": "Voice Service",
                 "port": 8011,
                 "critical": True
             },
             "models_service": {
-                "url": "http://localhost:8085/health",
+                "url": os.getenv("MODELS_SERVICE_HEALTH_URL", "http://models-service:8080/health"),
                 "name": "Models Service",
                 "port": 8085,
                 "critical": True
             },
             "community_service": {
-                "url": "http://localhost:8012/health",
+                "url": os.getenv("COMMUNITY_SERVICE_HEALTH_URL", "http://community-service:8006/health"),
                 "name": "Community Service",
-                "port": 8012,
+                "port": 8006,
                 "critical": False
             },
             "ml_service": {
-                "url": "http://localhost:8013/health",
+                "url": os.getenv("ML_SERVICE_HEALTH_URL", "http://ml-service:8008/health"),
                 "name": "ML Service",
-                "port": 8013,
+                "port": 8008,
                 "critical": False
             }
         }

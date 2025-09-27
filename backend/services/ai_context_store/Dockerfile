@@ -21,6 +21,6 @@ EXPOSE 8013
 
 # Healthcheck
 HEALTHCHECK --interval=30s --timeout=10s --start-period=30s --retries=3 \
-    CMD curl -f http://localhost:8013/health || exit 1
+    CMD curl -f http://ai-context-store:8013/health || exit 1
 
 CMD ["python", "run.py"]

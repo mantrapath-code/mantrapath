@@ -8,7 +8,7 @@ This directory contains the cleaned and reorganized microservices for the Mantra
 ### Voice Service (`voice_service/`)
 **Primary Functions**: Speech-to-text, text-to-speech, voice cloning, real-time voice processing
 - **Port**: 8011
-- **Main Technologies**: OpenAI Whisper, TTS (Coqui AI), Vosk
+- **Main Technologies**: Self-hosted Whisper-compatible model, TTS (Coqui AI), Vosk
 - **Key Features**: Multi-language support, voice cloning, emotion detection
 - **API**: RESTful + WebSocket for real-time processing
 
@@ -22,7 +22,7 @@ This directory contains the cleaned and reorganized microservices for the Mantra
 ### Chatbot Service (`chatbot_service/`)
 **Primary Functions**: Intelligent conversation management, crisis intervention, therapeutic responses
 - **Port**: 8008
-- **Main Technologies**: GPT-3.5/4, BERT, DistilBERT, Custom therapeutic models
+- **Main Technologies**: Local transformer models (e.g. distilled conversational models), BERT/DistilBERT, custom therapeutic classifiers
 - **Key Features**: Mood-aware responses, crisis detection, multi-modal integration
 - **Approaches**: CBT, mindfulness, solution-focused therapy
 
@@ -31,7 +31,7 @@ This directory contains the cleaned and reorganized microservices for the Mantra
 ### Speech & Voice Processing
 | Model | Service | Purpose | Languages | Accuracy |
 |-------|---------|---------|-----------|----------|
-| OpenAI Whisper | Voice Service | Speech-to-text | 99+ languages | 95%+ |
+| Whisper (self-hosted) | Voice Service | Speech-to-text | 90+ languages | High |
 | Vosk | Voice Service | Offline STT | 20+ languages | 85%+ |
 | TTS (Coqui) | Voice Service | Text-to-speech | 10+ languages | High fidelity |
 | Voice Cloning | Voice Service | Personalized voices | Multi-language | 85%+ similarity |
@@ -40,7 +40,7 @@ This directory contains the cleaned and reorganized microservices for the Mantra
 ### Natural Language & Intelligence
 | Model | Service | Purpose | Languages | Accuracy |
 |-------|---------|---------|-----------|----------|
-| GPT-3.5/4 | Chatbot Service | Conversation generation | Multi-language | 94%+ relevance |
+| Local Conversational LM | Chatbot Service | Conversation generation | Multi-language | Production-tuned |
 | DistilBERT | Chatbot Service | Mood classification | Hindi, English+ | 92%+ |
 | BERT Intent | Chatbot Service | Intent recognition | Multi-language | 89%+ |
 | Crisis Detection | Chatbot Service | Risk assessment | Multi-language | 95%+ detection |
@@ -274,9 +274,9 @@ Each service uses environment variables for configuration:
 - **Docker**: Containerization
 
 ### Service-Specific Dependencies
-- **Voice Service**: OpenAI Whisper, TTS, librosa, torch
+- **Voice Service**: Whisper-compatible (self-hosted), TTS (Coqui), librosa, torch
 - **Voice Event Processor**: aiohttp, structlog, numpy
-- **Chatbot Service**: transformers, openai, sqlalchemy
+- **Chatbot Service**: transformers, local conversational LMs, sqlalchemy
 
 ## 🎯 Future Enhancements
 

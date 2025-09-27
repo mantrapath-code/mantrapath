@@ -78,7 +78,7 @@ logger = logging.getLogger(__name__)
 SERVICE_URLS = {
     'chatbot_service': os.getenv('CHATBOT_SERVICE_URL', 'http://chatbot-service:8004'),
     'voice_service': os.getenv('VOICE_SERVICE_URL', 'http://voice-service:8011'),
-    'translation_service': os.getenv('TRANSLATION_SERVICE_URL', 'http://translation-service:8010'),
+    'translation_service': os.getenv('TRANSLATION_SERVICE_URL', 'http://translation-service:8010'),  # authoritative port
     'models_service': os.getenv('MODELS_SERVICE_URL', 'http://models-service:8080'),
     'ai_event_processor': os.getenv('AI_EVENT_PROCESSOR_URL', 'http://ai-event-processor:8014'),
     'memory_service': os.getenv('MEMORY_SERVICE_URL', 'http://memory-service:8017'),
