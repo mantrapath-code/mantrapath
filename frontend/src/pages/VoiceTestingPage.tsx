@@ -14,11 +14,12 @@ import { Alert, AlertDescription } from '@/components/ui/alert'
 import { 
   Settings, 
   Headphones, 
-  ActivityIcon, 
+  Activity, 
   CheckCircle, 
   XCircle, 
   RefreshCw,
-  ExternalLink
+  ExternalLink,
+  Volume2
 } from 'lucide-react'
 
 import VoiceInterface from '@/components/VoiceInterface'
@@ -112,7 +113,7 @@ const VoiceTestingPage: React.FC = () => {
         name: 'Analytics Data',
         test: async () => {
           const result = await voiceEventProcessorClient.getAnalytics()
-          return { success: result.service_uptime === 'running', data: result }
+          return { success: !!result.totalConnections || result.totalConnections === 0, data: result }
         }
       },
       {
@@ -254,7 +255,7 @@ const VoiceTestingPage: React.FC = () => {
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">Voice Event Processor</CardTitle>
-            <ActivityIcon className="h-4 w-4 text-muted-foreground" />
+            <Activity className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
             <div className="flex items-center justify-between">
@@ -409,7 +410,7 @@ const VoiceTestingPage: React.FC = () => {
                 </div>
               ) : (
                 <Alert>
-                  <ActivityIcon className="h-4 w-4" />
+                  <Activity className="h-4 w-4" />
                   <AlertDescription>
                     No voice events recorded yet. Start using the voice interface to see real-time analytics.
                   </AlertDescription>

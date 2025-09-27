@@ -14,7 +14,8 @@ import {
   LogOut,
   Menu,
   X,
-  Heart
+  Heart,
+  Mic
 } from "lucide-react"
 import { 
   Sidebar, 
@@ -107,6 +108,13 @@ export function SidebarLayout({
       label: "Journal",
       icon: <BookOpen size={20} />,
       group: "wellness"
+    },
+    {
+      id: "voice-testing",
+      label: "Voice Testing",
+      icon: <Mic size={20} />,
+      group: "wellness",
+      badge: "TEST"
     },
     {
       id: "community",

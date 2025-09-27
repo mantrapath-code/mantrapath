@@ -14,6 +14,7 @@ import { EnhancedInsightsPage } from "@/pages/EnhancedInsightsPage"
 import { AchievementsPage } from "@/pages/AchievementsPage"
 import { MoodTestPage } from "@/pages/MoodTestPage"
 import { OptimizedMoodPage } from "@/pages/OptimizedMoodPage"
+import VoiceTestingPage from "@/pages/VoiceTestingPage"
 import { ProactiveAssistancePanel } from "@/components/assistance"
 import { SidebarLayout } from "@/components/layout/SidebarLayout"
 import { AuthProvider, useAuth } from "@/hooks/useAuth"
@@ -246,6 +247,15 @@ function AppContent() {
             animate={{ opacity: 1, y: 0 }}
           >
             <EnhancedCommunitySection />
+          </motion.div>
+        )
+      case "voice-testing":
+        return (
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+          >
+            <VoiceTestingPage />
           </motion.div>
         )
       default:

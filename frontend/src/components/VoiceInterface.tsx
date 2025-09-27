@@ -8,6 +8,7 @@ import { Mic, MicOff, Volume2, VolumeX, Activity, Play, Pause, Square } from 'lu
 import { voiceServiceClient } from '@/services/voiceService'
 import { voiceEventProcessorClient, type VoiceEvent } from '@/services/voiceEventProcessor'
 import { voicePermissionManager } from '@/utils/voicePermissions'
+import { ensureDevTokenExists } from '@/utils/auth'
 
 export interface VoiceInterfaceProps {
   onTranscription?: (text: string) => void
@@ -62,6 +63,9 @@ export const VoiceInterface: React.FC<VoiceInterfaceProps> = ({
 
   const initializeVoiceInterface = async () => {
     try {
+      // Ensure dev token exists for testing
+      ensureDevTokenExists()
+      
       // Check and request permissions
       const permissions = await voicePermissionManager.initializeAllPermissions()
       setHasPermissions(permissions.microphone)
