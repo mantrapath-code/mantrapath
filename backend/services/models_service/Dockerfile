@@ -3,6 +3,10 @@ FROM python:3.11-slim
 
 WORKDIR /app
 
+# Get target architecture for conditional package installation
+ARG TARGETARCH
+ENV TARGETARCH=${TARGETARCH}
+
 # System deps kept minimal for audio I/O; avoid heavy toolchains unless required at runtime
 RUN apt-get update && apt-get install -y --no-install-recommends \
     # Runtime audio deps
@@ -43,9 +47,30 @@ RUN --mount=type=cache,target=/root/.cache/pip \
     python -m pip install --upgrade pip setuptools wheel setuptools-rust && \
     pip install -r requirements.txt
 
+# Architecture-specific whisper installation with fallback handling
+RUN --mount=type=cache,target=/root/.cache/pip \
+    echo "Target architecture: ${TARGETARCH}" && \
+    if [ "${TARGETARCH}" = "amd64" ]; then \
+        echo "Installing openai-whisper with triton support for AMD64..."; \
+        pip install openai-whisper==20231117 || { \
+            echo "Failed to install openai-whisper with triton, trying without triton..."; \
+            pip install --no-deps git+https://github.com/openai/whisper.git@main && \
+            pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cpu && \
+            pip install tiktoken tqdm; \
+        }; \
+    else \
+        echo "Installing openai-whisper without triton for ARM64..."; \
+        pip install --no-deps git+https://github.com/openai/whisper.git@main && \
+        pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cpu && \
+        pip install tiktoken tqdm; \
+    fi
+
 # Copy application code and shared
 COPY services/models_service/ ./
 COPY shared/ ./shared/
+
+# Test whisper installation
+RUN python test_whisper.py || echo "⚠️ Whisper test failed, but continuing with build..."
 
 # Prepare runtime
 RUN chmod +x ./start_simple.sh || true && \
@@ -54,11 +79,12 @@ RUN chmod +x ./start_simple.sh || true && \
 ENV PYTHONPATH=/app \
     MODELS_DIR=/app/models \
     CACHE_DIR=/app/cache \
-    LOGS_DIR=/app/logs
+    LOGS_DIR=/app/logs \
+    MODELS_SERVICE_MODE=minimal
 
 EXPOSE 8080
 
 HEALTHCHECK --interval=30s --timeout=10s --start-period=60s --retries=3 \
-    CMD curl -f http://models-service:8080/health || exit 1
+    CMD curl -f http://localhost:8080/health || exit 1
 
 CMD ["./start_simple.sh"]

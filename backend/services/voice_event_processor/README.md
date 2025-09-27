@@ -1,9 +1,11 @@
-# Voice Event Processor Service
+# 🎵 MantraPath Voice Event Processor Service
 
 ![Version](https://img.shields.io/badge/version-2.0.0-blue.svg)
 ![Status](https://img.shields.io/badge/status-active-green.svg)
 ![Port](https://img.shields.io/badge/port-8015-orange.svg)
 ![Framework](https://img.shields.io/badge/framework-FastAPI-green.svg)
+
+A real-time voice event processing service that handles voice interactions, audio analysis, emotion detection, and multi-language voice processing in the MantraPath mental health platform. This service acts as the central hub for all voice-related events and provides streaming capabilities for real-time voice processing.
 
 ## 📋 Table of Contents
 

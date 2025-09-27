@@ -14,8 +14,8 @@ soundfile==0.12.1
 pydub==0.25.1
 
 # STT backends
-# Use official openai-whisper package (import name remains 'whisper')
-openai-whisper==20231117
+# Note: openai-whisper has triton dependency issues on ARM64
+# We'll handle this in the Dockerfile with conditional installation
 vosk==0.3.45
 
 # TTS backends
