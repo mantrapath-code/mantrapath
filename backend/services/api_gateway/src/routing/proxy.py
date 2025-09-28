@@ -2,7 +2,7 @@
 Request Proxy - Handles forwarding requests to backend services with connection pooling
 """
 import logging
-from typing import Optional, Dict, Any
+from typing import Optional, Dict, Any, AsyncIterator
 from datetime import datetime
 import httpx
 from src.core.models import ProxyRequest, ProxyResponse, ServiceInstance
@@ -62,15 +62,46 @@ class RequestProxy:
             
             # Prepare response headers (exclude hop-by-hop headers)
             response_headers = self._prepare_response_headers(dict(response.headers))
-            
-            proxy_response = ProxyResponse(
-                status_code=response.status_code,
-                headers=response_headers,
-                body=response.content,
-                response_time=response_time,
-                service_name=target_service.name,
-                request_id=request.request_id
-            )
+
+            # Decide if we should stream (audio or large payload)
+            content_type = response_headers.get("Content-Type", "").lower()
+            content_length_header = response_headers.get("Content-Length")
+            should_stream = False
+            try:
+                if content_length_header and int(content_length_header) > 512_000:  # >500KB
+                    should_stream = True
+            except ValueError:
+                pass
+            if any(ct in content_type for ct in ["audio/", "video/", "application/octet-stream"]):
+                # Stream audio/video by default unless tiny
+                if content_length_header is None or should_stream or b"RIFF" in response.content[:8]:
+                    should_stream = True
+
+            if should_stream and hasattr(response, "aiter_bytes"):
+                async def stream_iter() -> AsyncIterator[bytes]:  # type: ignore
+                    async for chunk in response.aiter_bytes():
+                        if chunk:
+                            yield chunk
+                proxy_response = ProxyResponse(
+                    status_code=response.status_code,
+                    headers=response_headers,
+                    body=b"",  # Empty body when streaming
+                    response_time=response_time,
+                    service_name=target_service.name,
+                    request_id=request.request_id,
+                    streaming=True,
+                    stream_iterator=stream_iter()
+                )
+            else:
+                proxy_response = ProxyResponse(
+                    status_code=response.status_code,
+                    headers=response_headers,
+                    body=response.content,
+                    response_time=response_time,
+                    service_name=target_service.name,
+                    request_id=request.request_id,
+                    streaming=False
+                )
             
             # Log request details
             self._log_request(request, proxy_response, target_service)

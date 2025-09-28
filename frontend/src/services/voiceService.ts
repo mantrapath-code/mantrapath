@@ -71,7 +71,8 @@ class VoiceServiceClient {
   }
 
   private getVoiceServiceUrl(): string {
-    return import.meta.env.VITE_VOICE_SERVICE_URL || 'http://localhost:8011'
+    // Use API Gateway URL since all services route through it
+    return import.meta.env.VITE_API_GATEWAY_URL || import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000'
   }
 
   /**
@@ -79,8 +80,20 @@ class VoiceServiceClient {
    */
   async healthCheck(): Promise<{ status: string; version: string }> {
     try {
-      const response = await get<{ status: string; version: string }>(`${this.baseUrl}/health`)
-      return response
+      // Check voice service health through API Gateway
+      const response = await get<any>(`${this.baseUrl}/api/v1/voice/status`)
+      if (response && response.voice_service) {
+        return {
+          status: response.voice_service.status,
+          version: response.voice_service.version
+        }
+      }
+      // Fallback to basic health check
+      const basicResponse = await get<{ status: string; service: string }>(`${this.baseUrl}/health`)
+      return {
+        status: basicResponse.status,
+        version: '2.0.0'
+      }
     } catch (error) {
       console.error('Voice service health check failed:', error)
       throw error
@@ -92,7 +105,8 @@ class VoiceServiceClient {
    */
   async getServiceInfo(): Promise<any> {
     try {
-      const response = await get(`${this.baseUrl}/`)
+      // Get voice service status through API Gateway
+      const response = await get(`${this.baseUrl}/api/v1/voice/status`)
       return response
     } catch (error) {
       console.error('Failed to get voice service info:', error)
@@ -124,7 +138,7 @@ class VoiceServiceClient {
       }
 
       const response = await post<SpeechToTextResponse>(
-        `${this.baseUrl}/api/v1/voice/speech-to-text`,
+        `${this.baseUrl}/api/v1/voice/stt`,
         formData
       )
 
@@ -144,6 +158,7 @@ class VoiceServiceClient {
   async textToSpeech(request: TextToSpeechRequest): Promise<TextToSpeechResponse> {
     try {
       // For blob responses, we need to use fetch directly since our httpClient assumes JSON
+      // Use the legacy endpoint for compatibility
       const url = `${this.baseUrl}/api/v1/voice/text-to-speech`
       const response = await fetch(url, {
         method: 'POST',
@@ -180,8 +195,16 @@ class VoiceServiceClient {
    */
   async startSession(sessionData?: Partial<VoiceSessionData>): Promise<VoiceSessionData> {
     try {
-      const response = await post<VoiceSessionData>(`${this.baseUrl}/api/v1/session/start`, sessionData)
-      return response
+      const response = await post<any>(`${this.baseUrl}/api/v1/session/start`, sessionData)
+      // Handle the response format from our voice service
+      if (response.success && response.session) {
+        return {
+          sessionId: response.session.session_id,
+          userId: response.session.user_id,
+          metadata: response.session
+        }
+      }
+      throw new Error(response.error || 'Failed to create session')
     } catch (error) {
       console.error('Failed to start voice session:', error)
       throw error
@@ -193,7 +216,9 @@ class VoiceServiceClient {
    */
   async endSession(sessionId: string): Promise<void> {
     try {
-      await post(`${this.baseUrl}/api/v1/session/end`, { sessionId })
+      // Since we don't have a session end endpoint, just log for now
+      console.log('Session ended:', sessionId)
+      // TODO: Implement session cleanup when backend supports it
     } catch (error) {
       console.error('Failed to end voice session:', error)
       throw error

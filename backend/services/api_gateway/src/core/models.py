@@ -2,7 +2,7 @@
 Core data models for API Gateway
 """
 from dataclasses import dataclass, field
-from typing import Dict, List, Optional, Any
+from typing import Dict, List, Optional, Any, AsyncIterator, Union, Callable
 from enum import Enum
 from datetime import datetime
 
@@ -70,13 +70,17 @@ class ProxyRequest:
 
 @dataclass
 class ProxyResponse:
-    """Represents a response from a proxied service"""
+    """Represents a response from a proxied service.
+    For large audio/video or streaming responses, body can be empty and an async iterator provided.
+    """
     status_code: int
     headers: Dict[str, str]
     body: bytes
     response_time: float
     service_name: str
     request_id: str
+    streaming: bool = False
+    stream_iterator: Optional[AsyncIterator[bytes]] = None  # When streaming is True
 
 @dataclass
 class CircuitBreakerState:

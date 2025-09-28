@@ -19,8 +19,39 @@ ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = 30
 REFRESH_TOKEN_EXPIRE_DAYS = 7
 
-# Password hashing
-pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+# Password hashing - configure bcrypt context with minimal configuration to avoid initialization issues
+try:
+    # First try with minimal configuration
+    pwd_context = CryptContext(
+        schemes=["bcrypt"],
+        deprecated="auto",
+        bcrypt__rounds=10  # Lower rounds for compatibility
+    )
+    # Test the context with a simple password to ensure it works
+    test_hash = pwd_context.hash("test123")
+    if not pwd_context.verify("test123", test_hash):
+        raise Exception("Context verification failed")
+except Exception as e:
+    print(f"Warning: Error initializing bcrypt context: {e}")
+    print("Falling back to direct bcrypt implementation...")
+    
+    # Fallback: Use direct bcrypt without passlib if there are initialization issues
+    import bcrypt
+    
+    class SimpleBcryptContext:
+        def hash(self, password):
+            password_bytes = password.encode('utf-8')
+            if len(password_bytes) > 72:
+                password_bytes = password_bytes[:72]
+            return bcrypt.hashpw(password_bytes, bcrypt.gensalt(rounds=10)).decode('utf-8')
+        
+        def verify(self, password, hashed):
+            password_bytes = password.encode('utf-8')
+            if len(password_bytes) > 72:
+                password_bytes = password_bytes[:72]
+            return bcrypt.checkpw(password_bytes, hashed.encode('utf-8'))
+    
+    pwd_context = SimpleBcryptContext()
 
 def validate_password_strength(password: str) -> tuple[bool, str]:
     """
@@ -164,7 +195,12 @@ def send_verification_email(email: str, token: str, username: str) -> bool:
         return False
 
 def hash_password(password: str) -> str:
-    """Hash a password"""
+    """Hash a password (truncate to 72 bytes for bcrypt compatibility)"""
+    # Bcrypt has a 72-byte limit, so truncate if necessary
+    password_bytes = password.encode('utf-8')
+    if len(password_bytes) > 72:
+        password_bytes = password_bytes[:72]
+    password = password_bytes.decode('utf-8', errors='ignore')
     return pwd_context.hash(password)
 
 def get_password_hash(password: str) -> str:
@@ -172,7 +208,12 @@ def get_password_hash(password: str) -> str:
     return hash_password(password)
 
 def verify_password(plain_password: str, hashed_password: str) -> bool:
-    """Verify a password"""
+    """Verify a password (truncate to 72 bytes for bcrypt compatibility)"""
+    # Bcrypt has a 72-byte limit, so truncate if necessary
+    password_bytes = plain_password.encode('utf-8')
+    if len(password_bytes) > 72:
+        password_bytes = password_bytes[:72]
+    plain_password = password_bytes.decode('utf-8', errors='ignore')
     return pwd_context.verify(plain_password, hashed_password)
 
 def create_access_token(data: Dict[Any, Any], expires_delta: Optional[timedelta] = None) -> str:

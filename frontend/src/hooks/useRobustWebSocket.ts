@@ -163,33 +163,42 @@ class WebSocketManager {
 
 // WebSocket URL configuration (resilient across devices / origins)
 const getWebSocketUrls = (userId: string): string[] => {
-  // 1. Explicit env variable
-  let configured = import.meta.env.VITE_WS_URL as string | undefined
-
-  // 2. Fallback to current origin if not supplied
-  if (!configured && typeof window !== 'undefined') {
-    const proto = window.location.protocol === 'https:' ? 'wss:' : 'ws:'
-    configured = `${proto}//${window.location.host}`
-  }
-
-  // Avoid hardcoding localhost; if no env provided derive from window origin
-  let baseUrl = configured
-  if (!baseUrl && typeof window !== 'undefined') {
+  const uid = userId || 'anonymous'
+  
+  // 1. Get base URL from environment or derive from window location
+  let baseUrl: string
+  
+  const envWsUrl = import.meta.env.VITE_WS_URL as string | undefined
+  const envApiUrl = import.meta.env.VITE_API_URL as string | undefined
+  
+  if (envWsUrl) {
+    baseUrl = envWsUrl.replace(/\/$/, '')
+  } else if (envApiUrl) {
+    // Convert HTTP(S) URL to WebSocket URL
+    baseUrl = envApiUrl
+      .replace('http://', 'ws://')
+      .replace('https://', 'wss://')
+      .replace(/\/$/, '')
+  } else if (typeof window !== 'undefined') {
+    // Derive from current page URL
     const proto = window.location.protocol === 'https:' ? 'wss:' : 'ws:'
     baseUrl = `${proto}//${window.location.host}`
+  } else {
+    // Fallback for SSR
+    baseUrl = 'ws://localhost:8000'
   }
-  baseUrl = (baseUrl || 'ws://api-gateway:8000').replace(/\/$/, '')
 
-  // Force secure if page is secure
-  if (typeof window !== 'undefined' && window.location.protocol === 'https:') {
+  // Ensure secure WebSocket for HTTPS pages
+  if (typeof window !== 'undefined' && window.location.protocol === 'https:' && baseUrl.startsWith('ws:')) {
     baseUrl = baseUrl.replace('ws://', 'wss://')
   }
 
-  const uid = userId || 'anonymous'
-  const primary = `${baseUrl}/api/notifications/ws/${uid}`
-  const legacy = `${baseUrl}/ws/${uid}` // direct notification service (fallback)
-
-  return [primary, legacy]
+  // Return multiple URLs to try in order of preference
+  return [
+    `${baseUrl}/api/notifications/ws/${uid}`,  // Primary: Gateway proxy to notifications
+    `${baseUrl}/ws/${uid}`,                    // Fallback: Generic gateway endpoint
+    `${baseUrl.replace(':8000', ':8007')}/ws/${uid}` // Direct notifications service (last resort)
+  ].filter(Boolean)
 }
 
 export function useRobustWebSocket(

@@ -23,6 +23,7 @@ import {
 } from 'lucide-react'
 
 import VoiceInterface from '@/components/VoiceInterface'
+import VoiceServiceDebug from '@/components/VoiceServiceDebug'
 import { voiceServiceClient } from '@/services/voiceService'
 import { voiceEventProcessorClient } from '@/services/voiceEventProcessor'
 
@@ -286,8 +287,9 @@ const VoiceTestingPage: React.FC = () => {
 
       {/* Main Testing Interface */}
       <Tabs defaultValue="interface" className="w-full">
-        <TabsList className="grid w-full grid-cols-4">
+        <TabsList className="grid w-full grid-cols-5">
           <TabsTrigger value="interface">Voice Interface</TabsTrigger>
+          <TabsTrigger value="debug">Debug Panel</TabsTrigger>
           <TabsTrigger value="tests">Service Tests</TabsTrigger>
           <TabsTrigger value="analytics">Analytics</TabsTrigger>
           <TabsTrigger value="manual">Manual Tests</TabsTrigger>
@@ -326,6 +328,10 @@ const VoiceTestingPage: React.FC = () => {
               </CardContent>
             </Card>
           )}
+        </TabsContent>
+
+        <TabsContent value="debug" className="space-y-4">
+          <VoiceServiceDebug />
         </TabsContent>
 
         <TabsContent value="tests" className="space-y-4">

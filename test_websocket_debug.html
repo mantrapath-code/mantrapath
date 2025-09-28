@@ -1,0 +1,105 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>WebSocket Gateway Debug Test</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; }
+        .status { padding: 10px; margin: 10px 0; border-radius: 5px; }
+        .connected { background-color: #d4edda; color: #155724; }
+        .disconnected { background-color: #f8d7da; color: #721c24; }
+        .error { background-color: #fff3cd; color: #856404; }
+        .messages { margin-top: 20px; }
+        .message { padding: 5px; margin: 2px 0; background-color: #f8f9fa; border-left: 3px solid #007bff; }
+        button { padding: 10px 15px; margin: 5px; cursor: pointer; }
+    </style>
+</head>
+<body>
+    <h1>WebSocket Gateway Debug Test</h1>
+    
+    <div>
+        <button onclick="testDirectNotification()">Test Direct Notification Service (Port 8007)</button>
+        <button onclick="testGatewayProxy()">Test Gateway Proxy (/api/notifications/ws/)</button>
+        <button onclick="testGenericGateway()">Test Generic Gateway (/ws/)</button>
+    </div>
+    
+    <div id="status" class="status">Ready to test...</div>
+    <div id="messages" class="messages"></div>
+
+    <script>
+        let currentWs = null;
+        
+        function log(message) {
+            const messagesDiv = document.getElementById('messages');
+            const messageDiv = document.createElement('div');
+            messageDiv.className = 'message';
+            messageDiv.textContent = new Date().toISOString() + ' - ' + message;
+            messagesDiv.appendChild(messageDiv);
+            console.log(message);
+        }
+        
+        function setStatus(message, type = 'disconnected') {
+            const statusDiv = document.getElementById('status');
+            statusDiv.textContent = message;
+            statusDiv.className = 'status ' + type;
+        }
+        
+        function closeCurrentConnection() {
+            if (currentWs) {
+                currentWs.close();
+                currentWs = null;
+            }
+        }
+        
+        function connectWebSocket(url, description) {
+            closeCurrentConnection();
+            
+            log(`Attempting to connect to ${description}: ${url}`);
+            setStatus(`Connecting to ${description}...`, 'error');
+            
+            currentWs = new WebSocket(url);
+            
+            currentWs.onopen = function(event) {
+                const message = `✅ Connected to ${description}`;
+                log(message);
+                setStatus(message, 'connected');
+                
+                // Send a test message
+                const testMessage = {
+                    type: 'heartbeat',
+                    timestamp: new Date().toISOString()
+                };
+                currentWs.send(JSON.stringify(testMessage));
+                log('Sent heartbeat message');
+            };
+            
+            currentWs.onmessage = function(event) {
+                log(`📨 Received: ${event.data}`);
+            };
+            
+            currentWs.onclose = function(event) {
+                const message = `❌ Connection closed - Code: ${event.code}, Reason: ${event.reason}`;
+                log(message);
+                setStatus(message, 'disconnected');
+            };
+            
+            currentWs.onerror = function(error) {
+                const message = `💥 WebSocket error: ${error}`;
+                log(message);
+                setStatus(message, 'error');
+            };
+        }
+        
+        function testDirectNotification() {
+            connectWebSocket('ws://139.84.213.185:8007/ws/test-user', 'Direct Notification Service');
+        }
+        
+        function testGatewayProxy() {
+            connectWebSocket('ws://139.84.213.185:8000/api/notifications/ws/test-user', 'Gateway Proxy to Notifications');
+        }
+        
+        function testGenericGateway() {
+            connectWebSocket('ws://139.84.213.185:8000/ws/test-user', 'Generic Gateway Endpoint');
+        }
+    </script>
+</body>
+</html>

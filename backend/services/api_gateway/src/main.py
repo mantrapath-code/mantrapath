@@ -7,12 +7,14 @@ import uuid
 import logging
 import time
 import asyncio
+import json
 from typing import Dict, Any, Optional
 from contextlib import asynccontextmanager
+from datetime import datetime
 
 from fastapi import FastAPI, Request, HTTPException, Depends, WebSocket, WebSocketDisconnect, status
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse, Response
+from fastapi.responses import JSONResponse, Response, StreamingResponse
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from fastapi.middleware.trustedhost import TrustedHostMiddleware
 from fastapi.middleware.gzip import GZipMiddleware
@@ -452,31 +454,96 @@ async def voice_streaming_websocket(websocket: WebSocket):
 async def notifications_websocket_proxy(websocket: WebSocket, user_id: str):
     """Proxy WebSocket connections to notification service"""
     import websockets
+    from websockets.exceptions import ConnectionClosed, InvalidURI
     
     try:
         await websocket.accept()
         logger.info("Notifications WebSocket proxy connection established", user_id=user_id)
         
-        # Connect to notification service
+        # Connect to notification service with retry logic
         backend_url = f"ws://notification-service:8007/ws/{user_id}"
-        async with websockets.connect(backend_url) as backend_ws:
-            # Proxy messages between frontend and backend
-            async def forward_to_backend():
-                async for message in websocket.iter_text():
-                    await backend_ws.send(message)
-            
-            async def forward_to_frontend():
-                async for message in backend_ws:
-                    await websocket.send_text(message)
-            
-            # Run both forwarding tasks concurrently
-            await asyncio.gather(forward_to_backend(), forward_to_frontend())
+        max_retries = 3
+        retry_count = 0
+        
+        while retry_count < max_retries:
+            try:
+                async with websockets.connect(
+                    backend_url,
+                    ping_interval=30,
+                    ping_timeout=10,
+                    close_timeout=10
+                ) as backend_ws:
+                    logger.info(f"Connected to backend WebSocket: {backend_url}")
+                    
+                    # Proxy messages between frontend and backend
+                    async def forward_to_backend():
+                        try:
+                            async for message in websocket.iter_text():
+                                if backend_ws.closed:
+                                    break
+                                await backend_ws.send(message)
+                        except WebSocketDisconnect:
+                            logger.info("Frontend WebSocket disconnected")
+                        except Exception as e:
+                            logger.error(f"Error forwarding to backend: {e}")
+                    
+                    async def forward_to_frontend():
+                        try:
+                            async for message in backend_ws:
+                                if websocket.client_state.name != 'CONNECTED':
+                                    break
+                                await websocket.send_text(message)
+                        except ConnectionClosed:
+                            logger.info("Backend WebSocket connection closed")
+                        except Exception as e:
+                            logger.error(f"Error forwarding to frontend: {e}")
+                    
+                    # Run both forwarding tasks concurrently
+                    await asyncio.gather(
+                        forward_to_backend(), 
+                        forward_to_frontend(),
+                        return_exceptions=True
+                    )
+                    break  # Successful connection, break retry loop
+                    
+            except (ConnectionClosed, InvalidURI, OSError) as e:
+                retry_count += 1
+                logger.warning(f"Backend WebSocket connection failed (attempt {retry_count}/{max_retries}): {e}")
+                if retry_count < max_retries:
+                    await asyncio.sleep(2 ** retry_count)  # Exponential backoff
+                else:
+                    # Send error message to frontend
+                    try:
+                        await websocket.send_text(json.dumps({
+                            "type": "error",
+                            "message": "Backend service unavailable",
+                            "timestamp": datetime.now().isoformat()
+                        }))
+                    except:
+                        pass
+                    raise e
             
     except WebSocketDisconnect:
         logger.info("Notifications WebSocket proxy connection closed", user_id=user_id)
     except Exception as e:
         logger.exception("Notifications WebSocket proxy error", user_id=user_id, error=str(e))
+        # Try to send error message to client
+        try:
+            await websocket.send_text(json.dumps({
+                "type": "error",
+                "message": "WebSocket connection error",
+                "error": str(e),
+                "timestamp": datetime.now().isoformat()
+            }))
+        except:
+            pass
 
+
+# Generic WebSocket endpoint for backward compatibility
+@app.websocket("/ws/{user_id}")
+async def generic_websocket_proxy(websocket: WebSocket, user_id: str):
+    """Generic WebSocket endpoint - routes to notification service for compatibility"""
+    return await notifications_websocket_proxy(websocket, user_id)
 
 @app.websocket("/api/assistance/ws/{user_id}")
 async def assistance_websocket_proxy(websocket: WebSocket, user_id: str):
@@ -591,9 +658,19 @@ async def service_proxy(
         if not circuit_breaker.is_call_allowed(service_name):
             raise HTTPException(status_code=503, detail=f"Service {service_name} is currently unavailable")
         
-        # Proxy request
+        # Get healthy service instances
+        healthy_instances = service_registry.get_healthy_services(service_name)
+        if not healthy_instances:
+            raise HTTPException(status_code=503, detail=f"No healthy instances of service {service_name}")
+        
+        # Use load balancer to select an instance
+        target_service = load_balancer.select_instance(healthy_instances)
+        if not target_service:
+            raise HTTPException(status_code=503, detail=f"Failed to select service instance for {service_name}")
+        
+        # Proxy request to target service
         try:
-            response = await request_proxy.proxy_request(enhanced_request, service_name)
+            response = await request_proxy.proxy_request(enhanced_request, target_service)
             circuit_breaker.record_success(service_name)
             
             # Apply cultural adaptation to response
@@ -613,7 +690,22 @@ async def service_proxy(
                 success=True
             )
             
-            return enhanced_response
+            # If underlying proxy response is streaming, convert to StreamingResponse
+            if getattr(enhanced_response, 'streaming', False):
+                return StreamingResponse(
+                    enhanced_response.stream_iterator,
+                    status_code=enhanced_response.status_code,
+                    headers=enhanced_response.headers,
+                    media_type=enhanced_response.headers.get("Content-Type")
+                )
+            
+            # Convert ProxyResponse to FastAPI Response
+            return Response(
+                content=enhanced_response.body,
+                status_code=enhanced_response.status_code,
+                headers=enhanced_response.headers,
+                media_type=enhanced_response.headers.get("Content-Type")
+            )
             
         except Exception as e:
             circuit_breaker.record_failure(service_name)
@@ -709,6 +801,18 @@ async def route_request(
     )
     
     try:
+        # Skip WebSocket paths - let them be handled by WebSocket endpoints
+        if path.startswith("ws/") or "/ws/" in path:
+            # Check if this is a WebSocket upgrade request
+            upgrade_header = request.headers.get("upgrade", "").lower()
+            connection_header = request.headers.get("connection", "").lower()
+            if upgrade_header == "websocket" and "upgrade" in connection_header:
+                # This should be handled by WebSocket endpoints
+                raise HTTPException(status_code=404, detail="WebSocket endpoint not found")
+            else:
+                # Regular HTTP request to ws path, continue processing
+                pass
+        
         # Skip V3 API routes that are handled elsewhere
         if path.startswith("api/v3"):
             raise HTTPException(status_code=404, detail="Not found")
@@ -819,7 +923,21 @@ async def route_request(
                 success=True
             )
             
-            return enhanced_response
+            if getattr(enhanced_response, 'streaming', False):
+                return StreamingResponse(
+                    enhanced_response.stream_iterator,
+                    status_code=enhanced_response.status_code,
+                    headers=enhanced_response.headers,
+                    media_type=enhanced_response.headers.get("Content-Type")
+                )
+            
+            # Convert ProxyResponse to FastAPI Response
+            return Response(
+                content=enhanced_response.body,
+                status_code=enhanced_response.status_code,
+                headers=enhanced_response.headers,
+                media_type=enhanced_response.headers.get("Content-Type")
+            )
             
         except Exception as e:
             circuit_breaker.record_failure(service_name)

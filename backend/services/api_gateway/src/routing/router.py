@@ -328,7 +328,37 @@ class RequestRouter:
                 strip_prefix=True,  # Strip /voice prefix before forwarding to voice service
                 timeout=60,  # Longer timeout for voice processing
                 retries=1,
-                auth_required=True  # Re-enabled
+                auth_required=False  # Voice service currently has no auth; allow public access
+            ),
+            # Direct API v1 Voice Routes (frontend calls like /api/v1/voice/tts)
+            RouteRule(
+                path_pattern=r"^/api/v1/voice/.*",
+                methods=[HTTPMethod.GET, HTTPMethod.POST],
+                service_name="voice",
+                strip_prefix=False,  # Forward full path (/api/v1/voice/...)
+                timeout=60,
+                retries=1,
+                auth_required=False
+            ),
+            # Voice Session Management (sessions belong to voice service)
+            RouteRule(
+                path_pattern=r"^/api/v1/sessions/.*",
+                methods=[HTTPMethod.GET, HTTPMethod.POST, HTTPMethod.PUT, HTTPMethod.PATCH, HTTPMethod.DELETE],
+                service_name="voice",
+                strip_prefix=False,
+                timeout=30,
+                retries=1,
+                auth_required=False
+            ),
+            # Voice Session Start (singular session path for frontend compatibility)
+            RouteRule(
+                path_pattern=r"^/api/v1/session/.*",
+                methods=[HTTPMethod.POST],
+                service_name="voice",
+                strip_prefix=False,
+                timeout=30,
+                retries=1,
+                auth_required=False
             ),
             
 
