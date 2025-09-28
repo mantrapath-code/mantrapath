@@ -183,7 +183,7 @@ function AppContent() {
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
           >
-            <ModularWellnessDashboard />
+            <ModularWellnessDashboard onNavigate={setActiveTab} />
           </motion.div>
         )
       case "insights":
@@ -330,8 +330,8 @@ function AppContent() {
           </div>
         )}
         
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          <div className="lg:col-span-2">
+        <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
+          <div className="lg:col-span-3">
             {renderContent()}
           </div>
           
@@ -342,7 +342,7 @@ function AppContent() {
                 initial={{ opacity: 0, x: 20 }}
                 animate={{ opacity: 1, x: 0 }}
                 transition={{ delay: 0.2 }}
-                className="sticky top-32"
+                className="sticky top-6"
               >
                 <MinimizableChatBot />
               </motion.div>

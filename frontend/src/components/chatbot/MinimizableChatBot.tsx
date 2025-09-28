@@ -233,7 +233,7 @@ export function MinimizableChatBot({ className }: MinimizableChatBotProps) {
   }
   
   return (
-    <div className={cn("space-y-4", className)}>
+    <div className={cn("space-y-4", className)} data-chat-widget>
       <audio ref={audioRef} onEnded={() => setIsSpeaking(false)} />
       
       <Card className={cn(

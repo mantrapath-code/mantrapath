@@ -6,7 +6,8 @@ from datetime import datetime, timedelta
 from sqlalchemy.orm import Session
 from sqlalchemy import func, and_, desc
 
-from src.models.database import MoodEntryModel, MoodPatternModel, MoodContextModel
+from shared.models import MoodEntry as MoodEntryModel
+from src.models.database import MoodPatternModel, MoodContextModel
 from src.models.schemas import (
     MoodCreateRequest, 
     MoodEntryResponse, 
@@ -21,6 +22,25 @@ logger = logging.getLogger(__name__)
 
 class MoodDataService:
     """Service for managing mood data operations."""
+    
+    def _mood_entry_to_response(self, mood_entry: MoodEntryModel) -> MoodEntryResponse:
+        """Convert mood entry model to response format, mapping notes to description."""
+        return MoodEntryResponse(
+            id=mood_entry.id,
+            user_id=mood_entry.user_id,
+            mood_score=mood_entry.mood_score,
+            description=mood_entry.description,
+            stress_level=mood_entry.stress_level,
+            energy_level=mood_entry.energy_level,
+            primary_emotion=mood_entry.primary_emotion,
+            primary_sentiment=mood_entry.primary_sentiment,
+            emotion_analysis=mood_entry.emotion_analysis,
+            context_tags=mood_entry.context_tags,
+            location=mood_entry.location,
+            activity=mood_entry.activity,
+            created_at=mood_entry.created_at,
+            updated_at=mood_entry.updated_at
+        )
     
     async def create_mood_entry(
         self, 
@@ -66,7 +86,7 @@ class MoodDataService:
             
             logger.info(f"Created mood entry {mood_entry.id} for user {user_id}")
             
-            return MoodEntryResponse.model_validate(mood_entry)
+            return self._mood_entry_to_response(mood_entry)
             
         except Exception as e:
             db.rollback()
@@ -102,7 +122,7 @@ class MoodDataService:
                 .all()
             )
             
-            return [MoodEntryResponse.model_validate(entry) for entry in entries]
+            return [self._mood_entry_to_response(entry) for entry in entries]
             
         except Exception as e:
             logger.error(f"Failed to get mood entries for user {user_id}: {e}")

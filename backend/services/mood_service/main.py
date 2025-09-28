@@ -17,6 +17,8 @@ from fastapi.responses import RedirectResponse
 
 from src.core.config import settings
 from src.api import mood_router, health_router, actions_router
+from src.api.journal_routes import router as journal_router
+from src.api.analytics_routes import router as analytics_router
 from shared.database import create_tables
 from src.services import memory_integration_service
 
@@ -78,6 +80,8 @@ app.add_middleware(
 app.include_router(mood_router)
 app.include_router(health_router)
 app.include_router(actions_router)  # Action Orchestrator integration
+app.include_router(journal_router)  # Journal placeholder endpoints
+app.include_router(analytics_router)  # Analytics and insights endpoints
 
 
 @app.get("/")

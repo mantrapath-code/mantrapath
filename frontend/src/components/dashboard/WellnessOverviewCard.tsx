@@ -25,20 +25,13 @@ export function WellnessOverviewCard() {
   const [moodTrend, setMoodTrend] = useState<'improving' | 'declining' | 'stable'>('stable')
   
   const handleAutoTheme = () => {
-    const wasChanged = autoApplyMoodTheme()
+    const wasChanged = autoApplyMoodTheme(true) // Force apply theme
     
-    if (wasChanged) {
-      const newThemeName = availableThemes[currentTheme || 'default']?.name || 'Default'
-      toast.success(`Theme auto-applied based on your mood`, {
-        description: `Switched to ${newThemeName} theme`,
-        duration: 3000,
-      })
-    } else {
-      toast.info(`Theme already matches your mood`, {
-        description: `${availableThemes[currentTheme]?.name} theme is perfect for ${userCurrentMood} mood`,
-        duration: 2000,
-      })
-    }
+    const newThemeName = availableThemes[currentTheme || 'default']?.name || 'Default'
+    toast.success(`Theme applied based on your mood`, {
+      description: `Applied ${newThemeName} theme for ${userCurrentMood} mood`,
+      duration: 3000,
+    })
   }
   
   const averageMood = recentMoods.length > 0 
@@ -54,8 +47,8 @@ export function WellnessOverviewCard() {
     >
       <Card className="overflow-hidden bg-gradient-to-br from-primary/5 to-secondary/5 border-none shadow-lg">
         <CardContent className="p-6">
-          <div className="flex items-center justify-between">
-            {/* Left Side - Wellness Overview */}
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 items-start">
+            {/* Left Side - Welcome & Icon */}
             <div className="flex items-center gap-4">
               <div className="relative">
                 <div className="w-16 h-16 rounded-full bg-gradient-to-br from-primary/20 to-secondary/20 flex items-center justify-center">
@@ -69,36 +62,37 @@ export function WellnessOverviewCard() {
               <div className="space-y-1">
                 <h3 className="text-lg font-semibold">Welcome back!</h3>
                 <p className="text-sm text-muted-foreground">Here's your wellness overview</p>
-                
-                <div className="flex items-center gap-4 mt-3">
-                  <div>
-                    <div className="text-2xl font-bold text-primary">{wellnessScore}%</div>
-                    <div className="text-xs text-muted-foreground">Wellness Score</div>
-                    <Progress value={wellnessScore} className="w-24 h-2 mt-1" />
-                  </div>
-                  
-                  <div className="h-8 w-px bg-border" />
-                  
-                  <div>
-                    <div className="flex items-center gap-2">
-                      {moodTrend === 'improving' && <TrendingUp className="w-4 h-4 text-green-600" />}
-                      {moodTrend === 'declining' && <TrendingDown className="w-4 h-4 text-red-600" />}
-                      {moodTrend === 'stable' && <Activity className="w-4 h-4 text-blue-600" />}
-                      <span className="text-sm font-medium capitalize">{moodTrend}</span>
-                    </div>
-                    <div className="text-xs text-muted-foreground">Mood trend</div>
-                  </div>
+              </div>
+            </div>
+            
+            {/* Center - Wellness Score & Mood Trend */}
+            <div className="space-y-4">
+              <div>
+                <div className="flex items-center justify-between mb-2">
+                  <span className="text-sm font-medium">Wellness Score</span>
+                  <span className="text-2xl font-bold text-primary">{wellnessScore}%</span>
+                </div>
+                <Progress value={wellnessScore} className="w-full h-3" />
+              </div>
+              
+              <div className="pt-2 border-t border-muted/50">
+                <div className="flex items-center gap-2 justify-center">
+                  {moodTrend === 'improving' && <TrendingUp className="w-4 h-4 text-green-600" />}
+                  {moodTrend === 'declining' && <TrendingDown className="w-4 h-4 text-red-600" />}
+                  {moodTrend === 'stable' && <Activity className="w-4 h-4 text-blue-600" />}
+                  <span className="text-sm font-medium capitalize">{moodTrend}</span>
+                  <span className="text-xs text-muted-foreground">trend</span>
                 </div>
               </div>
             </div>
             
             {/* Right Side - Theme Controls */}
-            <div className="flex items-center gap-2">
+            <div className="flex flex-col items-end gap-2 lg:items-center">
               <Button
                 variant="outline"
                 size="sm"
                 onClick={handleAutoTheme}
-                className="text-xs"
+                className="text-xs w-full lg:w-auto"
               >
                 <Palette className="w-4 h-4 mr-2" />
                 Auto Theme

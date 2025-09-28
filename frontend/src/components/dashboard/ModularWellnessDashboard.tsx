@@ -1,4 +1,5 @@
 import { motion } from "framer-motion"
+import { Brain } from "lucide-react"
 import { WellnessOverviewCard } from "./WellnessOverviewCard"
 import { QuickActionsGrid } from "./QuickActionsGrid"
 import { GoalsAndAchievements } from "./GoalsAndAchievements"
@@ -24,16 +25,22 @@ export function ModularWellnessDashboard({ onNavigate }: ModularWellnessDashboar
         toast.success('Opening mood tracker...')
         break
       case 'voice':
-        // TODO: Start voice recording
-        toast.info('Voice recording feature coming soon!')
+        onNavigate('voice-testing')
+        toast.success('Opening voice testing...')
         break
       case 'journal':
         onNavigate('journal')
         toast.success('Opening journal...')
         break
       case 'chat':
-        // TODO: Focus on chatbot or open chat
-        toast.success('AI companion is available on the right sidebar!')
+        // Scroll to chat section on desktop or show mobile chat
+        const chatElement = document.querySelector('[data-chat-widget]')
+        if (chatElement) {
+          chatElement.scrollIntoView({ behavior: 'smooth' })
+          toast.success('AI chat is now focused!')
+        } else {
+          toast.success('AI companion is available on the right sidebar!')
+        }
         break
       default:
         toast.info(`${actionType} feature coming soon!`)
@@ -41,54 +48,73 @@ export function ModularWellnessDashboard({ onNavigate }: ModularWellnessDashboar
   }
 
   return (
-    <div className="space-y-6 max-w-7xl mx-auto">
+    <div className="space-y-6 max-w-7xl mx-auto p-4 md:p-6">
       {/* Hero Section - Wellness Overview */}
       <WellnessOverviewCard />
       
       {/* Quick Actions */}
       <QuickActionsGrid onActionClick={handleQuickAction} />
       
-      {/* Main Content Grid */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* Left Column - Goals and Current Mood */}
-        <div className="lg:col-span-2 space-y-6">
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+      {/* Main Content Grid - Improved Layout */}
+      <div className="grid grid-cols-1 xl:grid-cols-3 gap-6">
+        {/* Left Column - Current Mood and Stats */}
+        <div className="xl:col-span-2 space-y-6">
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
             <CurrentMoodCard onNavigate={onNavigate} />
             <KeyStatsPanel />
           </div>
           
-          {/* Goals take full width */}
+          {/* Goals take full width on larger screens */}
           <GoalsAndAchievements onNavigate={onNavigate} />
         </div>
         
-        {/* Right Column - Could add more widgets here */}
+        {/* Right Column - Additional insights */}
         <div className="space-y-6">
-          {/* Placeholder for additional widgets */}
+          {/* Quick Tips Card */}
           <motion.div
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.5 }}
+            transition={{ delay: 0.3 }}
+            className="p-6 rounded-lg bg-gradient-to-br from-blue-50 to-indigo-50 dark:from-blue-950/50 dark:to-indigo-950/50 border border-blue-200 dark:border-blue-800"
+          >
+            <h3 className="text-sm font-semibold text-blue-900 dark:text-blue-100 mb-3 flex items-center gap-2">
+              <Brain className="w-4 h-4" />
+              Quick Tips
+            </h3>
+            <ul className="space-y-2 text-xs text-blue-800 dark:text-blue-200">
+              <li>• Track your mood daily for better insights</li>
+              <li>• Use voice notes for quick emotional capture</li>
+              <li>• Journal regularly to process your thoughts</li>
+              <li>• Chat with AI when you need support</li>
+            </ul>
+          </motion.div>
+          
+          {/* Coming Soon Card */}
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.4 }}
             className="p-6 rounded-lg bg-gradient-to-br from-primary/5 to-secondary/5 border border-dashed border-primary/20 text-center"
           >
             <h3 className="text-sm font-medium text-muted-foreground mb-2">
               Coming Soon
             </h3>
             <p className="text-xs text-muted-foreground">
-              More wellness insights and personalized recommendations will appear here
+              Personalized wellness recommendations and advanced analytics
             </p>
           </motion.div>
         </div>
       </div>
       
-      {/* Footer note about modular design */}
+      {/* Footer note */}
       <motion.div
         initial={{ opacity: 0 }}
         animate={{ opacity: 1 }}
         transition={{ delay: 0.6 }}
-        className="text-center py-4"
+        className="text-center py-4 border-t border-muted"
       >
         <p className="text-xs text-muted-foreground">
-          ✨ This dashboard is now fully modular and optimized for better performance
+          ✨ Your personalized wellness dashboard
         </p>
       </motion.div>
     </div>

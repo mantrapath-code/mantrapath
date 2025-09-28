@@ -214,26 +214,37 @@ export function useMoodBasedTheme() {
 
     setIsThemeChanging(true)
 
-    // Apply CSS variables to document root
+    // Apply CSS variables to document root with !important for priority
     const root = document.documentElement
+    
+    // First remove any existing theme classes
+    root.classList.remove('theme-changing')
+    
+    // Apply new CSS variables
     Object.entries(theme.cssVariables).forEach(([property, value]) => {
-      root.style.setProperty(property, value)
+      root.style.setProperty(property, value, 'important')
     })
 
+    // Add visual transition class
+    root.classList.add('theme-changing')
+    
     // Store theme locally and update local state
     localStorage.setItem('mantrapath_theme', themeName)
     setLocalTheme(themeName)
 
-    // Visual feedback for theme change
-    setTimeout(() => setIsThemeChanging(false), 1000)
+    // Visual feedback for theme change with cleanup
+    setTimeout(() => {
+      setIsThemeChanging(false)
+      root.classList.remove('theme-changing')
+    }, 1000)
   }
 
-  const autoApplyMoodTheme = () => {
+  const autoApplyMoodTheme = (forceApply = false) => {
     const currentMood = getCurrentMood()
     const recommendedTheme = getRecommendedTheme(currentMood)
     
-    // Only apply if the theme actually changes
-    if (recommendedTheme !== localTheme) {
+    // Apply if the theme changes or if force apply is requested
+    if (recommendedTheme !== localTheme || forceApply) {
       applyTheme(recommendedTheme)
       return true // Theme was changed
     }
@@ -260,14 +271,20 @@ export function useMoodBasedTheme() {
   // Initialize theme from localStorage on mount
   useEffect(() => {
     const savedTheme = localStorage.getItem('mantrapath_theme') || stats?.currentTheme || 'default'
-    setLocalTheme(savedTheme)
+    console.log('🎨 Initializing theme:', savedTheme)
     
     const theme = moodThemes[savedTheme]
     if (theme) {
       const root = document.documentElement
+      // Apply theme variables with higher priority
       Object.entries(theme.cssVariables).forEach(([property, value]) => {
-        root.style.setProperty(property, value)
+        root.style.setProperty(property, value, 'important')
       })
+      setLocalTheme(savedTheme)
+      console.log('✅ Theme applied:', savedTheme, theme.name)
+    } else {
+      console.warn('⚠️ Theme not found, falling back to default')
+      applyTheme('default')
     }
   }, [stats?.currentTheme])
 

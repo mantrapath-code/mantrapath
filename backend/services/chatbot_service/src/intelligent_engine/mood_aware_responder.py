@@ -356,16 +356,13 @@ I care about your safety and wellbeing. Would you like me to help you connect wi
             MoodAwareResponse: Generated response
         """
         # Primary: Lightweight embeddings-based template selection (no large models)
-        try:
-            embeddings_response = await self._generate_via_embeddings_templates(
-                user_message, mood_context, strategy, conversation_history
-            )
-            if embeddings_response:
-                return embeddings_response
-        except Exception as e:
-            logger.error(f"Embeddings-based generation failed: {e}")
+        embeddings_response = await self._generate_via_embeddings_templates(
+            user_message, mood_context, strategy, conversation_history
+        )
+        if embeddings_response:
+            return embeddings_response
         
-        # No mock/template fallback. Fail fast so the caller can handle properly.
+        # If embeddings fail, the error will be raised to caller
         logger.error("No AI response available from embeddings pipeline")
         raise RuntimeError("No AI response available")
     
@@ -571,53 +568,90 @@ Please provide a thoughtful, empathetic response that addresses the user's needs
         to select and personalize a high-quality template. This avoids large
         transformer models while producing meaningful, contextual replies.
         """
+        logger.info(f"Generating embeddings-based response for strategy: {strategy}")
+        
+        # Build candidate templates tailored to strategy
+        templates_map: Dict[str, List[str]] = self._load_template_candidates()
+        candidates: List[str] = templates_map.get(strategy, templates_map.get("maintenance_support", []))
+        
+        if not candidates:
+            logger.error(f"No template candidates found for strategy: {strategy}")
+            raise RuntimeError(f"No template candidates available for strategy: {strategy}")
+
+        logger.info(f"Found {len(candidates)} template candidates for strategy: {strategy}")
+
+        # Try to use models service for embeddings
         try:
-            # Build candidate templates tailored to strategy
-            templates_map: Dict[str, List[str]] = self._load_template_candidates()
-            candidates: List[str] = templates_map.get(strategy, templates_map.get("maintenance_support", []))
-            if not candidates:
-                return None
-
-            # Create embeddings for user message and templates
             from ..clients.models_service_client import models_client
+            
+            # Check if models service is available
+            is_healthy = await models_client.health_check()
+            logger.info(f"Models service health check: {is_healthy}")
+            
+            if is_healthy:
+                message_embedding = await models_client.get_text_embeddings(user_message)
+                if message_embedding and message_embedding.embedding:
+                    logger.info(f"Got embeddings for user message, dimension: {message_embedding.dimension}")
+                    
+                    # Score templates by cosine similarity
+                    import math
+                    def cosine(a: List[float], b: List[float]) -> float:
+                        dot = sum(x*y for x, y in zip(a, b))
+                        na = math.sqrt(sum(x*x for x in a))
+                        nb = math.sqrt(sum(x*x for x in b))
+                        return (dot / (na * nb)) if na and nb else 0.0
 
-            message_embedding = await models_client.get_text_embeddings(user_message)
-            if not message_embedding or not message_embedding.embedding:
-                return None
+                    best_template: Optional[str] = None
+                    best_score: float = -1.0
 
-            # Score templates by cosine similarity
-            import math
-            def cosine(a: List[float], b: List[float]) -> float:
-                dot = sum(x*y for x, y in zip(a, b))
-                na = math.sqrt(sum(x*x for x in a))
-                nb = math.sqrt(sum(x*x for x in b))
-                return (dot / (na * nb)) if na and nb else 0.0
+                    for i, template in enumerate(candidates):
+                        emb = await models_client.get_text_embeddings(template)
+                        if emb and emb.embedding:
+                            score = cosine(message_embedding.embedding, emb.embedding)
+                            logger.debug(f"Template {i} similarity score: {score:.3f}")
+                            if score > best_score:
+                                best_score = score
+                                best_template = template
 
-            best_template: Optional[str] = None
-            best_score: float = -1.0
+                    if best_template:
+                        logger.info(f"Selected template with similarity score: {best_score:.3f}")
+                    else:
+                        logger.warning("No template scored above threshold, using first candidate")
+                        best_template = candidates[0]
+                        best_score = 0.5
+                else:
+                    logger.warning("Failed to get embeddings for user message, using first template")
+                    best_template = candidates[0]
+                    best_score = 0.5
+            else:
+                logger.warning("Models service not healthy, using first template")
+                best_template = candidates[0]
+                best_score = 0.5
+                
+        except Exception as e:
+            logger.warning(f"Embeddings processing failed: {e}, using first template")
+            best_template = candidates[0]
+            best_score = 0.5
 
-            for template in candidates:
-                emb = await models_client.get_text_embeddings(template)
-                if emb and emb.embedding:
-                    score = cosine(message_embedding.embedding, emb.embedding)
-                    if score > best_score:
-                        best_score = score
-                        best_template = template
+        if not best_template:
+            logger.error("No template available after processing")
+            raise RuntimeError("No template available for response generation")
 
-            if not best_template:
-                return None
-
-            # Personalize and return
+        # Personalize the template
+        try:
             personalized = await self._personalize_response(best_template, user_message, mood_context)
+            logger.info(f"Successfully personalized response, length: {len(personalized)} chars")
+            
             return MoodAwareResponse(
                 response_text=personalized,
                 tone=self._determine_response_tone(mood_context),
                 intervention_type=strategy,
-                confidence_score=min(0.9, max(0.5, best_score)),
+                confidence_score=min(0.9, max(0.3, best_score)),
                 follow_up_suggestions=self._generate_follow_up_suggestions(mood_context)
             )
-        except Exception:
-            return None
+        except Exception as e:
+            logger.error(f"Failed to personalize response: {e}")
+            raise RuntimeError(f"Failed to personalize response: {e}")
 
     async def _get_enhanced_user_context(self, mood_context: MoodContext) -> Dict[str, Any]:
         """

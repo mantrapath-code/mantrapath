@@ -869,6 +869,16 @@ async def route_request(
             if not target_path.startswith('/'):
                 target_path = f"/{target_path}"
         
+        # Handle special case for analytics path rewriting: /api/v1/analytics/* -> /api/v1/mood/analytics/*
+        elif route.path_pattern == r"^/api/v1/analytics/.*" and target_path.startswith("/api/v1/analytics"):
+            # Rewrite /api/v1/analytics/* to /api/v1/mood/analytics/* for mood service
+            remaining_path = target_path[len("/api/v1/analytics"):]
+            target_path = f"/api/v1/mood/analytics{remaining_path}"
+        
+        # Handle special case for mood entries: /api/v1/mood/ -> /api/v1/mood/entries
+        elif route.service_name == "mood" and target_path == "/api/v1/mood/":
+            target_path = "/api/v1/mood/entries"
+        
         # Use existing X-Request-ID if provided, otherwise use generated one
         actual_request_id = request.headers.get("X-Request-ID") or request_id
         

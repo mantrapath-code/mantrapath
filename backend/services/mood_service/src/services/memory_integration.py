@@ -8,7 +8,8 @@ import httpx
 import asyncio
 
 from src.core.config import settings
-from src.models.database import MoodContextModel, MoodEntryModel
+from shared.models import MoodEntry as MoodEntryModel
+from src.models.database import MoodContextModel
 from src.models.schemas import MoodContextRequest, MoodContextResponse
 from src.services.emotion_analysis import emotion_service
 

@@ -60,8 +60,14 @@ export function QuickActionsGrid({ onActionClick }: QuickActionsGridProps) {
       initial={{ opacity: 0, y: 20 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ delay: 0.1 }}
+      className="mb-8"
     >
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+      <div className="mb-4">
+        <h2 className="text-lg font-semibold text-foreground mb-1">Quick Actions</h2>
+        <p className="text-sm text-muted-foreground">Start your wellness journey with these tools</p>
+      </div>
+      
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3 md:gap-4">
         {quickActions.map((action, index) => {
           const IconComponent = action.icon
           return (
@@ -74,16 +80,16 @@ export function QuickActionsGrid({ onActionClick }: QuickActionsGridProps) {
               whileTap={{ scale: 0.98 }}
             >
               <Card 
-                className="cursor-pointer hover:shadow-md transition-all duration-200 border-none bg-gradient-to-br from-background to-muted/20 group"
+                className="cursor-pointer hover:shadow-lg transition-all duration-200 border hover:border-primary/20 bg-gradient-to-br from-background to-muted/20 group h-full"
                 onClick={() => handleQuickAction(action.action)}
               >
-                <CardContent className="p-4 text-center space-y-3">
-                  <div className="w-12 h-12 rounded-full bg-gradient-to-br from-primary/10 to-secondary/10 flex items-center justify-center mx-auto group-hover:scale-110 transition-transform">
+                <CardContent className="p-4 text-center space-y-3 h-full flex flex-col justify-center">
+                  <div className="w-12 h-12 rounded-full bg-gradient-to-br from-primary/10 to-secondary/10 flex items-center justify-center mx-auto group-hover:scale-110 transition-transform duration-200">
                     <IconComponent className={`w-6 h-6 ${action.color}`} />
                   </div>
-                  <div>
-                    <h3 className="font-medium text-sm">{action.title}</h3>
-                    <p className="text-xs text-muted-foreground mt-1">
+                  <div className="space-y-1">
+                    <h3 className="font-medium text-sm leading-tight">{action.title}</h3>
+                    <p className="text-xs text-muted-foreground leading-tight">
                       {action.action === 'mood' && 'Track your current mood'}
                       {action.action === 'voice' && 'Record a voice memo'}
                       {action.action === 'journal' && 'Write your thoughts'}

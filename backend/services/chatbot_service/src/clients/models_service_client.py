@@ -37,8 +37,8 @@ class ModelsServiceClient:
     
     def __init__(self):
         import os
-    # Prefer Docker service discovery by default; override via env if needed
-    self.models_service_url = os.getenv("MODELS_SERVICE_URL", "http://models-service:8080")
+        # Prefer Docker service discovery by default; override via env if needed
+        self.models_service_url = os.getenv("MODELS_SERVICE_URL", "http://models-service:8080")
         self.timeout = int(os.getenv("MODELS_SERVICE_TIMEOUT", "30"))
         self.max_retries = int(os.getenv("MODELS_SERVICE_MAX_RETRIES", "3"))
         self.cache_ttl = int(os.getenv("MODELS_SERVICE_CACHE_TTL", "3600"))

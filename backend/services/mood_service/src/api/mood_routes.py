@@ -7,6 +7,7 @@ from sqlalchemy.orm import Session
 
 from shared.database import get_db
 from shared.auth import verify_token, extract_user_id, get_current_user
+from shared.models import MoodEntry
 from src.models.schemas import (
     MoodCreateRequest,
     MoodEntryResponse,
@@ -254,3 +255,5 @@ async def get_mood_contexts(
     except Exception as e:
         logger.error(f"Failed to get mood contexts: {e}")
         raise HTTPException(status_code=500, detail="Failed to retrieve mood contexts")
+
+
