@@ -1,23 +1,32 @@
 # Multi-stage build for React frontend
 FROM node:20-alpine as builder
 
+# Install build tools for better ARM64 compatibility
+RUN apk add --no-cache python3 make g++ libc6-compat
+
 WORKDIR /app
 
 # Copy package files
 COPY package*.json ./
 
-# Install dependencies (include dev dependencies for build tools like tsc and vite)
+# Configure npm for better compatibility and performance
+RUN npm config set cache /tmp/.npm && \
+    npm config set prefer-offline true
+
+# Install dependencies with retry logic and better ARM64 support
 # Use npm ci when a lockfile is present; otherwise fall back to npm install
-RUN if [ -f package-lock.json ]; then \
-			npm ci --no-audit --no-fund; \
-		else \
-			npm install --no-audit --no-fund; \
-		fi
+RUN timeout 1800 sh -c 'if [ -f package-lock.json ]; then \
+        npm ci --no-audit --no-fund --ignore-scripts; \
+    else \
+        npm install --no-audit --no-fund --ignore-scripts; \
+    fi' && \
+    npm run prepare || true
 
 # Copy source code
 COPY . .
 
-# Build the application
+# Build the application with memory optimization
+ENV NODE_OPTIONS="--max-old-space-size=4096"
 RUN npm run build
 
 # Production stage

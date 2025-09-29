@@ -278,8 +278,25 @@ jobs:
             echo 'EOF'
           } >> "$GITHUB_OUTPUT"
 
-      - name: Build and push ${{ matrix.name }}
+      - name: Build and push ${{ matrix.name }} (AMD64 only for frontend)
         uses: docker/build-push-action@v6
+        if: matrix.name == 'frontend'
+        with:
+          context: ${{ matrix.context }}
+          file: ${{ matrix.dockerfile }}
+          push: ${{ github.event_name != 'pull_request' }}
+          platforms: linux/amd64
+          tags: ${{ steps.meta.outputs.tags }}
+          cache-from: type=gha,scope=mantrapath-${{ matrix.image_suffix }}
+          cache-to: type=gha,mode=max,scope=mantrapath-${{ matrix.image_suffix }},ignore-error=true
+          provenance: false
+          build-args: |
+            BUILDKIT_INLINE_CACHE=1
+          outputs: type=image,oci-mediatypes=true,compression=zstd,compression-level=3,force-compression=true
+
+      - name: Build and push ${{ matrix.name }} (Multi-platform for backend)
+        uses: docker/build-push-action@v6
+        if: matrix.name != 'frontend'
         with:
           context: ${{ matrix.context }}
           file: ${{ matrix.dockerfile }}
