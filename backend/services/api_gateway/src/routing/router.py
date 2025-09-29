@@ -320,6 +320,53 @@ class RequestRouter:
                 auth_required=True
             ),
             
+            # Models Service Routes - STT, TTS, and Language Detection (Must come before voice routes)
+            RouteRule(
+                path_pattern=r"^/api/v1/stt/.*",
+                methods=[HTTPMethod.POST],
+                service_name="models",
+                strip_prefix=False,  # Forward full path (/api/v1/stt/...)
+                timeout=120,  # Longer timeout for model processing
+                retries=1,
+                auth_required=False
+            ),
+            RouteRule(
+                path_pattern=r"^/api/v1/tts/.*",
+                methods=[HTTPMethod.POST],
+                service_name="models",
+                strip_prefix=False,  # Forward full path (/api/v1/tts/...)
+                timeout=120,  # Longer timeout for model processing
+                retries=1,
+                auth_required=False
+            ),
+            RouteRule(
+                path_pattern=r"^/api/v1/language/.*",
+                methods=[HTTPMethod.GET, HTTPMethod.POST],
+                service_name="models",
+                strip_prefix=False,  # Forward full path (/api/v1/language/...)
+                timeout=60,
+                retries=1,
+                auth_required=False
+            ),
+            RouteRule(
+                path_pattern=r"^/api/v1/models/.*",
+                methods=[HTTPMethod.GET, HTTPMethod.POST],
+                service_name="models",
+                strip_prefix=False,  # Forward full path (/api/v1/models/...)
+                timeout=120,
+                retries=1,
+                auth_required=False
+            ),
+            RouteRule(
+                path_pattern=r"^/api/v1/voice/test/?$",
+                methods=[HTTPMethod.POST],
+                service_name="models",
+                strip_prefix=False,  # Forward full path (/api/v1/voice/test)
+                timeout=120,  # Longer timeout for voice pipeline tests
+                retries=1,
+                auth_required=False
+            ),
+            
             # Voice Service Routes
             RouteRule(
                 path_pattern=r"^/voice/.*",
@@ -360,9 +407,36 @@ class RequestRouter:
                 retries=1,
                 auth_required=False
             ),
+            # Voice Test Pipeline Routes
+            RouteRule(
+                path_pattern=r"^/api/v1/test/.*",
+                methods=[HTTPMethod.GET, HTTPMethod.POST],
+                service_name="voice",
+                strip_prefix=False,
+                timeout=120,  # Longer timeout for pipeline tests
+                retries=1,
+                auth_required=False
+            ),
             
-
-
+            # Voice Event Processor Routes
+            RouteRule(
+                path_pattern=r"^/api/v1/voice-events/.*",
+                methods=[HTTPMethod.GET, HTTPMethod.POST, HTTPMethod.PUT, HTTPMethod.DELETE],
+                service_name="voice-events",
+                strip_prefix=False,  # Forward full path
+                timeout=60,
+                retries=2,
+                auth_required=False
+            ),
+            RouteRule(
+                path_pattern=r"^/voice-events/.*",
+                methods=[HTTPMethod.GET, HTTPMethod.POST, HTTPMethod.PUT, HTTPMethod.DELETE],
+                service_name="voice-events",
+                strip_prefix=True,  # Strip /voice-events prefix
+                timeout=60,
+                retries=2,
+                auth_required=False
+            ),
             
             # AI Event Processor Routes
             RouteRule(

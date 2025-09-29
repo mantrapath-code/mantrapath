@@ -304,9 +304,60 @@ async def text_to_speech_legacy(request: TextToSpeechRequest):
         logger.error(f"TTS legacy alias error: {e}")
         return JSONResponse(status_code=500, content={"success": False, "error": str(e)})
 
+# New Indic Language Support Endpoints
+@app.post("/api/v1/language/detect")
+async def detect_language(audio: UploadFile = File(...)):
+    """Detect language from audio using Indic models"""
+    try:
+        audio_data = await audio.read()
+        result = await models_client.detect_language(audio_data)
+        return result
+        
+    except Exception as e:
+        logger.error(f"Language detection error: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+class VoicePipelineTestRequest(BaseModel):
+    text: str
+    language: str = "hi"
+
+@app.post("/api/v1/test/voice-pipeline")
+async def test_voice_pipeline(request: VoicePipelineTestRequest):
+    """Test full voice pipeline with Indic models (TTS + STT roundtrip)"""
+    try:
+        result = await models_client.test_voice_pipeline(
+            text=request.text,
+            language=request.language
+        )
+        return result
+        
+    except Exception as e:
+        logger.error(f"Voice pipeline test error: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/api/v1/models/languages")
+async def get_supported_languages():
+    """Get all supported languages for STT and TTS"""
+    try:
+        stt_result = await models_client.get_supported_languages("stt")
+        tts_result = await models_client.get_supported_languages("tts")
+        
+        return {
+            "success": True,
+            "stt_languages": stt_result.get("languages", []),
+            "tts_languages": tts_result.get("languages", []),
+            "indic_languages": ["hi", "mr", "ta", "te", "bn", "gu", "kn", "ml", "or", "pa", "ur"],
+            "supported_models": {
+                "stt": ["indicwav2vec", "whisper", "wav2vec2"],
+                "tts": ["indic-tts", "mms", "parler"]
+            }
+        }
+        
+    except Exception as e:
+        logger.error(f"Get languages error: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
 # TODO: Add voice processing endpoints
-# - POST /stt (Speech to Text)
-# - POST /tts (Text to Speech) 
 # - POST /voice-clone (Voice cloning)
 # - WebSocket /ws/voice (Real-time voice)
 

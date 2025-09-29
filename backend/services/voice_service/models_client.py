@@ -169,5 +169,60 @@ class ModelsServiceClient:
                 "error": f"Sentiment analysis failed: {str(e)}"
             }
 
+    async def detect_language(self, audio_data: bytes) -> Dict[str, Any]:
+        """Detect language from audio using Models Service"""
+        try:
+            async with httpx.AsyncClient(timeout=self.timeout) as client:
+                files = {"audio": ("audio.wav", audio_data, "audio/wav")}
+                
+                response = await client.post(
+                    f"{self.base_url}/api/v1/language/detect",
+                    files=files
+                )
+                
+                if response.status_code == 200:
+                    return response.json()
+                else:
+                    return {
+                        "success": False,
+                        "error": f"Language detection failed: {response.status_code}"
+                    }
+                    
+        except Exception as e:
+            logger.error(f"Language detection request failed: {e}")
+            return {
+                "success": False,
+                "error": f"Language detection failed: {str(e)}"
+            }
+
+    async def test_voice_pipeline(self, text: str, language: str = "hi") -> Dict[str, Any]:
+        """Test full voice pipeline (TTS + STT roundtrip)"""
+        try:
+            async with httpx.AsyncClient(timeout=self.timeout) as client:
+                request_data = {
+                    "text": text,
+                    "language": language
+                }
+                
+                response = await client.post(
+                    f"{self.base_url}/api/v1/voice/test",
+                    json=request_data
+                )
+                
+                if response.status_code == 200:
+                    return response.json()
+                else:
+                    return {
+                        "success": False,
+                        "error": f"Voice pipeline test failed: {response.status_code}"
+                    }
+                    
+        except Exception as e:
+            logger.error(f"Voice pipeline test failed: {e}")
+            return {
+                "success": False,
+                "error": f"Voice pipeline test failed: {str(e)}"
+            }
+
 # Global client instance
 models_client = ModelsServiceClient()

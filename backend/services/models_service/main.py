@@ -63,27 +63,46 @@ async def lifespan(app: FastAPI):
         await model_manager.initialize()
         
         # Initialize engines
+        logger.info("🔧 Initializing engines...")
         stt_engine = STTEngine(model_manager)
+        logger.info(f"🎤 STT Engine initialized - indic_models type: {type(getattr(stt_engine, 'indic_models', None))}")
+        
         tts_engine = TTSEngine(model_manager)
+        logger.info(f"🔊 TTS Engine initialized - indic_models type: {type(getattr(tts_engine, 'indic_models', None))}")
+        
         nlp_engine = NLPEngine(model_manager)
         await nlp_engine.initialize()
         
-        # Optional preload list (comma separated)
+        # Common variables for both modes
         preload_list_env = os.getenv("MODELS_PRELOAD_LIST", "").strip()
         background_preload = os.getenv("MODELS_PRELOAD_BACKGROUND", "true").lower() == "true"
-
-        if minimal_mode:
-            logger.info("✅ Models Service initialized in minimal mode (skipping default model loading)")
+        
+        # Enhanced Voice Stack: Always preload Indic models for immediate availability
+        enhanced_mode = os.getenv("VOICE_STACK_MODE") == "enhanced"
+        if enhanced_mode:
+            logger.info("🎤 Enhanced Voice Stack Mode - Preloading Indic models...")
+            
+            # For now, just load default models since preload methods aren't working
+            await stt_engine.load_default_models()
+            await tts_engine.load_default_models()
+            if nlp_engine is not None:
+                await nlp_engine.load_default_models()
+                
+            logger.info("✅ Enhanced Voice Stack initialized (on-demand loading)")
         else:
-            # Load defaults unless user explicitly wants to skip (when providing custom preload list and setting skip flag)
-            skip_defaults = os.getenv("MODELS_SERVICE_SKIP_DEFAULTS", "false").lower() == "true"
-            if skip_defaults and preload_list_env:
-                logger.info("⚙️  Skipping default model loads due to MODELS_SERVICE_SKIP_DEFAULTS=true")
+            # Legacy/minimal mode behavior
+            if minimal_mode:
+                logger.info("✅ Models Service initialized in minimal mode (skipping default model loading)")
             else:
-                await stt_engine.load_default_models()
-                await tts_engine.load_default_models()
-                if nlp_engine is not None:
-                    await nlp_engine.load_default_models()
+                # Load defaults unless user explicitly wants to skip
+                skip_defaults = os.getenv("MODELS_SERVICE_SKIP_DEFAULTS", "false").lower() == "true"
+                if skip_defaults and preload_list_env:
+                    logger.info("⚙️  Skipping default model loads due to MODELS_SERVICE_SKIP_DEFAULTS=true")
+                else:
+                    await stt_engine.load_default_models()
+                    await tts_engine.load_default_models()
+                    if nlp_engine is not None:
+                        await nlp_engine.load_default_models()
 
         # Handle custom preload list (works in both minimal and normal modes)
         if preload_list_env:
@@ -161,6 +180,23 @@ async def health_check():
 @app.get("/status")
 async def get_status():
     """Detailed service status"""
+    
+    # Try to trigger model loading for better status visibility
+    try:
+        if tts_engine and hasattr(tts_engine, 'indic_models'):
+            # This will just check if we can access the attribute, not actually load models
+            tts_models_count = len(tts_engine.indic_models)
+        else:
+            tts_models_count = 0
+            
+        if stt_engine and hasattr(stt_engine, 'indic_models'):
+            stt_models_count = len(stt_engine.indic_models)  
+        else:
+            stt_models_count = 0
+    except Exception as e:
+        logger.warning(f"Error accessing engine models: {e}")
+        tts_models_count = -1
+        stt_models_count = -1
     gpu_available = False
     gpu_count = 0
     if torch is not None:
@@ -190,6 +226,20 @@ async def get_status():
         "supported_languages": {
             "stt": list(stt_engine.supported_languages.keys()) if stt_engine else [],
             "tts": list(tts_engine.supported_languages.keys()) if tts_engine else []
+        },
+        "active_models": {
+            "stt_active_models": list(getattr(stt_engine, 'indic_models', {}).keys()) if stt_engine else [],
+            "tts_active_models": list(getattr(tts_engine, 'indic_models', {}).keys()) if tts_engine else [],
+            "debug": {
+                "stt_engine_available": stt_engine is not None,
+                "tts_engine_available": tts_engine is not None,
+                "stt_indic_models_attr": hasattr(stt_engine, 'indic_models') if stt_engine else False,
+                "tts_indic_models_attr": hasattr(tts_engine, 'indic_models') if tts_engine else False,
+                "stt_indic_models_type": str(type(getattr(stt_engine, 'indic_models', None))) if stt_engine else "N/A",
+                "tts_indic_models_type": str(type(getattr(tts_engine, 'indic_models', None))) if tts_engine else "N/A",
+                "stt_supported_langs": list(getattr(stt_engine, 'supported_languages', [])) if stt_engine else [],
+                "tts_language_models": list(getattr(tts_engine, 'language_models', {}).keys()) if tts_engine else []
+            }
         }
     }
     
