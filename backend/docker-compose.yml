@@ -523,18 +523,25 @@ services:
       - CHATBOT_SERVICE_URL=http://chatbot-service:${CHATBOT_SERVICE_PORT:-8004}
       - MOOD_SERVICE_URL=http://mood-service:${MOOD_SERVICE_PORT:-8003}
       - ANALYTICS_SERVICE_URL=http://analytics-service:${ANALYTICS_SERVICE_PORT:-8008}
+      - MODELS_SERVICE_URL=http://models-service:${MODELS_SERVICE_INTERNAL_PORT:-8080}
       # Indian Language Support
       - DEFAULT_LANGUAGE=hi
       - SUPPORTED_LANGUAGES=hi,en,bn,ta,te,gu,mr,pa,ur,ml,kn
-      # Vosk Configuration
+      # Vosk Configuration (Legacy)
       - VOSK_MODELS_DIR=/app/voice_models
-      - VOSK_DOWNLOAD_ENABLED=true
+      - VOSK_DOWNLOAD_ENABLED=false
+      # New Indic Models Configuration
+      - ENABLE_INDIC_MODELS=true
+      - STT_ENGINE=indicwav2vec
+      - TTS_ENGINE=indic-tts
     volumes:
       - voice_models:/app/voice_models
     depends_on:
       postgres:
         condition: service_healthy
       redis:
+        condition: service_healthy
+      models-service:
         condition: service_healthy
     networks:
       - mantrapath-network
@@ -921,12 +928,12 @@ services:
       - MODELS_DIR=/app/models
       - CACHE_DIR=/app/cache
       - LOGS_DIR=/app/logs
-      # Model preferences for Voice Service
-      - DEFAULT_STT_MODEL=whisper_tiny  # Fast startup
-      - DEFAULT_TTS_MODEL=coqui_hi     # High quality Hindi
-      - WHISPER_MODEL_SIZE=tiny        # Start with small, upgrade later
-      - COQUI_MODEL_NAME=coqui_hi      # Hindi focus
-      - VOSK_ENABLE=true               # Enable Vosk for fast STT
+      # Enhanced Voice Stack - Indic Models Only
+      - DEFAULT_STT_MODEL=indicwav2vec_hi  # AI4Bharat IndicWav2Vec
+      - DEFAULT_TTS_MODEL=mms_tts_hi       # Meta MMS-TTS
+      - INDIC_MODELS_ENABLE=true           # Enable Indic models
+      - LEGACY_MODELS_DISABLE=true         # Disable Whisper/Vosk/Coqui
+      - VOICE_STACK_MODE=enhanced          # Enhanced natural voice mode
       - RASA_ENABLE=false              # Disable dialogue management for now
       # Hardware settings
       - MAX_GPU_MEMORY=0.8
@@ -944,8 +951,10 @@ services:
     networks:
       - mantrapath-network
     depends_on:
-      - postgres
-      - redis
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
     healthcheck:
       test: ["CMD", "curl", "-f", "http://models-service:8080/health"]
       interval: 30s
