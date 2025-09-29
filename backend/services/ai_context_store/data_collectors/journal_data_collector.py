@@ -15,7 +15,8 @@ class JournalDataCollector:
     """Collects journal data for context building"""
     
     def __init__(self):
-        self.content_service_url = "http://content-service:8009"  # Assuming journal is part of content service
+        # Updated to canonical content-service port (8005)
+        self.content_service_url = "http://content-service:8005"  # Assuming journal is part of content service
         self.timeout = 30
         
     async def collect_user_journal_data(self, user_id: str, jwt_token: str, days_back: int = 30) -> Dict[str, Any]:

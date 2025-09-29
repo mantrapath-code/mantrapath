@@ -87,14 +87,14 @@ class EarlyWarningSystem:
         
         # Redis for real-time communication
         try:
-            self.redis_client = redis.from_url(os.getenv("REDIS_URL", "redis://localhost:6379"))
+            self.redis_client = redis.from_url(os.getenv("REDIS_URL", "redis://redis:6379"))
             self.redis_available = True
         except Exception as e:
             logger.warning(f"Redis not available for early warning system: {e}")
             self.redis_available = False
         
         # External service URLs
-        self.notification_service_url = os.getenv("NOTIFICATION_SERVICE_URL", "http://localhost:8007")
+        self.notification_service_url = os.getenv("NOTIFICATION_SERVICE_URL", "http://notification-service:8007")
         self.crisis_hotline_number = os.getenv("CRISIS_HOTLINE_NUMBER", "988")  # US Suicide & Crisis Lifeline
         
         logger.info("Early Warning System initialized successfully")

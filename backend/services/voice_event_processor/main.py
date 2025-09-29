@@ -262,6 +262,38 @@ async def get_config() -> Dict[str, Any]:
         "emotion_analysis_timeout": int(os.getenv("EMOTION_ANALYSIS_TIMEOUT", 200))
     }
 
+@app.post("/api/voice-events/track")
+async def track_voice_event(event_data: Dict[str, Any]) -> Dict[str, Any]:
+    """Track voice analytics event"""
+    try:
+        logger.info(f"📊 Voice Event Tracked: {event_data.get('event_type', 'unknown')}")
+        
+        # In a real implementation, this would:
+        # 1. Validate event data structure
+        # 2. Store in analytics database (ClickHouse, etc.)
+        # 3. Update real-time metrics
+        # 4. Trigger any real-time processing
+        
+        # For now, just log and confirm receipt
+        processed_event = {
+            "event_id": f"evt_{asyncio.get_event_loop().time()}",
+            "status": "processed",
+            "timestamp": asyncio.get_event_loop().time(),
+            "event_type": event_data.get("event_type"),
+            "user_id": event_data.get("user_id"),
+            "session_id": event_data.get("session_id")
+        }
+        
+        return {
+            "success": True,
+            "message": "Event tracked successfully",
+            "event": processed_event
+        }
+        
+    except Exception as e:
+        logger.error(f"Failed to track voice event: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to track event: {str(e)}")
+
 @app.get("/api/v1/stats")
 async def get_stats() -> Dict[str, Any]:
     """Get voice processing statistics"""

@@ -37,18 +37,22 @@ async def mock_service_registry():
     registry = ServiceRegistry()
     
     # Add mock services
+    # Use environment variables for test URLs or internal DNS defaults
+    auth_url = os.getenv("AUTH_SERVICE_TEST_URL", "http://auth-service:8001")
+    mood_url = os.getenv("MOOD_SERVICE_TEST_URL", "http://mood-service:8003")
+    
     test_services = [
         ServiceInstance(
             id="auth-test-1",
             name="auth",
-            url="http://localhost:8001",
+            url=auth_url,
             health_path="/health",
             status=ServiceStatus.HEALTHY
         ),
         ServiceInstance(
             id="mood-test-1", 
             name="mood",
-            url="http://localhost:8003",
+            url=mood_url,
             health_path="/health",
             status=ServiceStatus.HEALTHY
         )

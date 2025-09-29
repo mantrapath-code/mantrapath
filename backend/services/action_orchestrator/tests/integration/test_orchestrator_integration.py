@@ -111,12 +111,12 @@ class TestActionOrchestratorIntegration:
         health_status = await action_dispatcher.get_service_health_status()
         assert isinstance(health_status, dict)
         
-        # Test service URL mapping
+        # Test service URL mapping (updated to use internal DNS)
         journal_url = action_dispatcher._get_service_url("journal_service")
-        assert journal_url == "http://localhost:8003"
+        assert journal_url == "http://content-service:8005"
         
         unknown_url = action_dispatcher._get_service_url("unknown_service")
-        assert unknown_url == "http://localhost:8000"
+        assert unknown_url == "http://api-gateway:8000"  # Default to internal DNS
     
     async def test_rollback_manager_integration(self):
         """Test real rollback manager integration"""

@@ -46,14 +46,20 @@ class CrisisDetectionService {
    * Get comprehensive crisis analysis using REAL backend services ONLY
    */
   async analyzeCrisisRisk(userId: string): Promise<CrisisAnalysisResult> {
+    let moodEntries: any[] = []
+    let behavioralInsights: any[] = []
+    
     try {
       console.log(`🔍 Starting real crisis analysis for user ${userId} - NO MOCK DATA`)
       
       // Get real user data from actual services
-      const [moodEntries, behavioralInsights] = await Promise.all([
+      const [mood, insights] = await Promise.all([
         this.getRealMoodData(userId),
         this.getRealBehavioralInsights(userId)
       ])
+      
+      moodEntries = mood
+      behavioralInsights = insights
 
       console.log(`📊 Retrieved ${moodEntries.length} mood entries and ${behavioralInsights.length} behavioral insights`)
 
@@ -91,7 +97,54 @@ class CrisisDetectionService {
         return this.createServiceUnavailableResponse(error.message)
       }
       
+      // If ML service fails, provide fallback analysis based on available data
+      if (error.message?.includes('Crisis analysis requires ML service')) {
+        console.log('⚠️ ML service unavailable, providing fallback analysis')
+        return this.createFallbackAnalysis(moodEntries, behavioralInsights)
+      }
+      
       throw new Error(`Crisis analysis failed: ${error.message}. Please ensure all services are running and user has sufficient data.`)
+    }
+  }
+
+  /**
+   * Create fallback analysis when ML service is unavailable
+   */
+  private createFallbackAnalysis(moodEntries: any[], behavioralInsights: any[]): CrisisAnalysisResult {
+    // Simple rule-based analysis when ML service is down
+    const recentMoods = moodEntries.slice(0, 7) // Last 7 entries
+    const avgMood = recentMoods.length > 0 
+      ? recentMoods.reduce((sum, entry) => sum + (entry.mood_score || 3), 0) / recentMoods.length
+      : 3
+    
+    let riskLevel: 'low' | 'medium' | 'high' = 'low'
+    let confidenceScore = 0.6 // Lower confidence for rule-based analysis
+    
+    if (avgMood < 2) {
+      riskLevel = 'high'
+      confidenceScore = 0.7
+    } else if (avgMood < 2.5) {
+      riskLevel = 'medium'
+    }
+    
+    return {
+      riskLevel,
+      confidence: confidenceScore,
+      riskFactors: avgMood < 2.5 ? ['Low mood trend detected'] : [],
+      protectiveFactors: avgMood >= 3 ? ['Stable mood levels'] : [],
+      recommendations: [
+        'Continue regular mood tracking',
+        'Consider speaking with a mental health professional if concerns persist'
+      ],
+      urgencyLevel: riskLevel === 'high' ? 'immediate' : 'routine',
+      timeToIntervention: riskLevel === 'high' ? '24 hours' : '7 days',
+      crisisIndicators: [],
+      lastUpdated: new Date().toISOString(),
+      dataQuality: {
+        moodEntries: moodEntries.length,
+        journalEntries: 0,
+        sufficientData: moodEntries.length > 0
+      }
     }
   }
 
@@ -173,9 +226,9 @@ class CrisisDetectionService {
     try {
       console.log(`🎭 Fetching REAL mood data from mood service for user ${userId}`)
       
-      const response = await apiService.request<any>(`/api/v1/mood/`, {
+      const response = await apiService.request<any>(`/api/v1/mood/entries?limit=50`, {
         method: 'GET'
-      }, MOOD_SERVICE_URL)
+      })
 
       console.log(`✅ Retrieved ${response.length || 0} real mood entries`)
       return response || []
@@ -193,11 +246,10 @@ class CrisisDetectionService {
     try {
       console.log(`🧠 Fetching REAL behavioral insights from memory service for user ${userId}`)
       
-      const response = await apiService.request<any>(`/api/v1/insights/${userId}`, { 
-        method: 'GET' 
-      }, MEMORY_SERVICE_URL)
+      // Use AI insights endpoint through API Gateway
+      const response = await apiService.getAIInsights()
       
-      const insights = response.recent_insights || []
+      const insights = response.insights || []
       console.log(`✅ Retrieved ${insights.length} real behavioral insights`)
       return insights
     } catch (error) {
@@ -213,10 +265,10 @@ class CrisisDetectionService {
   private async callRealMLCrisisPrediction(data: any): Promise<any> {
     try {
       console.log('🤖 Calling REAL ML crisis prediction service')
-      const response = await apiService.request<any>('/crisis/predict-risk', {
+      const response = await apiService.request<any>('/ml/crisis/predict-risk', {
         method: 'POST',
         body: JSON.stringify(data)
-      }, ML_SERVICE_URL)
+      })
       
       console.log('✅ Real ML crisis prediction completed')
       return response.crisis_assessment || response
@@ -399,9 +451,9 @@ class CrisisDetectionService {
   async getSystemHealth(): Promise<any> {
     try {
       const healthChecks = await Promise.allSettled([
-        this.checkServiceHealth('ML Service', ML_SERVICE_URL + '/health'),
-        this.checkServiceHealth('Mood Service', MOOD_SERVICE_URL + '/health'),
-        this.checkServiceHealth('Memory Service', MEMORY_SERVICE_URL + '/health')
+        this.checkServiceHealth('ML Service', '/ml/health'),
+        this.checkServiceHealth('Mood Service', '/api/v1/mood/health'),
+        this.checkServiceHealth('Memory Service', '/ai-context/health')
       ])
       
       return {

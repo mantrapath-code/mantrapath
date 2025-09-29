@@ -209,6 +209,80 @@ async def global_exception_handler(request: Request, exc: Exception):
         }
     )
 
+# ------------------------------------------------------------
+# Compatibility & Frontend Alias Endpoints
+# These provide backward compatibility for older frontend paths
+# that expect /api/v1/session/start and /api/v1/voice/text-to-speech
+# as well as a simplified /api/v1/voice/tts alias.
+# ------------------------------------------------------------
+from fastapi import Body
+from app.models.requests import TTSRequest, CreateSessionRequest
+from app.api.session_routes import get_session_manager
+from app.api.session_routes import SessionManager as _SessionManagerAlias  # type: ignore
+
+
+@app.post("/api/v1/session/start")
+async def start_session_alias(
+    payload: CreateSessionRequest = Body(default=CreateSessionRequest()),
+    session_manager: _SessionManagerAlias = Depends(get_session_manager)  # type: ignore
+):
+    """Alias endpoint expected by some frontend builds (maps to POST /api/v1/sessions).
+    Returns minimal session structure for compatibility.
+    """
+    try:
+        session_id = session_manager.create_session(
+            user_id=payload.user_id,
+            language=payload.language,
+            preferences=payload.preferences
+        )
+        data = session_manager.get_session(session_id)
+        return {
+            "success": True,
+            "session": {
+                "session_id": session_id,
+                "user_id": data.get("user_id"),
+                "language": data.get("language"),
+                "created_at": data.get("created_at"),
+                "last_activity": data.get("last_activity"),
+                "status": data.get("status")
+            }
+        }
+    except Exception as e:
+        logger.error(f"Session start alias error: {e}")
+        return JSONResponse(status_code=500, content={"success": False, "error": str(e)})
+
+
+@app.post("/api/v1/voice/text-to-speech")
+async def text_to_speech_legacy(request: TTSRequest):
+    """Legacy alias for /api/v1/voice/tts used by earlier frontend code."""
+    try:
+        from app.core.models_client import ModelsServiceClient  # local import to avoid circular
+        client = ModelsServiceClient()
+        result = await client.text_to_speech(
+            text=request.text,
+            language=request.language,
+            voice=request.voice,
+            model_preference=request.model_preference
+        )
+        if not result.success:
+            return JSONResponse(status_code=500, content={"success": False, "error": result.error})
+        # Stream audio identical to main route behavior
+        return StreamingResponse(
+            io.BytesIO(result.audio_data),
+            media_type=result.content_type,
+            headers={
+                "Content-Disposition": "attachment; filename=synthesized.wav",
+                "X-Model-Used": result.model_used,
+                "X-Sample-Rate": str(result.sample_rate),
+                "X-Duration": str(result.duration),
+                "X-Legacy-Alias": "true"
+            }
+        )
+    except Exception as e:
+        logger.error(f"Legacy TTS alias error: {e}")
+        return JSONResponse(status_code=500, content={"success": False, "error": str(e)})
+
+
 # Make components available to routes
 def get_components():
     """Get initialized components"""

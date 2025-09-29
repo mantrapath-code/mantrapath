@@ -4,6 +4,7 @@ API Documentation Service for frontend engineers
 
 import asyncio
 import httpx
+import os
 from typing import Dict, Any, List, Optional
 from datetime import datetime, timezone
 
@@ -19,7 +20,7 @@ class APIDocumentationService:
         # Service endpoints for documentation discovery
         self.services = {
             "voice_service": {
-                "url": "http://localhost:8011",
+                "url": os.getenv("VOICE_SERVICE_URL", "http://voice-service:8011"),
                 "name": "Voice Service",
                 "description": "Speech-to-text and text-to-speech capabilities",
                 "endpoints": [
@@ -68,7 +69,7 @@ class APIDocumentationService:
                 ]
             },
             "community_service": {
-                "url": "http://localhost:8012",
+                "url": os.getenv("COMMUNITY_SERVICE_URL", "http://community-service:8006"),
                 "name": "Community Service",
                 "description": "Social features and community management",
                 "endpoints": [
@@ -118,7 +119,7 @@ class APIDocumentationService:
                 ]
             },
             "ml_service": {
-                "url": "http://localhost:8013",
+                "url": os.getenv("ML_SERVICE_URL", "http://ml-service:8008"),
                 "name": "ML Service",
                 "description": "Machine learning and AI model management",
                 "endpoints": [
@@ -165,7 +166,7 @@ class APIDocumentationService:
                 ]
             },
             "models_service": {
-                "url": "http://localhost:8085",
+                "url": os.getenv("MODELS_SERVICE_URL", "http://models-service:8080"),
                 "name": "Models Service",
                 "description": "AI model training and deployment management",
                 "endpoints": [
@@ -211,7 +212,7 @@ class APIDocumentationService:
                 ]
             },
             "auth_service": {
-                "url": "http://localhost:8001",
+                "url": os.getenv("AUTH_SERVICE_URL", "http://auth-service:8001"),
                 "name": "Authentication Service",
                 "description": "User authentication and authorization",
                 "endpoints": [

@@ -2,7 +2,12 @@ FROM python:3.11-slim
 
 WORKDIR /app
 
-# Copy service-specific requirements first
+# Install minimal system dependencies
+RUN apt-get update && apt-get install -y \
+    curl \
+    && rm -rf /var/lib/apt/lists/*
+
+# Copy minimal requirements
 COPY services/chatbot_service/requirements.txt /app/requirements.txt
 RUN pip install --no-cache-dir -r requirements.txt
 
@@ -16,6 +21,10 @@ COPY services/chatbot_service /app/
 ENV PYTHONPATH=/app
 
 EXPOSE 8004
+
+# Health check
+HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
+    CMD curl -f http://chatbot-service:8004/health || exit 1
 
 # Production chatbot service
 CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8004"]

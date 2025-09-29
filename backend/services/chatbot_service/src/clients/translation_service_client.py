@@ -40,7 +40,7 @@ class TranslationServiceClient:
     
     def __init__(self):
         import os
-        self.translation_service_url = os.getenv("TRANSLATION_SERVICE_URL", "http://translation-service:8005")
+    self.translation_service_url = os.getenv("TRANSLATION_SERVICE_URL", "http://translation-service:8010")
         self.timeout = int(os.getenv("TRANSLATION_SERVICE_TIMEOUT", "30"))
         self.max_retries = int(os.getenv("TRANSLATION_SERVICE_MAX_RETRIES", "3"))
         self.default_language = os.getenv("TRANSLATION_DEFAULT_LANGUAGE", "en")

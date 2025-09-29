@@ -104,9 +104,10 @@ class ResponseGenerator:
             
             # Step 3: Generate mood-aware response
             mood_response = await self.mood_responder.generate_mood_aware_response(
-                user_message, 
-                service_context.mood_context, 
-                conversation_history
+                user_message,
+                service_context.mood_context,
+                conversation_history,
+                user_id=user_id,
             )
             
             # Step 4: Enhance response with conversation context

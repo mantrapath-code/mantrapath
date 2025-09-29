@@ -24,7 +24,7 @@
 |---------|-------------|--------|
 | 🎭 **Enhanced Mood Tracking** | 10-point mood tracking with energy, stress, sleep analytics | ✅ Production |
 | 🧠 **AI Crisis Prediction** | 87.3% accuracy ML-powered mental health risk assessment | ✅ Production |
-| 🤖 **Context-Aware Chatbot** | OpenAI GPT integration with full user context and crisis support | ✅ Production |
+| 🤖 **Context-Aware Chatbot** | Self-hosted conversational models with full user context and crisis support | ✅ Production |
 | 📝 **Smart Journaling** | Sentiment analysis with mood correlation and pattern recognition | ✅ Production |
 | 👥 **Community Platform** | Forums, discussions, peer support with AI content moderation | ✅ Production |
 | 🎤 **Voice Commands** | Multilingual voice processing with 17+ language support | ✅ Production |
@@ -88,7 +88,7 @@ cd mantrapath
 cp backend/.env.example backend/.env
 cp frontend/.env.example frontend/.env
 
-# Edit .env files with your configuration (OpenAI API key, etc.)
+# Edit .env files with your configuration (external AI keys no longer required)
 ```
 
 ### 2. Quick Start Options
@@ -252,7 +252,7 @@ nltk==3.8.1                # Natural language processing
 transformers==4.35.2       # Advanced NLP models
 
 # AI & Integration
-openai==1.3.7              # OpenAI GPT integration
+# (Removed) openai==1.3.7   # No longer required
 websockets==12.0           # WebSocket support
 ```
 
@@ -1144,7 +1144,7 @@ const usePrivateIdentity = () => {
 - ✅ **Node.js 18+** (for frontend development)
 - ✅ **Git** (for version control)
 - ⚠️ **Python 3.11+** (optional, for local backend development)
-- ⚠️ **OpenAI API Key** (optional, enhances AI chatbot capabilities)
+# (Removed) OpenAI API Key requirement
 
 #### **Quick Start Commands**
 ```bash
@@ -1377,7 +1377,7 @@ ufw deny 8001:8014/tcp            # Block direct service access
 DATABASE_URL=postgresql://username:password@db-host:5432/mantrapath
 REDIS_URL=redis://username:password@redis-host:6379
 JWT_SECRET_KEY=your-256-bit-secret-key
-OPENAI_API_KEY=your-openai-api-key
+# OPENAI_API_KEY removed (self-hosted models)
 ENVIRONMENT=production
 DEBUG=false
 CORS_ORIGINS=https://your-domain.com

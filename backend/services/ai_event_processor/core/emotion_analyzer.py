@@ -5,8 +5,17 @@ from datetime import datetime, timezone
 import os
 
 import structlog
-import torch
-from transformers import pipeline, AutoTokenizer, AutoModelForSequenceClassification
+# Optional heavy deps: make import safe for minimal builds
+try:
+    import torch  # type: ignore
+    from transformers import pipeline, AutoTokenizer, AutoModelForSequenceClassification  # type: ignore
+    _TRANSFORMERS_AVAILABLE = True
+except Exception:
+    torch = None  # type: ignore
+    pipeline = None  # type: ignore
+    AutoTokenizer = None  # type: ignore
+    AutoModelForSequenceClassification = None  # type: ignore
+    _TRANSFORMERS_AVAILABLE = False
 from langdetect import detect
 import numpy as np
 
@@ -49,6 +58,11 @@ class EmotionAnalyzer:
         """Initialize emotion analysis models"""
         try:
             logger.info("Starting Emotion Analyzer")
+            # Initialize Models Service client (non-fatal if unavailable)
+            try:
+                await self.models_service_client.initialize()
+            except Exception as e:
+                logger.warning(f"Models Service client init failed: {e}")
             
             # Load primary English emotion model
             await self._load_primary_models()
@@ -72,9 +86,12 @@ class EmotionAnalyzer:
             self.models.clear()
             self.tokenizers.clear()
             
-            # Clear GPU memory if using CUDA
-            if torch.cuda.is_available():
-                torch.cuda.empty_cache()
+            # Clear GPU memory if using CUDA (only if torch available)
+            try:
+                if _TRANSFORMERS_AVAILABLE and torch is not None and torch.cuda.is_available():  # type: ignore
+                    torch.cuda.empty_cache()  # type: ignore
+            except Exception:
+                pass
             
             self.is_initialized = False
             logger.info("Emotion Analyzer stopped")
@@ -84,7 +101,7 @@ class EmotionAnalyzer:
     
     async def _load_primary_models(self):
         """Load primary emotion analysis models only if needed as fallback"""
-        if not self.use_models_service or not self.models_service_client:
+        if (not self.use_models_service or not self.models_service_client) and _TRANSFORMERS_AVAILABLE:
             try:
                 logger.info("Loading local emotion models as fallback")
                 
@@ -92,7 +109,7 @@ class EmotionAnalyzer:
                 self.models['en_emotion'] = pipeline(
                     "text-classification",
                     model="j-hartmann/emotion-english-distilroberta-base",
-                    device=0 if torch.cuda.is_available() else -1,
+                    device=0 if (torch is not None and torch.cuda.is_available()) else -1,
                     truncation=True,
                     max_length=512
                 )
@@ -101,7 +118,7 @@ class EmotionAnalyzer:
                 self.models['sentiment'] = pipeline(
                     "sentiment-analysis",
                     model="cardiffnlp/twitter-roberta-base-sentiment-latest",
-                    device=0 if torch.cuda.is_available() else -1,
+                    device=0 if (torch is not None and torch.cuda.is_available()) else -1,
                     truncation=True,
                     max_length=512
                 )
@@ -113,18 +130,28 @@ class EmotionAnalyzer:
                 logger.error("Error loading primary models", error=str(e))
                 self.local_models_available = False
                 raise
+        elif not _TRANSFORMERS_AVAILABLE:
+            logger.info("Transformers/torch not available; skipping local model loading")
+            self.local_models_available = False
         else:
             logger.info("Using Models Service - skipping local model loading")
             self.local_models_available = False
     
     async def _load_multilingual_models(self):
         """Load multilingual emotion models"""
+        # If using models service, skip local multilingual model load
+        if self.use_models_service:
+            logger.info("Using Models Service - skipping multilingual model loading")
+            return
+        if not _TRANSFORMERS_AVAILABLE:
+            logger.info("Skipping multilingual model load; transformers not available")
+            return
         try:
             # Load multilingual emotion model
             self.models['multilingual'] = pipeline(
                 "text-classification",
                 model="j-hartmann/emotion-english-distilroberta-base",  # Using English as base
-                device=0 if torch.cuda.is_available() else -1,
+                device=0 if (torch is not None and torch.cuda.is_available()) else -1,
                 truncation=True,
                 max_length=512
             )
@@ -236,18 +263,12 @@ class EmotionAnalyzer:
             # Try Models Service first
             if self.use_models_service:
                 try:
-                    sentiment_result = await self.models_service_client.analyze_sentiment(text)
-                    if sentiment_result and sentiment_result.get('score', 0) > 0.1:
-                        # Convert sentiment to emotion format
-                        emotion_label = self._convert_sentiment_to_emotion(sentiment_result)
-                        confidence = sentiment_result.get('score', 0.5)
-                        
-                        # Create emotion scores dict for compatibility
-                        emotion_scores = {emotion_label: confidence}
-                        for emotion in self.emotion_labels:
-                            if emotion != emotion_label:
-                                emotion_scores[emotion] = 0.1  # Low confidence for other emotions
-                        
+                    ms_result = await self.models_service_client.analyze_emotion(text, language=language, user_id=user_id)
+                    if ms_result:
+                        # Normalize to local structure
+                        emotion_label = ms_result.get('emotion', 'neutral')
+                        confidence = ms_result.get('confidence', 0.5)
+                        emotion_scores = ms_result.get('emotions', {emotion_label: confidence})
                         return {
                             "primary_emotion": emotion_label,
                             "confidence": confidence,
@@ -474,12 +495,12 @@ class EmotionAnalyzer:
             "supported_languages": len(self.supported_languages),
             "models_loaded": len(self.models),
             "is_initialized": self.is_initialized,
-            "gpu_available": torch.cuda.is_available()
+            "gpu_available": bool((_TRANSFORMERS_AVAILABLE and torch is not None and getattr(torch, 'cuda', None) and torch.cuda.is_available()))
         }
     
     def health_check(self) -> bool:
-        """Check if emotion analyzer is healthy"""
-        return self.is_initialized and len(self.models) > 0
+        """Check if emotion analyzer is healthy (initialized is sufficient when using Models Service)"""
+        return bool(self.is_initialized)
     
     async def analyze_batch(
         self, 

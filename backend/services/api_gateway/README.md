@@ -1,583 +1,447 @@
-# MantraPath API Gateway
+# MantraPath API Gateway Service
 
-> 🚪 **High-performance, secure API gateway with intelligent routing, rate limiting, and comprehensive authentication for the MantraPath ecosystem**
+## 🧭 Overview
+The **API Gateway** is the unified entry point for all MantraPath backend services. It provides intelligent request routing, load balancing, service discovery, resiliency (rate limiting + circuit breaker), WebSocket proxying, and an extensible AI-enhanced middleware layer (voice routing, cultural context, AI context injection, performance hooks).
 
-[![Build Status](https://img.shields.io/badge/build-passing-brightgreen)](https://github.com/ssharmasachin/mantrapath)
-[![Python Version](https://img.shields.io/badge/python-3.11+-blue)](https://python.org)
-[![FastAPI](https://img.shields.io/badge/FastAPI-0.104+-green)](https://fastapi.tiangolo.com)
-[![License](https://img.shields.io/badge/license-MIT-blue)](LICENSE)
-[![Uptime](https://img.shields.io/badge/uptime-99.9%25-brightgreen)](./docs/MONITORING.md)
-
-## 📖 Project Overview
-
-The MantraPath API Gateway serves as the central entry point for all MantraPath services, providing intelligent routing, authentication, rate limiting, and monitoring. Built with FastAPI, it offers enterprise-grade performance and security while maintaining simplicity and developer-friendly features.
-
-### ✨ Key Features
-
-- **🔀 Intelligent Routing**: Dynamic service discovery and load balancing with health checks
-- **🔐 Comprehensive Authentication**: JWT, OAuth2, API keys, and multi-factor authentication
-- **⚡ Rate Limiting**: Configurable per-user, per-endpoint, and global rate limiting
-- **🛡️ Security Middleware**: CORS, CSRF protection, request validation, and security headers
-- **📊 Real-time Monitoring**: Metrics collection, logging, and health monitoring
-- **🚀 High Performance**: Async processing with connection pooling and caching
-- **🔧 DevOps Ready**: Docker support, Kubernetes deployment, and CI/CD integration
-- **📈 Auto-scaling**: Dynamic scaling based on traffic patterns and resource usage
-
-## 🚀 Getting Started
-
-### Prerequisites
-
-Before you begin, ensure you have the following installed:
-
-- **Python 3.11+** ([Download](https://python.org/downloads/))
-- **PostgreSQL 13+** ([Download](https://postgresql.org/download/))
-- **Redis 6+** ([Download](https://redis.io/download))
-- **Docker** (optional, for containerized deployment)
-
-**Additional Requirements:**
-- **Consul** (for service discovery, optional)
-- **Prometheus** (for metrics collection, optional)
-- **Jaeger** (for distributed tracing, optional)
-
-### Installation
-
-1. **Clone the repository**
-   ```bash
-   git clone https://github.com/ssharmasachin/mantrapath.git
-   cd mantrapath/backend/services/api_gateway
-   ```
-
-2. **Create and activate virtual environment**
-   ```bash
-   python3 -m venv venv
-   source venv/bin/activate  # On Windows: venv\Scripts\activate
-   ```
-
-3. **Install dependencies**
-   ```bash
-   pip install -r requirements.txt
-   ```
-
-4. **Install development dependencies** (optional)
-   ```bash
-   pip install -r requirements-dev.txt
-   ```
-
-### Configuration
-
-1. **Create environment configuration**
-   ```bash
-   cp .env.example .env
-   ```
-
-2. **Edit the `.env` file with your configuration:**
-   ```bash
-   # Service Configuration
-   API_GATEWAY_PORT=8000
-   API_GATEWAY_HOST=0.0.0.0
-   ENVIRONMENT=development
-
-   # Database
-   DATABASE_URL=postgresql://username:password@localhost/mantrapath
-
-   # Authentication
-   JWT_SECRET_KEY=your-super-secret-jwt-key
-   JWT_ALGORITHM=HS256
-   JWT_ACCESS_TOKEN_EXPIRE_MINUTES=30
-
-   # Redis (for caching and rate limiting)
-   REDIS_URL=redis://localhost:6379
-
-   # Service Registry
-   SERVICE_DISCOVERY_ENABLED=true
-   CONSUL_HOST=localhost
-   CONSUL_PORT=8500
-
-   # Rate Limiting
-   RATE_LIMIT_ENABLED=true
-   DEFAULT_RATE_LIMIT=1000  # requests per minute
-   BURST_RATE_LIMIT=100     # requests per second
-
-   # Monitoring
-   PROMETHEUS_ENABLED=true
-   JAEGER_ENABLED=false
-   LOG_LEVEL=INFO
-   ```
-
-3. **Set up the database**
-   ```bash
-   # Run database migrations
-   alembic upgrade head
-   ```
-
-4. **Configure service endpoints**
-   ```bash
-   # Edit config/services.yaml
-   cp config/services.yaml.example config/services.yaml
-   ```
-
-### Running the Project
-
-**Development Mode:**
-```bash
-# Start the gateway with auto-reload
-./scripts/start-dev.sh
-```
-
-**Production Mode:**
-```bash
-# Start with Uvicorn
-uvicorn main:app --host 0.0.0.0 --port 8000 --workers 4
-```
-
-**Using Docker:**
-```bash
-# Build and run
-docker build -t mantrapath-api-gateway .
-docker run -p 8000:8000 --env-file .env mantrapath-api-gateway
-```
-
-**Using Docker Compose:**
-```bash
-# Start entire development stack
-docker-compose up
-```
-
-**Expected Output:**
-```
-🚪 Starting MantraPath API Gateway...
-📋 Loading service configurations...
-🔍 Service discovery enabled: true
-🔐 Authentication modules loaded: JWT, OAuth2
-⚡ Rate limiting enabled: 1000 req/min
-📊 Monitoring enabled: Prometheus, Health checks
-INFO:     Started server process [12345]
-INFO:     Waiting for application startup.
-INFO:     Application startup complete.
-INFO:     Uvicorn running on http://0.0.0.0:8000
-```
-
-## 💡 Usage and Examples
-
-### Core Functionality
-
-The API Gateway provides a unified interface for all MantraPath services:
-
-- **🔀 Request Routing**: Intelligent routing to appropriate microservices
-- **🔐 Authentication**: Centralized authentication and authorization
-- **⚡ Rate Limiting**: Protects services from abuse and overload
-- **📊 Monitoring**: Real-time metrics and health monitoring
-- **🛡️ Security**: Comprehensive security middleware and validation
-
-### Code Examples
-
-**Authenticate and get access token:**
-```bash
-curl -X POST "http://localhost:8000/auth/login" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "username": "user@example.com",
-    "password": "your-password"
-  }'
-```
-
-**Response:**
-```json
-{
-  "access_token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
-  "token_type": "bearer",
-  "expires_in": 1800,
-  "refresh_token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
-  "user": {
-    "id": "123e4567-e89b-12d3-a456-426614174000",
-    "email": "user@example.com",
-    "roles": ["user"]
-  }
-}
-```
-
-**Make authenticated API request:**
-```bash
-curl -X GET "http://localhost:8000/api/v1/media/" \
-  -H "Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
-```
-
-**Upload file through gateway:**
-```bash
-curl -X POST "http://localhost:8000/api/v1/media/upload" \
-  -H "Authorization: Bearer your-token" \
-  -F "file=@image.jpg" \
-  -F "alt_text=Beautiful sunset"
-```
-
-**Check gateway health:**
-```bash
-curl "http://localhost:8000/health"
-```
-
-**Response:**
-```json
-{
-  "status": "healthy",
-  "timestamp": "2025-08-14T10:00:00Z",
-  "version": "1.0.0",
-  "services": {
-    "media_service": {
-      "status": "healthy",
-      "response_time": 0.05,
-      "last_check": "2025-08-14T10:00:00Z"
-    },
-    "user_service": {
-      "status": "healthy", 
-      "response_time": 0.03,
-      "last_check": "2025-08-14T10:00:00Z"
-    }
-  },
-  "database": "connected",
-  "redis": "connected",
-  "rate_limits": {
-    "requests_per_minute": 1000,
-    "current_usage": 45
-  }
-}
-```
-
-### Service Routing Examples
-
-**Route to media service:**
-```bash
-# This request is automatically routed to the media service
-GET /api/v1/media/{id} → http://media-service:8009/api/v1/media/{id}
-```
-
-**Route to user service:**
-```bash
-# This request is automatically routed to the user service  
-GET /api/v1/users/{id} → http://user-service:8001/api/v1/users/{id}
-```
-
-**Route to chatbot service:**
-```bash
-# This request is automatically routed to the chatbot service
-POST /api/v1/chat/message → http://chatbot-service:8002/api/v1/chat/message
-```
-
-### Live Demo
-
-🌐 **Interactive API Documentation**: When running locally, visit:
-- **Swagger UI**: http://localhost:8000/docs
-- **ReDoc**: http://localhost:8000/redoc
-- **Admin Dashboard**: http://localhost:8000/admin (for service management)
-
-### Tutorials
-
-For detailed tutorials and advanced usage examples, see:
-- 📚 [API Gateway Documentation](./docs/API_GATEWAY.md)
-- 🔐 [Authentication Guide](./docs/AUTHENTICATION.md)
-- ⚡ [Rate Limiting Configuration](./docs/RATE_LIMITING.md)
-- 🔀 [Service Routing Setup](./docs/SERVICE_ROUTING.md)
-- 📊 [Monitoring and Metrics](./docs/MONITORING.md)
-
-## 🏗️ Advanced Topics
-
-### Architecture
-
-The API Gateway follows a modern microservices gateway pattern:
-
-```
-┌─────────────────────────────────────────────────────────────────┐
-│                           Clients                                │
-│  Web Apps • Mobile Apps • Third-party APIs • Internal Services  │
-└─────────────────────┬───────────────────────────────────────────┘
-                      │
-                      ▼
-┌─────────────────────────────────────────────────────────────────┐
-│                      API Gateway                                 │
-│                                                                 │
-│  ┌─────────────┐  ┌─────────────┐  ┌─────────────┐            │
-│  │    Auth     │  │Rate Limiting│  │  Monitoring │            │
-│  │ Middleware  │  │ Middleware  │  │ Middleware  │            │
-│  └─────────────┘  └─────────────┘  └─────────────┘            │
-│                                                                 │
-│  ┌─────────────┐  ┌─────────────┐  ┌─────────────┐            │
-│  │   Request   │  │   Service   │  │  Response   │            │
-│  │ Validation  │  │   Router    │  │ Transform   │            │
-│  └─────────────┘  └─────────────┘  └─────────────┘            │
-└─────────────────────┬───────────────────────────────────────────┘
-                      │
-          ┌───────────┼───────────┐
-          ▼           ▼           ▼
-┌─────────────┐ ┌─────────────┐ ┌─────────────┐
-│Media Service│ │User Service │ │Chat Service │
-│   :8009     │ │    :8001    │ │    :8002    │
-└─────────────┘ └─────────────┘ └─────────────┘
-```
-
-**Technology Stack:**
-- **Gateway**: FastAPI with async middleware pipeline
-- **Authentication**: JWT with Redis session management
-- **Rate Limiting**: Token bucket algorithm with Redis backend
-- **Service Discovery**: Consul integration with health checks
-- **Monitoring**: Prometheus metrics, structured logging
-- **Load Balancing**: Round-robin with health-based failover
-
-### API Reference
-
-📖 **Full API Documentation**: [./docs/API_GATEWAY.md](./docs/API_GATEWAY.md)
-
-**Quick Reference:**
-
-| Endpoint | Method | Description |
-|----------|--------|-------------|
-| `/auth/login` | POST | User authentication |
-| `/auth/refresh` | POST | Refresh access token |
-| `/auth/logout` | POST | User logout |
-| `/api/v1/*` | ANY | Route to microservices |
-| `/health` | GET | Gateway health check |
-| `/metrics` | GET | Prometheus metrics |
-| `/admin/services` | GET | Service management |
-
-**Rate Limiting Headers:**
-```
-X-RateLimit-Limit: 1000
-X-RateLimit-Remaining: 999
-X-RateLimit-Reset: 1629123456
-X-RateLimit-Retry-After: 60
-```
-
-### Testing
-
-Run the complete test suite:
-
-```bash
-# Run all tests
-pytest
-
-# Run with coverage
-pytest --cov=. --cov-report=html
-
-# Run specific test categories
-pytest tests/unit/
-pytest tests/integration/
-pytest tests/load/
-
-# Run security tests
-pytest tests/security/ -v
-
-# Test rate limiting
-pytest tests/rate_limiting/ -v
-```
-
-**Load Testing:**
-```bash
-# Test gateway performance
-k6 run tests/load/gateway_load_test.js
-
-# Test authentication endpoints
-k6 run tests/load/auth_load_test.js
-```
-
-**Test Results:**
-```
-======================== test session starts ========================
-collected 89 items
-
-tests/unit/test_auth.py ..................... [ 23%]
-tests/unit/test_routing.py .................. [ 44%]
-tests/unit/test_rate_limiting.py ............ [ 67%]
-tests/integration/test_gateway_flow.py ...... [ 89%]
-tests/security/test_security.py ............ [100%]
-
-======================== 89 passed in 32.1s ========================
-
-Load Testing Results:
-- Average Response Time: 45ms
-- 95th Percentile: 120ms
-- Throughput: 2,500 requests/second
-- Error Rate: 0.01%
-```
-
-## 🤝 Contribution Guidelines
-
-We welcome contributions to make the API Gateway even better! The gateway is designed to be highly extensible and configurable.
-
-### How to Contribute
-
-1. **🐛 Report Bugs**: Use GitHub Issues for bug reports with reproduction steps
-2. **💡 Request Features**: Submit feature requests with clear use cases
-3. **🔧 Submit Code**: Fork, create feature branch, and submit pull requests
-4. **📖 Improve Documentation**: Help improve guides, tutorials, and API docs
-5. **🧪 Write Tests**: Contribute tests for new features and edge cases
-
-### Development Setup
-
-1. **Fork and clone the repository**
-   ```bash
-   git clone https://github.com/your-username/mantrapath.git
-   cd mantrapath/backend/services/api_gateway
-   ```
-
-2. **Set up development environment**
-   ```bash
-   # Create virtual environment
-   python3 -m venv venv
-   source venv/bin/activate
-
-   # Install all dependencies
-   pip install -r requirements.txt
-   pip install -r requirements-dev.txt
-
-   # Set up pre-commit hooks
-   pre-commit install
-   ```
-
-3. **Start development services**
-   ```bash
-   # Start Redis and PostgreSQL
-   docker-compose up -d redis postgres
-
-   # Start the gateway in development mode
-   ./scripts/start-dev.sh
-   ```
-
-4. **Create a feature branch**
-   ```bash
-   git checkout -b feature/amazing-gateway-feature
-   ```
-
-5. **Make your changes and test**
-   ```bash
-   # Run tests
-   pytest
-
-   # Run linting
-   flake8 .
-   mypy .
-
-   # Test the gateway
-   curl http://localhost:8000/health
-   ```
-
-6. **Submit a pull request**
-   - Write clear commit messages
-   - Include tests for new functionality
-   - Update documentation as needed
-   - Ensure all CI checks pass
-
-### Development Tools
-
-**Code Quality:**
-```bash
-# Format code
-black .
-
-# Sort imports
-isort .
-
-# Type checking
-mypy .
-
-# Security scanning
-bandit -r .
-
-# Dependency scanning
-safety check
-```
-
-**Gateway Testing:**
-```bash
-# Test authentication flow
-python scripts/test_auth_flow.py
-
-# Test service routing
-python scripts/test_routing.py
-
-# Test rate limiting
-python scripts/test_rate_limits.py
-```
-
-### Middleware Development
-
-**Creating Custom Middleware:**
-```python
-# middleware/custom_middleware.py
-from fastapi import Request, Response
-from fastapi.middleware.base import BaseHTTPMiddleware
-
-class CustomMiddleware(BaseHTTPMiddleware):
-    async def dispatch(self, request: Request, call_next):
-        # Pre-process request
-        start_time = time.time()
-        
-        # Call next middleware/endpoint
-        response = await call_next(request)
-        
-        # Post-process response
-        process_time = time.time() - start_time
-        response.headers["X-Process-Time"] = str(process_time)
-        
-        return response
-```
-
-### Code of Conduct
-
-This project adheres to a [Code of Conduct](../../CODE_OF_CONDUCT.md). By participating, you are expected to uphold this code. Please report unacceptable behavior to the project maintainers.
-
-## 📄 License
-
-This project is licensed under the MIT License - see the [LICENSE](../../LICENSE) file for details.
-
-## 🙏 Acknowledgments
-
-- **FastAPI** - For the excellent async web framework and middleware support
-- **Starlette** - For the robust ASGI foundation
-- **Redis** - For high-performance caching and rate limiting
-- **Consul** - For service discovery and configuration management
-- **Prometheus** - For comprehensive metrics collection
-- **The MantraPath Team** - For continuous feedback and real-world testing
-
-## 📞 Support
-
-- **Documentation**: [./docs/](./docs/)
-- **Issues**: [GitHub Issues](https://github.com/ssharmasachin/mantrapath/issues)
-- **Discussions**: [GitHub Discussions](https://github.com/ssharmasachin/mantrapath/discussions)
-- **Security**: security@mantrapath.com
-- **General**: support@mantrapath.com
-
-## 📊 Performance Metrics
-
-**Production Performance (Last 30 days):**
-- **Uptime**: 99.97%
-- **Average Response Time**: 42ms
-- **Peak Throughput**: 5,000 requests/second
-- **Error Rate**: 0.008%
-- **P95 Response Time**: 125ms
-- **Authentication Success Rate**: 99.95%
-
-## 🛡️ Security
-
-**Security Features:**
-- Rate limiting with configurable policies
-- JWT token validation and refresh
-- CORS protection with configurable origins
-- Request/response validation
-- Security headers (HSTS, CSP, etc.)
-- IP allowlisting/blocklisting
-- Request size limits
-- SQL injection protection
-
-**Security Auditing:**
-- Regular dependency scanning
-- OWASP compliance checks
-- Penetration testing
-- Security headers validation
+> Version: 1.0.0 (Gateway Core) • Architecture Generation: V3 Enhanced Stack • File Generated: 2025-09-26
 
 ---
 
-<div align="center">
+## 📂 Directory & File Structure
 
-**The Gateway to MantraPath Universe 🌟**
+```
+api_gateway/
+├── Dockerfile                # Container build definition
+├── requirements.txt          # Python dependencies
+├── .env                      # Environment configuration (loaded via pydantic-settings)
+├── README.md                 # (This document)
+├── config/                   # (Reserved for future externalized configs)
+├── config_old/               # Legacy / deprecated configuration artifacts
+├── scripts/                  # Helper scripts (startup, maintenance)
+├── src/
+│   ├── main.py               # FastAPI application & all route definitions
+│   ├── core/
+│   │   ├── config.py         # Gateway & service configuration models
+│   │   └── models.py         # Core dataclasses (ServiceInstance, RouteRule, ProxyRequest ...)
+│   ├── registry/
+│   │   └── service_registry.py  # Service discovery & periodic health checking
+│   ├── routing/
+│   │   ├── router.py         # Rule-based path → service resolution
+│   │   ├── load_balancer.py  # Strategy factory (round‑robin, weighted, etc.)
+│   │   └── proxy.py          # Outbound request proxy (httpx pooled clients)
+│   ├── middleware/
+│   │   ├── rate_limiter.py   # Token bucket implementation
+│   │   ├── circuit_breaker.py# Service circuit state machine
+│   │   ├── performance.py    # Request timing + metrics hook (stub impl)
+│   │   ├── ai_context.py     # AI context injection (placeholder)
+│   │   ├── cultural_context.py # Cultural adaptation (placeholder)
+│   │   └── voice_routing.py  # Voice request detection & enrichment
+│   ├── services/
+│   │   ├── voice_router.py   # Advanced voice command routing engine
+│   │   ├── context_manager.py# AI context manager (stub)
+│   │   ├── cultural_manager.py # Cultural adaptation manager (stub)
+│   │   └── websocket_manager.py # WebSocket session registry & proxy support
+│   ├── models/
+│   │   └── voice_models.py   # Pydantic + dataclasses for voice intents & routing
+│   ├── health/
+│   │   └── health_checker.py # Aggregated & detailed health logic
+│   ├── utils/
+│   │   ├── cache_manager.py  # In‑memory cache abstraction (stub)
+│   │   ├── connection_pool.py# httpx AsyncClient pool helper
+│   │   ├── language_detector.py # Multi‑method language detection utility
+│   │   └── performance_monitor.py # Metrics recorder (stub)
+│   ├── shared_integration.py # (Potential future cross‑service helpers)
+│   └── grpc/ & grpc_services/ # (Reserved for future gRPC exposure)
+├── tests/                    # Pytest suites (routing, voice, registry, limiter, etc.)
+└── venv/                     # Local virtual environment (not for production)
+```
 
-[🌟 Star this project](https://github.com/ssharmasachin/mantrapath) | [🍴 Fork it](https://github.com/ssharmasachin/mantrapath/fork) | [📖 Read the docs](./docs/API_GATEWAY.md)
+### Notable Design Characteristics
+| Concern | Implementation | Notes |
+|---------|----------------|-------|
+| Service Discovery | `ServiceRegistry` | Static bootstrap + periodic health polling |
+| Routing | `RequestRouter` (regex rules) | Supports prefix stripping & auth flags |
+| Load Balancing | Strategy factory | Default: Round‑Robin (others selectable) |
+| Resilience | RateLimiter + CircuitBreaker | In‑memory; no distributed state yet |
+| Observability | Health + (stub) metrics | Metrics recording mostly placeholders |
+| Voice Intelligence | `VoiceCommandRouter` + middleware | Intent classification: rule / keyword based |
+| Context Enrichment | AI & Cultural middleware | Currently stubbed (returns None) |
+| WebSockets | Proxy + manager | Notification & Assistance passthrough |
+| Security | Optional HTTP Bearer per endpoint | JWT verification via shared `shared.auth` |
 
-</div>
+---
+
+## ⚙️ Service Functionality Overview
+The gateway centralizes:
+1. Public & authenticated HTTP ingress
+2. Intelligent routing to domain microservices (auth, profile, mood, chatbot, content, media, translation, AI event/context, memory, proactive assistance, models, voice)
+3. Voice-aware request transformation (intent detection, parameter extraction, fallback routing)
+4. Resilience controls (rate limiting + circuit breaker around target services)
+5. Health aggregation & service status surfacing
+6. WebSocket proxy bridging front-end → downstream real-time services
+7. Foundational hooks for AI & cultural adaptation (extensible future capability)
+
+Fits Into Platform:
+- Sits in front of all user-facing backend HTTP APIs
+- Simplifies frontend integration: consistent headers, observability, error semantics
+- Enables future cross-cutting concerns (auth hardening, quota, tracing, adaptive personalization)
+
+---
+
+## 🌐 Routing & API Endpoints
+
+### 1. Core Health & Operational
+| Endpoint | Method | Purpose | Auth | Notes |
+|----------|--------|---------|------|-------|
+| `/health` | GET | Basic heartbeat | No | Lightweight status |
+| `/api/health` | GET | Alias basic heartbeat | No | For frontend uniformity |
+| `/health/live` | GET | Liveness probe | No | Container / K8s |
+| `/health/ready` | GET | Readiness (checks essential services) | No | Uses `HealthChecker.readiness_check()` |
+| `/api/health/detailed` | GET | Full subsystem + registered services | No | Aggregates feature health |
+| `/api/health/voice` | GET | Voice subsystem | No | From `VoiceCommandRouter` |
+| `/api/health/ai-context` | GET | AI context manager | No | Stub returns healthy if initialized |
+| `/api/health/cultural` | GET | Cultural subsystem | No | Stub |
+| `/api/services/status` | GET | Raw registry instance listing | Yes | JWT required |
+
+### 2. Metrics (Current Mostly Placeholders)
+| Endpoint | Method | Purpose | Auth |
+|----------|--------|---------|------|
+| `/api/metrics` | GET | Global metrics snapshot | Yes |
+| `/api/metrics/voice` | GET | Voice command metrics | Yes |
+| `/api/metrics/cultural` | GET | Cultural adaptation metrics | Yes |
+| `/api/metrics/services` | GET | Per-service performance | Yes |
+| `/api/v3/metrics/performance` | GET | V3 consolidated metrics | No (design choice) |
+| `/api/v3/metrics/voice` | GET | Voice metrics mirror | No |
+| `/api/v3/metrics/cultural` | GET | Cultural metrics mirror | No |
+
+### 3. Voice Processing
+| Endpoint | Method | Body Model | Description |
+|----------|--------|-----------|-------------|
+| `/api/voice/command` | POST | `VoiceCommand` | Classify & route structured voice command; proxies downstream |
+| `/api/voice/stream` | WS | - | Bi-directional streaming (echo prototype) |
+
+### 4. WebSocket Proxies
+| Endpoint | Type | Proxies To | Purpose |
+|----------|------|-----------|---------|
+| `/api/notifications/ws/{user_id}` | WS | `ws://notification-service:8007/ws/{user_id}` | Notifications channel |
+| `/api/assistance/ws/{user_id}` | WS | `ws://proactive-assistance-engine:8018/ws/{user_id}` | Proactive assistance stream |
+
+### 5. Generic Service Proxying
+1. Pattern-based dispatch via `RequestRouter`
+2. Fallback catch-all route `/{path:path}` (excludes `/api/v3/*` special cases)
+3. Explicit enhanced proxy endpoint: `/api/service/{service_name}/{path:path}` (skips router)
+
+Example Flow:
+```
+Client -> /api/v1/mood/entries -> Gateway
+	Router matches ^/api/v1/mood/.* -> service_name=mood
+	RateLimiter -> CircuitBreaker check
+	ServiceRegistry -> healthy instances
+	LoadBalancer -> select instance
+	RequestProxy -> forward (httpx pooled)
+	Response -> optional cultural adaptation -> return
+```
+
+### 6. Representative Routing Rules (from `router.py`)
+| Path Regex | Service | Strip Prefix | Auth | Notes |
+|------------|---------|--------------|------|-------|
+| `^/auth/.*` | auth | Yes | No | Direct auth ops |
+| `^/api/auth/.*` | auth | Custom | No | Supports both prefixed forms |
+| `^/api/v1/mood/.*` | mood | No | Yes | Mood API v1 |
+| `^/api/chatbot/.*` | chatbot | No | Yes | Higher timeout (AI) |
+| `^/voice/.*` | voice | Yes | Yes | Voice backend forwarding |
+| `^/ai-events/.*` | ai-events | Yes | Yes | AI Event Processor passthrough |
+| `^/ai-context/.*` | ai-context | Yes | Yes | AI Context Store |
+| `^/media/.*` | media | Yes | Yes | Upload / retrieval |
+| `^/api/v1/translation/.*` | translation | No | Yes | Translation endpoints |
+
+---
+
+## 🔌 Ports & Configuration
+
+### Primary Runtime Ports
+| Purpose | Default | Source |
+|---------|---------|--------|
+| HTTP Gateway | 8000 | `GatewayConfig.port` |
+| Metrics (future) | 9090 | `GatewayConfig.metrics_port` |
+| WebSocket (logical) | 8001 | `ServiceConfig.websocket_port` (not separately bound yet) |
+
+### Key Environment Variables (`.env` via pydantic-settings)  
+Prefix: `GATEWAY_` (gateway) / `SERVICE_` (service URLs)
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `GATEWAY_ENVIRONMENT` | development | Environment enum |
+| `GATEWAY_PORT` | 8000 | HTTP bind port |
+| `GATEWAY_RATE_LIMIT_REQUESTS_PER_MINUTE` | 100 | Global rate cap |
+| `GATEWAY_RATE_LIMIT_BURST` | 20 | Burst tokens |
+| `GATEWAY_CIRCUIT_BREAKER_FAILURE_THRESHOLD` | 5 | Failures before open |
+| `GATEWAY_CIRCUIT_BREAKER_RECOVERY_TIMEOUT` | 60 | Seconds to half-open |
+| `SERVICE_AUTH_SERVICE_PORT` | 8001 | Downstream auth service port |
+| `SERVICE_AI_EVENT_PROCESSOR_PORT` | 8014 | AI event processor |
+| `SERVICE_MODELS_SERVICE_INTERNAL_PORT` | 8080 | Models service internal |
+| ... | ... | Similar for all microservices |
+
+> NOTE: All service base URLs: `http://<service-name>:<PORT>` are composed inside `ServiceConfig` with overridable env ports.
+
+---
+
+## 🔄 Request Processing Flow
+
+### A. Generic HTTP Request (non-voice)
+```
+Client → FastAPI → PerformanceMiddleware (start timer)
+	 → CulturalContextMiddleware (stub returns None)
+	 → AIContextMiddleware (stub returns None)
+	 → VoiceRoutingMiddleware (skips if not voice)
+	 → Catch-all route handler (main.py)
+			 • Find RouteRule (regex)
+			 • RateLimiter check (ip/user)
+			 • (Optional) Auth -> JWT verify -> user context
+			 • AI Context fetch (stub)
+			 • Cultural Context fetch (stub)
+			 • CircuitBreaker.is_call_allowed
+			 • ServiceRegistry.get_healthy_services
+			 • LoadBalancer.select_instance
+			 • RequestProxy.proxy_request (connection pool)
+			 • circuit_breaker.record_success/failure
+			 • performance_monitor.record_service_request (stub)
+			 • Optional cultural response adaptation
+	 ← Response headers enriched (X-Request-ID, X-Processing-Time)
+Return to client
+```
+
+### B. Voice Command (`/api/voice/command`)
+```
+POST voice command JSON
+ → Validate (Pydantic VoiceCommand)
+ → Language detection if missing
+ → VoiceCommandRouter.route_command
+		 • Intent -> rule match / fallback classification
+		 • Parameter extraction (keywords, time, mood)
+		 • Build target service + endpoint + headers
+ → Construct ProxyRequest with enriched headers
+ → RequestProxy → Downstream
+ → Cultural adaptation (stub)
+ → Build VoiceResponse (routing info + processing time)
+```
+
+### C. WebSocket Proxy (Notifications / Assistance)
+```
+Client WS → Gateway WS endpoint
+	→ Establish upstream WS to service
+	→ Bi-directional async gather copy loops
+	→ Close & cleanup in WebSocketManager
+```
+
+---
+
+## 🔗 Service Communication
+
+| Channel | Direction | Type | Mechanism | Notes |
+|---------|-----------|------|-----------|-------|
+| HTTP Proxy | Gateway → Services | Request/Response | httpx pooled clients | Core routing |
+| Health Polling | Gateway → Services | Periodic GET | Async tasks | Updates ServiceInstance.status |
+| WebSocket Proxy | Client ↔ Gateway ↔ Service | Duplex | `websockets` + FastAPI WS | Notification & assistance streams |
+| Headers Enrichment | Gateway → Services | Metadata | X-Request-ID, X-AI-Context, X-Cultural-Context | Extensible |
+
+Currently **no** direct event bus inside gateway; eventing handled by other services.
+
+---
+
+## 🧠 Design Documentation
+
+### High-Level Architecture
+```
+					+--------------+       +------------------+
+Client -> |  API Gateway | ----> |  Auth / Profile  |
+					| (FastAPI)    | ----> |  Mood / Chatbot  |
+					|              | ----> |  Content / Media |
+					|  Middleware  | ----> |  AI (Events/Ctx) |
+					+--------------+ ----> |  Translation ... |
+								 |                +------------------+
+								 |-- WebSocket Proxy --> Real-time Services
+```
+
+### Component Interactions
+| Component | Depends On | Responsibility |
+|-----------|------------|----------------|
+| `main.py` | All below | Composition root, endpoints |
+| `ServiceRegistry` | httpx, config | Track service health/URLs |
+| `RequestRouter` | Regex rules | Map path+method → service |
+| `LoadBalancer` | Registry output | Instance selection strategy |
+| `RequestProxy` | Connection pool | Execute outbound request |
+| `CircuitBreaker` | Proxy outcomes | Failure isolation |
+| `RateLimiter` | In-memory window | Abuse prevention |
+| `VoiceCommandRouter` | Voice models | Intent routing decisions |
+| `LanguageDetector` | langdetect/TextBlob | Language inference |
+
+### Key Design Decisions & Rationale
+| Decision | Rationale | Trade-offs |
+|----------|-----------|-----------|
+| In-memory registry | Simplicity & fast startup | No dynamic discovery, manual scaling complexity |
+| Regex routing rules | Flexible matching | Harder to validate statically; order matters |
+| httpx pooled clients | Connection reuse & perf | Need lifecycle management (handled in pool) |
+| Custom circuit breaker | Lightweight internal control | Lacks advanced metrics / half-open testing nuance |
+| Stubs for AI/Cultural | Enable interface-first development | Missing real enrichment today |
+| Voice routing engine inside gateway | Reduce latency for intent dispatch | Couples gateway to domain semantics (may move out later) |
+
+---
+
+## 🚧 Incomplete Implementations & TODOs
+
+| Area | Status | Gaps |
+|------|--------|------|
+| Performance Metrics | Stub | `PerformanceMonitor.record_*` are no-ops |
+| AI Context Injection | Stub | `AIContextManager.get_context` always returns None |
+| Cultural Adaptation | Stub | No transformation of requests/responses |
+| Distributed Rate Limiting | Missing | Needs Redis/token bucket sync |
+| Dynamic Service Discovery | Static only | No registration/deregistration at runtime (beyond manual) |
+| Load Metrics Based Balancing | Not implemented | Only static strategies |
+| Circuit Breaker Telemetry | Minimal | No persistence, no alerting hooks |
+| Voice Intent ML Models | Keyword/rule based | Upgrade path to ML/NLP embeddings |
+| Observability | Basic | No tracing, structured metrics, Prometheus export |
+| Security Hardening | Basic JWT | No mTLS, no scope/role enforcement per route |
+| WebSocket Robustness | Basic proxy | No backpressure, heartbeat, reconnection strategy |
+
+Inline TODOs (selected):
+```
+# TODO (voice_router): load from external config / DB
+# TODO (performance_monitor): implement aggregation & retention
+# TODO (context_manager / cultural_manager): integrate real AI services
+# TODO: Add tracing (OpenTelemetry) & correlation propagation
+# TODO: Implement distributed cache & rate limits via Redis or NATS KV
+```
+
+---
+
+## 🌟 Future Development Plans
+
+### Phase 1 (Short Term)
+| Goal | Description |
+|------|-------------|
+| Real Metrics | Implement counters/histograms; expose `/metrics` Prometheus format |
+| Redis Backing | Move rate limiting + cache + circuit state to Redis |
+| Tracing | OpenTelemetry spans (ingress → proxy) |
+| Config Externalization | YAML/DB-driven routing rules with hot-reload |
+
+### Phase 2 (Mid Term)
+| Goal | Description |
+|------|-------------|
+| Dynamic Discovery | Service self-registration (heartbeat-based) |
+| Adaptive LB | Latency & success-rate weighted balancing |
+| Policy Layer | Per-route auth scopes, quota plans, feature flags |
+| AI/Cultural Enrichment | Real context retrieval from AI Context Store + cultural adaptation algorithms |
+| Voice ML Upgrade | Intent classification via embeddings / transformer model |
+
+### Phase 3 (Long Term)
+| Goal | Description |
+|------|-------------|
+| Multi-Protocol | gRPC proxying & HTTP/2 multiplexing |
+| Edge Decomposition | Split voice & AI enrichment into sidecar/edge workers |
+| Intelligent Throttling | Adaptive rate limits based on risk & user tier |
+| Zero-Downtime Reload | Hot rule & config swap without connection drops |
+| Observability Suite | Unified dashboards (latency SLOs, error budgets) |
+
+---
+
+## 🧪 Testing Strategy
+| Test File | Focus |
+|-----------|-------|
+| `test_gateway.py` | Health, readiness, error handling |
+| `test_registry.py` | Service registration & health cycle |
+| `test_load_balancer.py` | Strategy correctness |
+| `test_rate_limiter_comprehensive.py` | Rate limiting edge cases |
+| `test_voice_router_comprehensive.py` | Voice routing rules & parameters |
+| `test_voice_integration.py` | End-to-end voice request path |
+| `test_middleware_comprehensive.py` | Middleware chaining & headers |
+
+Run All:
+```bash
+pytest -v
+```
+
+---
+
+## 🔐 Security Model (Current State)
+1. Optional Bearer token on most proxy endpoints. Router rules can mark `auth_required=False`.
+2. JWT validation delegated to shared library (`shared.auth.verify_token`).
+3. No per-scope / RBAC enforcement yet (future Policy Layer).
+4. No rate limit differentiation (user tier vs anonymous) yet—straight token bucket.
+
+Hardening Roadmap:
+- Add per-route scopes & claims mapping
+- Integrate WAF / basic request anomaly detection
+- Enable mTLS for inter-service traffic (service mesh or sidecar)
+
+---
+
+## 🧵 Error Handling & Status Mapping
+| Gateway Condition | Upstream Condition | Returned Status |
+|-------------------|--------------------|-----------------|
+| Rate limit exceeded | - | 429 |
+| Circuit open | Service tripped | 503 |
+| No healthy instances | All failing | 503 |
+| Upstream timeout | httpx timeout | 504 |
+| Connect error | DNS / network | 503 |
+| Unexpected upstream error | 5xx generic | 502 |
+| Unknown route | No rule matched | 404 |
+
+Body Examples (error):
+```json
+{"error": "Bad Gateway", "message": "Service error occurred"}
+```
+
+---
+
+## 🚀 Deployment Notes
+Minimal (dev) run:
+```bash
+export GATEWAY_PORT=8000
+python -m uvicorn src.main:app --reload --port $GATEWAY_PORT
+```
+
+Docker (example):
+```bash
+docker build -t mantrapath/api-gateway:latest .
+docker run -p 8000:8000 --env-file .env mantrapath/api-gateway:latest
+```
+
+Kubernetes Readiness/Liveness already aligned: `/health/ready`, `/health/live`.
+
+---
+
+## 📏 Non-Functional Targets (Proposed)
+| Dimension | Target |
+|-----------|--------|
+| P99 Latency (proxy passthrough) | < 250ms (intra-cluster) |
+| Availability | 99.9% |
+| Error Budget | 0.1% 5xx over 30d |
+| Cold Start Time | < 3s |
+| Config Reload | < 1s (future) |
+
+---
+
+## 🗂️ Glossary
+| Term | Definition |
+|------|------------|
+| RouteRule | Declarative mapping regex → service metadata |
+| ServiceInstance | Represents a concrete backend instance with health state |
+| Circuit Breaker | Prevents repeated calls to failing dependencies |
+| Voice Routing | Intent-driven dynamic service dispatch for speech-derived commands |
+| AI Context | Planned enrichment describing user, session, emotional or behavioral state |
+| Cultural Context | Planned localized adaptation profile for personalization |
+
+---
+
+## ✅ Summary
+The API Gateway establishes a solid, extensible foundation: stable routing, resilience primitives, health visibility, and the scaffolding for advanced AI-driven personalization & voice-first interaction. Main immediate improvement vectors are production-grade metrics, distributed resilience state, and fully realized AI/cultural enrichment.
+
+---
+
+## 📄 License
+Part of the MantraPath platform – see root project LICENSE.
+
+---
+_Generated: 2025-09-26 • Maintainers: Platform / AI Infrastructure Teams_
+

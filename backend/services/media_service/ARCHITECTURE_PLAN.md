@@ -344,7 +344,7 @@ MAX_FILE_SIZES = {
 
 ```env
 # Media Service Configuration
-MEDIA_SERVICE_PORT=8009
+MEDIA_SERVICE_PORT=8021
 MEDIA_SERVICE_HOST=0.0.0.0
 
 # Database

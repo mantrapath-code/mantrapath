@@ -1,22 +1,25 @@
 """
-MantraPath API Gateway V3 Enhanced - Main Application
-Voice-enabled, AI-powered, culturally-aware service orchestration platform
+MantraPath API Gateway - Main Application
+Self-hosted, AI-powered service orchestration platform
 """
 
 import uuid
 import logging
 import time
+import asyncio
+import json
 from typing import Dict, Any, Optional
 from contextlib import asynccontextmanager
+from datetime import datetime
 
 from fastapi import FastAPI, Request, HTTPException, Depends, WebSocket, WebSocketDisconnect, status
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse, Response
+from fastapi.responses import JSONResponse, Response, StreamingResponse
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from fastapi.middleware.trustedhost import TrustedHostMiddleware
 from fastapi.middleware.gzip import GZipMiddleware
 
-# V3 Enhanced Imports
+# Core Imports
 from src.core.config import gateway_config, service_config
 from src.core.models import ProxyRequest, HTTPMethod
 from src.registry import ServiceRegistry
@@ -24,7 +27,7 @@ from src.routing import RequestRouter, LoadBalancerFactory, RequestProxy
 from src.middleware import RateLimiter, get_client_identifier, CircuitBreaker
 from src.health import HealthChecker
 
-# V3 Enhanced Components
+# Enhanced Components
 from src.middleware.voice_routing import VoiceRoutingMiddleware
 from src.middleware.ai_context import AIContextMiddleware
 from src.middleware.cultural_context import CulturalContextMiddleware
@@ -66,7 +69,7 @@ structlog.configure(
 
 logger = structlog.get_logger(__name__)
 
-# Global V3 Enhanced Components
+# Global Components
 service_registry = ServiceRegistry()
 request_router = RequestRouter()
 load_balancer = LoadBalancerFactory.create_load_balancer(gateway_config.load_balancing_strategy)
@@ -75,7 +78,7 @@ rate_limiter = RateLimiter()
 circuit_breaker = CircuitBreaker()
 health_checker = HealthChecker(service_registry, circuit_breaker)
 
-# V3 Enhanced Services
+# Enhanced Services
 voice_router = VoiceCommandRouter()
 ai_context_manager = AIContextManager()
 cultural_manager = CulturalContextManager()
@@ -90,9 +93,9 @@ security = HTTPBearer(auto_error=False)
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    """Application lifespan manager for V3 Enhanced Gateway"""
+    """Application lifespan manager"""
     # Startup
-    logger.info("🚀 Starting MantraPath API Gateway V3 Enhanced...")
+    logger.info("🚀 Starting MantraPath API Gateway...")
     
     # Initialize core services
     await service_registry.start()
@@ -105,28 +108,28 @@ async def lifespan(app: FastAPI):
     await cultural_manager.initialize()
     await websocket_manager.initialize()
     
-    logger.info("✅ API Gateway V3 Enhanced started successfully")
+    logger.info("✅ API Gateway started successfully")
     
     yield
     
     # Shutdown
-    logger.info("🛑 Shutting down API Gateway V3 Enhanced...")
+    logger.info("🛑 Shutting down API Gateway...")
     await websocket_manager.shutdown()
     await performance_monitor.stop()
     await cache_manager.close()
     await service_registry.stop()
-    logger.info("✅ API Gateway V3 Enhanced shutdown complete")
+    logger.info("✅ API Gateway shutdown complete")
 
 
-# Create FastAPI application with V3 enhancements
+# Create FastAPI application with clean architecture
 app = FastAPI(
-    title="MantraPath API Gateway V3 Enhanced",
-    description="Voice-enabled, AI-powered, culturally-aware service orchestration platform",
-    version="3.0.0",
+    title="MantraPath API Gateway",
+    description="Self-hosted, AI-powered service orchestration platform",
+    version="1.0.0",
     lifespan=lifespan,
-    docs_url="/api/v3/docs",
-    redoc_url="/api/v3/redoc",
-    openapi_url="/api/v3/openapi.json"
+    docs_url="/docs",
+    redoc_url="/redoc",
+    openapi_url="/openapi.json"
 )
 
 # Add V3 Enhanced Middleware Stack
@@ -148,14 +151,14 @@ app.add_middleware(AIContextMiddleware, ai_context_manager=ai_context_manager)
 app.add_middleware(VoiceRoutingMiddleware, voice_router=voice_router)
 
 
-# V3 Enhanced Health Endpoints
-@app.get("/api/v3/health/enhanced")
-async def enhanced_health_check():
-    """Enhanced health check with V3 features"""
+# Clean Health Endpoints
+@app.get("/api/health/detailed")
+async def detailed_health_check():
+    """Detailed health check with all subsystems"""
     try:
         return {
             "status": "healthy",
-            "version": "3.0.0-enhanced",
+            "version": "1.0.0",
             "timestamp": time.time(),
             "features": {
                 "voice_routing": await voice_router.health_check(),
@@ -167,12 +170,12 @@ async def enhanced_health_check():
             "services": await health_checker.gateway_health()
         }
     except Exception as e:
-        logger.error("Enhanced health check failed", error=str(e))
+        logger.error("Detailed health check failed", error=str(e))
         return JSONResponse(
             status_code=500,
             content={
                 "status": "unhealthy",
-                "version": "3.0.0-enhanced",
+                "version": "1.0.0",
                 "timestamp": time.time(),
                 "error": str(e)
             }
@@ -214,36 +217,94 @@ async def readiness_check():
     return await health_checker.readiness_check()
 
 
-@app.get("/api/health")
-async def api_health_check():
-    """API health check endpoint for frontend compatibility"""
-    return {
-        "status": "healthy",
-        "service": "api-gateway",
-        "timestamp": time.time()
-    }
-
-
-@app.get("/api/v3/health/voice")
+@app.get("/api/health/voice")
 async def voice_system_health():
     """Voice system specific health check"""
     return await voice_router.detailed_health_check()
 
 
-@app.get("/api/v3/health/ai-context")
+@app.get("/api/health/ai-context")
 async def ai_context_health():
     """AI context system health check"""
     return await ai_context_manager.detailed_health_check()
 
 
-@app.get("/api/v3/health/cultural")
+@app.get("/api/health/cultural")
 async def cultural_system_health():
     """Cultural intelligence system health check"""
     return await cultural_manager.detailed_health_check()
 
 
-# V3 Enhanced Voice Command Endpoints
-@app.post("/api/v3/voice/command", response_model=VoiceResponse)
+@app.get("/api/services/status")
+async def services_status(
+    credentials: HTTPAuthorizationCredentials = Depends(security)
+):
+    """Return current status of all registered backend services (auth required).
+
+    Provides a snapshot of each service instance including:
+      - name
+      - url
+      - status (HEALTHY / UNHEALTHY)
+      - last_health_check timestamp (ISO) if available
+      - failure_count
+    """
+    # Authenticate user
+    user_context = await authenticate_user(credentials)
+    
+    services = service_registry.get_all_services()
+    result = {}
+    for name, instances in services.items():
+        result[name] = []
+        for inst in instances:
+            result[name].append({
+                "id": inst.id,
+                "url": inst.url,
+                "status": inst.status.value if hasattr(inst.status, 'value') else str(inst.status),
+                "last_health_check": inst.last_health_check.isoformat() if getattr(inst, 'last_health_check', None) else None,
+                "failure_count": getattr(inst, 'failure_count', None),
+            })
+    return {"timestamp": time.time(), "services": result}
+
+
+# Observability Endpoints
+@app.get("/api/metrics")
+async def metrics(
+    credentials: HTTPAuthorizationCredentials = Depends(security)
+):
+    """Get system metrics (auth required)"""
+    user_context = await authenticate_user(credentials)
+    return await performance_monitor.get_metrics()
+
+
+@app.get("/api/metrics/voice")
+async def voice_metrics(
+    credentials: HTTPAuthorizationCredentials = Depends(security)
+):
+    """Get voice command processing metrics (auth required)"""
+    user_context = await authenticate_user(credentials)
+    return await performance_monitor.get_voice_metrics()
+
+
+@app.get("/api/metrics/cultural")
+async def cultural_metrics(
+    credentials: HTTPAuthorizationCredentials = Depends(security)
+):
+    """Get cultural adaptation metrics (auth required)"""
+    user_context = await authenticate_user(credentials)
+    return await performance_monitor.get_cultural_metrics()
+
+
+@app.get("/api/metrics/services")
+async def service_metrics(
+    credentials: HTTPAuthorizationCredentials = Depends(security)
+):
+    """Get per-service performance metrics (auth required)"""
+    user_context = await authenticate_user(credentials)
+    return await health_checker.get_service_metrics()
+
+
+# Voice Command Endpoints
+@app.post("/api/voice/command", response_model=VoiceResponse)
 async def process_voice_command(
     voice_command: VoiceCommand,
     request: Request,
@@ -363,8 +424,8 @@ async def process_voice_command(
         )
 
 
-# V3 Enhanced WebSocket Endpoint for Real-time Voice Streaming
-@app.websocket("/api/v3/voice/stream")
+# WebSocket Endpoints
+@app.websocket("/api/voice/stream")
 async def voice_streaming_websocket(websocket: WebSocket):
     """WebSocket endpoint for real-time voice streaming"""
     connection_id = str(uuid.uuid4())
@@ -393,31 +454,96 @@ async def voice_streaming_websocket(websocket: WebSocket):
 async def notifications_websocket_proxy(websocket: WebSocket, user_id: str):
     """Proxy WebSocket connections to notification service"""
     import websockets
+    from websockets.exceptions import ConnectionClosed, InvalidURI
     
     try:
         await websocket.accept()
         logger.info("Notifications WebSocket proxy connection established", user_id=user_id)
         
-        # Connect to notification service
+        # Connect to notification service with retry logic
         backend_url = f"ws://notification-service:8007/ws/{user_id}"
-        async with websockets.connect(backend_url) as backend_ws:
-            # Proxy messages between frontend and backend
-            async def forward_to_backend():
-                async for message in websocket.iter_text():
-                    await backend_ws.send(message)
-            
-            async def forward_to_frontend():
-                async for message in backend_ws:
-                    await websocket.send_text(message)
-            
-            # Run both forwarding tasks concurrently
-            await asyncio.gather(forward_to_backend(), forward_to_frontend())
+        max_retries = 3
+        retry_count = 0
+        
+        while retry_count < max_retries:
+            try:
+                async with websockets.connect(
+                    backend_url,
+                    ping_interval=30,
+                    ping_timeout=10,
+                    close_timeout=10
+                ) as backend_ws:
+                    logger.info(f"Connected to backend WebSocket: {backend_url}")
+                    
+                    # Proxy messages between frontend and backend
+                    async def forward_to_backend():
+                        try:
+                            async for message in websocket.iter_text():
+                                if backend_ws.closed:
+                                    break
+                                await backend_ws.send(message)
+                        except WebSocketDisconnect:
+                            logger.info("Frontend WebSocket disconnected")
+                        except Exception as e:
+                            logger.error(f"Error forwarding to backend: {e}")
+                    
+                    async def forward_to_frontend():
+                        try:
+                            async for message in backend_ws:
+                                if websocket.client_state.name != 'CONNECTED':
+                                    break
+                                await websocket.send_text(message)
+                        except ConnectionClosed:
+                            logger.info("Backend WebSocket connection closed")
+                        except Exception as e:
+                            logger.error(f"Error forwarding to frontend: {e}")
+                    
+                    # Run both forwarding tasks concurrently
+                    await asyncio.gather(
+                        forward_to_backend(), 
+                        forward_to_frontend(),
+                        return_exceptions=True
+                    )
+                    break  # Successful connection, break retry loop
+                    
+            except (ConnectionClosed, InvalidURI, OSError) as e:
+                retry_count += 1
+                logger.warning(f"Backend WebSocket connection failed (attempt {retry_count}/{max_retries}): {e}")
+                if retry_count < max_retries:
+                    await asyncio.sleep(2 ** retry_count)  # Exponential backoff
+                else:
+                    # Send error message to frontend
+                    try:
+                        await websocket.send_text(json.dumps({
+                            "type": "error",
+                            "message": "Backend service unavailable",
+                            "timestamp": datetime.now().isoformat()
+                        }))
+                    except:
+                        pass
+                    raise e
             
     except WebSocketDisconnect:
         logger.info("Notifications WebSocket proxy connection closed", user_id=user_id)
     except Exception as e:
         logger.exception("Notifications WebSocket proxy error", user_id=user_id, error=str(e))
+        # Try to send error message to client
+        try:
+            await websocket.send_text(json.dumps({
+                "type": "error",
+                "message": "WebSocket connection error",
+                "error": str(e),
+                "timestamp": datetime.now().isoformat()
+            }))
+        except:
+            pass
 
+
+# Generic WebSocket endpoint for backward compatibility
+@app.websocket("/ws/{user_id}")
+async def generic_websocket_proxy(websocket: WebSocket, user_id: str):
+    """Generic WebSocket endpoint - routes to notification service for compatibility"""
+    return await notifications_websocket_proxy(websocket, user_id)
 
 @app.websocket("/api/assistance/ws/{user_id}")
 async def assistance_websocket_proxy(websocket: WebSocket, user_id: str):
@@ -468,18 +594,18 @@ async def cultural_metrics():
     return await performance_monitor.get_cultural_metrics()
 
 
-# Enhanced Service Proxy with V3 Features
+# Service Proxy Endpoints  
 @app.api_route(
-    "/api/v3/service/{service_name}/{path:path}",
+    "/api/service/{service_name}/{path:path}",
     methods=["GET", "POST", "PUT", "DELETE", "PATCH", "HEAD", "OPTIONS"]
 )
-async def enhanced_service_proxy(
+async def service_proxy(
     service_name: str,
     path: str,
     request: Request,
     credentials: Optional[HTTPAuthorizationCredentials] = Depends(security)
 ):
-    """Enhanced service proxy with V3 features"""
+    """Proxy requests to backend services"""
     request_id = str(uuid.uuid4())
     start_time = time.time()
     
@@ -532,9 +658,19 @@ async def enhanced_service_proxy(
         if not circuit_breaker.is_call_allowed(service_name):
             raise HTTPException(status_code=503, detail=f"Service {service_name} is currently unavailable")
         
-        # Proxy request
+        # Get healthy service instances
+        healthy_instances = service_registry.get_healthy_services(service_name)
+        if not healthy_instances:
+            raise HTTPException(status_code=503, detail=f"No healthy instances of service {service_name}")
+        
+        # Use load balancer to select an instance
+        target_service = load_balancer.select_instance(healthy_instances)
+        if not target_service:
+            raise HTTPException(status_code=503, detail=f"Failed to select service instance for {service_name}")
+        
+        # Proxy request to target service
         try:
-            response = await request_proxy.proxy_request(enhanced_request, service_name)
+            response = await request_proxy.proxy_request(enhanced_request, target_service)
             circuit_breaker.record_success(service_name)
             
             # Apply cultural adaptation to response
@@ -554,7 +690,22 @@ async def enhanced_service_proxy(
                 success=True
             )
             
-            return enhanced_response
+            # If underlying proxy response is streaming, convert to StreamingResponse
+            if getattr(enhanced_response, 'streaming', False):
+                return StreamingResponse(
+                    enhanced_response.stream_iterator,
+                    status_code=enhanced_response.status_code,
+                    headers=enhanced_response.headers,
+                    media_type=enhanced_response.headers.get("Content-Type")
+                )
+            
+            # Convert ProxyResponse to FastAPI Response
+            return Response(
+                content=enhanced_response.body,
+                status_code=enhanced_response.status_code,
+                headers=enhanced_response.headers,
+                media_type=enhanced_response.headers.get("Content-Type")
+            )
             
         except Exception as e:
             circuit_breaker.record_failure(service_name)
@@ -650,6 +801,18 @@ async def route_request(
     )
     
     try:
+        # Skip WebSocket paths - let them be handled by WebSocket endpoints
+        if path.startswith("ws/") or "/ws/" in path:
+            # Check if this is a WebSocket upgrade request
+            upgrade_header = request.headers.get("upgrade", "").lower()
+            connection_header = request.headers.get("connection", "").lower()
+            if upgrade_header == "websocket" and "upgrade" in connection_header:
+                # This should be handled by WebSocket endpoints
+                raise HTTPException(status_code=404, detail="WebSocket endpoint not found")
+            else:
+                # Regular HTTP request to ws path, continue processing
+                pass
+        
         # Skip V3 API routes that are handled elsewhere
         if path.startswith("api/v3"):
             raise HTTPException(status_code=404, detail="Not found")
@@ -706,6 +869,16 @@ async def route_request(
             if not target_path.startswith('/'):
                 target_path = f"/{target_path}"
         
+        # Handle special case for analytics path rewriting: /api/v1/analytics/* -> /api/v1/mood/analytics/*
+        elif route.path_pattern == r"^/api/v1/analytics/.*" and target_path.startswith("/api/v1/analytics"):
+            # Rewrite /api/v1/analytics/* to /api/v1/mood/analytics/* for mood service
+            remaining_path = target_path[len("/api/v1/analytics"):]
+            target_path = f"/api/v1/mood/analytics{remaining_path}"
+        
+        # Handle special case for mood entries: /api/v1/mood/ -> /api/v1/mood/entries
+        elif route.service_name == "mood" and target_path == "/api/v1/mood/":
+            target_path = "/api/v1/mood/entries"
+        
         # Use existing X-Request-ID if provided, otherwise use generated one
         actual_request_id = request.headers.get("X-Request-ID") or request_id
         
@@ -760,7 +933,21 @@ async def route_request(
                 success=True
             )
             
-            return enhanced_response
+            if getattr(enhanced_response, 'streaming', False):
+                return StreamingResponse(
+                    enhanced_response.stream_iterator,
+                    status_code=enhanced_response.status_code,
+                    headers=enhanced_response.headers,
+                    media_type=enhanced_response.headers.get("Content-Type")
+                )
+            
+            # Convert ProxyResponse to FastAPI Response
+            return Response(
+                content=enhanced_response.body,
+                status_code=enhanced_response.status_code,
+                headers=enhanced_response.headers,
+                media_type=enhanced_response.headers.get("Content-Type")
+            )
             
         except Exception as e:
             circuit_breaker.record_failure(service_name)

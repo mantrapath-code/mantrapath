@@ -3,6 +3,11 @@
 @import './styles/theme.css';
 @import './index.css';
 @import "tw-animate-css";
+
+/* Theme transition styles */
+.theme-changing * {
+  transition: background-color 0.3s ease, border-color 0.3s ease, color 0.3s ease !important;
+}
 /*
   ---break---
 */

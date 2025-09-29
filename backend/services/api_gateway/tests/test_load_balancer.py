@@ -26,21 +26,21 @@ class TestLoadBalancers:
             ServiceInstance(
                 id="service-1",
                 name="test-service",
-                url="http://localhost:8001",
+                url="http://test-service:8001",
                 weight=1,
                 status=ServiceStatus.HEALTHY
             ),
             ServiceInstance(
                 id="service-2",
                 name="test-service", 
-                url="http://localhost:8002",
+                url="http://test-service:8002",
                 weight=2,
                 status=ServiceStatus.HEALTHY
             ),
             ServiceInstance(
                 id="service-3",
                 name="test-service",
-                url="http://localhost:8003",
+                url="http://test-service:8003",
                 weight=1,
                 status=ServiceStatus.HEALTHY
             )

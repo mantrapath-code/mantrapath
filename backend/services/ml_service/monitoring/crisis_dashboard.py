@@ -5,11 +5,9 @@ Real-time monitoring dashboar        # Redis connection for real-time data
         self.redis_client = None
         if REDIS_AVAILABLE:
             try:
-                # Try Docker service name first, fallback to localhost for development
+                # Use environment variable or default to Docker service name
                 redis_urls = [
-                    os.getenv("REDIS_URL", "redis://redis:6379"),
-                    "redis://redis:6379", 
-                    "redis://localhost:6379"
+                    os.getenv("REDIS_URL", "redis://redis:6379")
                 ]
                 for redis_url in redis_urls:
                     try:
@@ -122,8 +120,8 @@ class CrisisDashboard:
         self.redis_client = None
         if REDIS_AVAILABLE:
             try:
-                # Try Docker service name first, fallback to localhost for development
-                redis_urls = ["redis://redis:6379", "redis://localhost:6379"]
+                # Use environment variable or default to Docker service name
+                redis_urls = [os.getenv("REDIS_URL", "redis://redis:6379")]
                 for redis_url in redis_urls:
                     try:
                         self.redis_client = redis.from_url(redis_url, decode_responses=True)

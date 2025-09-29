@@ -4,9 +4,9 @@ FastAPI-based voice processing service
 """
 import os
 import logging
-from fastapi import FastAPI, UploadFile, File, Form, HTTPException
+from fastapi import FastAPI, UploadFile, File, Form, HTTPException, Body, Depends
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import StreamingResponse
+from fastapi.responses import StreamingResponse, JSONResponse
 from pydantic import BaseModel
 from typing import Optional
 import io
@@ -48,6 +48,13 @@ class ConversationRequest(BaseModel):
     language: str = "auto"
     context: Optional[dict] = None
     user_id: Optional[str] = None
+
+class CreateSessionRequest(BaseModel):
+    """Create session request model"""
+    user_id: Optional[str] = None
+    language: str = "en"
+    preferences: Optional[dict] = None
+    voice_settings: Optional[dict] = None
 
 @app.get("/")
 async def root():
@@ -214,6 +221,88 @@ async def voice_service_status():
                 "error": str(e)
             }
         }
+
+# Simple session management for compatibility
+class SimpleSessionManager:
+    def __init__(self):
+        self.sessions = {}
+        self.counter = 0
+    
+    def create_session(self, user_id=None, language="en", preferences=None):
+        self.counter += 1
+        session_id = f"session_{self.counter}"
+        import time
+        self.sessions[session_id] = {
+            "user_id": user_id,
+            "language": language,
+            "preferences": preferences or {},
+            "status": "active",
+            "created_at": time.time(),
+            "last_activity": time.time()
+        }
+        return session_id
+    
+    def get_session(self, session_id):
+        return self.sessions.get(session_id)
+
+session_manager = SimpleSessionManager()
+
+# Alias endpoints for frontend compatibility
+@app.post("/api/v1/session/start")
+async def start_session_alias(payload: CreateSessionRequest = Body(default=CreateSessionRequest())):
+    """Alias endpoint expected by frontend for session creation"""
+    try:
+        session_id = session_manager.create_session(
+            user_id=payload.user_id,
+            language=payload.language,
+            preferences=payload.preferences
+        )
+        data = session_manager.get_session(session_id)
+        return {
+            "success": True,
+            "session": {
+                "session_id": session_id,
+                "user_id": data.get("user_id"),
+                "language": data.get("language"),
+                "created_at": data.get("created_at"),
+                "last_activity": data.get("last_activity"),
+                "status": data.get("status")
+            }
+        }
+    except Exception as e:
+        logger.error(f"Session start alias error: {e}")
+        return JSONResponse(status_code=500, content={"success": False, "error": str(e)})
+
+@app.post("/api/v1/voice/text-to-speech")
+async def text_to_speech_legacy(request: TextToSpeechRequest):
+    """Legacy alias for /api/v1/voice/tts used by earlier frontend code."""
+    try:
+        result = await models_client.text_to_speech(
+            text=request.text,
+            language=request.language,
+            voice=request.voice,
+            model_preference=request.model_preference
+        )
+        
+        # If we got audio data, return it as streaming response
+        if result.get("success") and result.get("audio_data"):
+            return StreamingResponse(
+                io.BytesIO(result["audio_data"]),
+                media_type=result.get("content_type", "audio/wav"),
+                headers={
+                    "Content-Disposition": "attachment; filename=synthesized.wav",
+                    "X-Sample-Rate": str(result.get("sample_rate", "22050")),
+                    "X-Duration": str(result.get("duration", "0")),
+                    "X-Model-Used": str(result.get("model_used", "unknown")),
+                    "X-Legacy-Alias": "true"
+                }
+            )
+        
+        return result
+        
+    except Exception as e:
+        logger.error(f"TTS legacy alias error: {e}")
+        return JSONResponse(status_code=500, content={"success": False, "error": str(e)})
 
 # TODO: Add voice processing endpoints
 # - POST /stt (Speech to Text)

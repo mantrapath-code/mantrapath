@@ -453,7 +453,7 @@ This comprehensive analysis examines the current implementation state of 6 criti
 
 #### Core Components
 - **Local CPU-based AI Inference** using Microsoft Phi-3 Mini
-- **OpenAI-Compatible API** for seamless integration
+- (Removed) OpenAI-compatible API dependency – internal interfaces only
 - **Memory-Efficient Processing** with threading locks
 - **Production-Ready Error Handling**
 
@@ -471,7 +471,7 @@ This comprehensive analysis examines the current implementation state of 6 criti
    ```python
    @app.post("/v1/chat/completions", response_model=ChatCompletionResponse)
    async def chat_completions(request: ChatCompletionRequest):
-       # OpenAI-compatible chat endpoint
+   # Internal chat endpoint (previous external compatibility removed)
        # Proper message formatting for Phi-3
    ```
 

@@ -73,8 +73,7 @@ class RedisTTLCache(CacheInterface):
             
         # Add default URLs
         redis_urls.extend([
-            "redis://redis:6379",
-            "redis://localhost:6379"
+            "redis://redis:6379"
         ])
         
         # Try to connect to Redis

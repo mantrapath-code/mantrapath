@@ -2,6 +2,7 @@
 Configuration settings for the Deployment API Service
 """
 
+import os
 from typing import List
 from pydantic_settings import BaseSettings
 
@@ -27,18 +28,18 @@ class Settings(BaseSettings):
     FRONTEND_ENGINEER_LIMIT: int = 500  # requests per minute
     
     # CORS
-    ALLOWED_ORIGINS: List[str] = [
-        "http://localhost:3000",
-        "http://localhost:3001",
-        "http://127.0.0.1:3000",
-        "http://127.0.0.1:3001"
-    ]
-    ALLOWED_HOSTS: List[str] = ["localhost", "127.0.0.1", "0.0.0.0", "api-gateway", "deployment-api"]
+    ALLOWED_ORIGINS: List[str] = (
+        [os.getenv("FRONTEND_URL", "http://frontend:5173")] + 
+        (os.getenv("CORS_ADDITIONAL_ORIGINS", "").split(",") if os.getenv("CORS_ADDITIONAL_ORIGINS") else [])
+    )
+    ALLOWED_HOSTS: List[str] = ["127.0.0.1", "0.0.0.0", "api-gateway", "deployment-api"] + (
+        os.getenv("ALLOWED_HOSTS_ADDITIONAL", "").split(",") if os.getenv("ALLOWED_HOSTS_ADDITIONAL") else []
+    )
     
     # Service Discovery
     API_GATEWAY_URL: str = "http://api-gateway:8000"
     VOICE_SERVICE_URL: str = "http://voice-service:8011"
-    MODELS_SERVICE_URL: str = "http://models-service:8085"
+    MODELS_SERVICE_URL: str = "http://models-service:8080"
     COMMUNITY_SERVICE_URL: str = "http://community-service:8006"
     ML_SERVICE_URL: str = "http://ml-service:8008"
     

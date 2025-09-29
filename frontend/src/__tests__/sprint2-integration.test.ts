@@ -25,13 +25,13 @@ describe('Sprint 2 Backend Integration', () => {
 
   describe('Backend Service Endpoints', () => {
     test('should have correct API Gateway endpoints', () => {
-      expect(BACKEND_API_ENDPOINTS.gateway.base).toBe('http://localhost:8000')
+      expect(BACKEND_API_ENDPOINTS.gateway.base).toBe('http://api-gateway:8000')
       expect(BACKEND_API_ENDPOINTS.gateway.health).toBe('/api/v3/health/enhanced')
       expect(BACKEND_API_ENDPOINTS.gateway.voiceCommand).toBe('/api/v3/voice/command')
     })
 
     test('should have correct Proactive Assistance Engine endpoints', () => {
-      expect(BACKEND_API_ENDPOINTS.assistance.base).toBe('http://localhost:8018')
+      expect(BACKEND_API_ENDPOINTS.assistance.base).toBe('http://proactive-assistance-engine:8018')
       expect(BACKEND_API_ENDPOINTS.assistance.evaluate(TEST_USER_ID))
         .toBe(`/api/v1/assistance/evaluate/${TEST_USER_ID}`)
       expect(BACKEND_API_ENDPOINTS.assistance.status(TEST_USER_ID))
@@ -39,13 +39,13 @@ describe('Sprint 2 Backend Integration', () => {
     })
 
     test('should have correct AI Context Store endpoints', () => {
-      expect(BACKEND_API_ENDPOINTS.context.base).toBe('http://localhost:8013')
+      expect(BACKEND_API_ENDPOINTS.context.base).toBe('http://ai-context-store:8013')
       expect(BACKEND_API_ENDPOINTS.context.root).toBe('/')
       expect(BACKEND_API_ENDPOINTS.context.metrics).toBe('/metrics')
     })
 
     test('should have correct Mood Service endpoints', () => {
-      expect(BACKEND_API_ENDPOINTS.mood.base).toBe('http://localhost:8002')
+      expect(BACKEND_API_ENDPOINTS.mood.base).toBe('http://profile-service:8002')
       expect(BACKEND_API_ENDPOINTS.mood.entries).toBe('/api/v1/mood/entries')
       expect(BACKEND_API_ENDPOINTS.mood.patterns).toBe('/api/v1/mood/patterns')
     })
@@ -71,7 +71,7 @@ describe('Sprint 2 Backend Integration', () => {
       const result = await sprint2ApiService.evaluateAssistance(TEST_USER_ID)
 
       expect(fetch).toHaveBeenCalledWith(
-        'http://localhost:8018/api/v1/assistance/evaluate/test-user-sprint2',
+        'http://proactive-assistance-engine:8018/api/v1/assistance/evaluate/test-user-sprint2',
         expect.objectContaining({
           method: 'POST',
           headers: expect.objectContaining({
@@ -99,7 +99,7 @@ describe('Sprint 2 Backend Integration', () => {
       const result = await sprint2ApiService.getAssistanceStatus(TEST_USER_ID)
 
       expect(fetch).toHaveBeenCalledWith(
-        'http://localhost:8018/api/v1/assistance/status/test-user-sprint2',
+        'http://proactive-assistance-engine:8018/api/v1/assistance/status/test-user-sprint2',
         expect.objectContaining({
           headers: expect.objectContaining({
             'Authorization': 'Bearer mock-test-token'
@@ -122,7 +122,7 @@ describe('Sprint 2 Backend Integration', () => {
       const result = await sprint2ApiService.triggerAssistance(TEST_USER_ID, triggerData)
 
       expect(fetch).toHaveBeenCalledWith(
-        'http://localhost:8018/api/v1/assistance/trigger/test-user-sprint2',
+        'http://proactive-assistance-engine:8018/api/v1/assistance/trigger/test-user-sprint2',
         expect.objectContaining({
           method: 'POST',
           body: JSON.stringify(triggerData),
@@ -150,7 +150,7 @@ describe('Sprint 2 Backend Integration', () => {
       const result = await sprint2ApiService.analyzeSentiment('I am feeling great today!')
 
       expect(fetch).toHaveBeenCalledWith(
-        'http://localhost:8018/api/v1/assistance/sentiment-analysis',
+        'http://proactive-assistance-engine:8018/api/v1/assistance/sentiment-analysis',
         expect.objectContaining({
           method: 'POST',
           body: JSON.stringify({ text: 'I am feeling great today!' })
@@ -178,7 +178,7 @@ describe('Sprint 2 Backend Integration', () => {
       const result = await sprint2ApiService.sendVoiceCommand(voiceCommand)
 
       expect(fetch).toHaveBeenCalledWith(
-        'http://localhost:8000/api/v3/voice/command',
+        'http://api-gateway:8000/api/v3/voice/command',
         expect.objectContaining({
           method: 'POST',
           body: JSON.stringify(voiceCommand)
@@ -204,7 +204,7 @@ describe('Sprint 2 Backend Integration', () => {
       const result = await sprint2ApiService.getMoodEntries(TEST_USER_ID, 10)
 
       expect(fetch).toHaveBeenCalledWith(
-        'http://localhost:8002/api/v1/mood/entries?limit=10',
+        'http://profile-service:8002/api/v1/mood/entries?limit=10',
         expect.objectContaining({
           headers: expect.objectContaining({
             'Authorization': 'Bearer mock-test-token'
@@ -227,7 +227,7 @@ describe('Sprint 2 Backend Integration', () => {
       const result = await sprint2ApiService.createMoodEntry(moodData)
 
       expect(fetch).toHaveBeenCalledWith(
-        'http://localhost:8002/api/v1/mood/entries',
+        'http://profile-service:8002/api/v1/mood/entries',
         expect.objectContaining({
           method: 'POST',
           body: JSON.stringify(moodData)

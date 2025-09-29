@@ -8,6 +8,7 @@ import { processApiError } from '../utils/errorHandling'
 import { notificationService } from './notifications'
 import { getAuthToken } from '../utils/auth'
 import { getServiceUrls } from '../config/api-config'
+import { httpRequest } from './httpClient'
 
 // Get environment-aware service URLs
 const serviceUrls = getServiceUrls();
@@ -182,39 +183,28 @@ class ApiService {
     }
 
     const baseUrl = customBaseUrl || this.baseUrl
-    const url = `${baseUrl}${endpoint}`
-    
-    // For FormData uploads, don't include default JSON headers
+    const fullPath = `${baseUrl}${endpoint}`
+
     const isFormData = options.body instanceof FormData
-    const defaultHeaders = isFormData ? {} : this.getHeaders()
-    
-    const config: RequestInit = {
-      ...options,
-      headers: {
-        ...defaultHeaders,
-        ...options.headers,
-      },
+    const headers: HeadersInit = {
+      ...(isFormData ? {} : this.getHeaders()),
+      ...(options.headers || {})
     }
 
     try {
-      const response = await fetch(url, config)
-      return this.handleResponse<T>(response)
-    } catch (error) {
-      console.error('API request failed:', error)
-      
-      if (error instanceof TypeError && error.message.includes('Failed to fetch')) {
-        // Network error - backend might be down
-        console.warn('Network error detected, backend may be unavailable')
+      // Delegate actual HTTP work to unified client (auto token injection if not overridden)
+      return await httpRequest<T>(fullPath, {
+        method: options.method || 'GET',
+        body: options.body as any,
+        headers,
+        // We rely on httpRequest JSON auto parsing; it throws on unexpected statuses
+        expectedStatuses: [200, 201, 202, 204]
+      })
+    } catch (error: any) {
+      if (error.status === 0) {
+        // network-level already handled in wrapper, propagate after flagging
         this.isBackendAvailable = false
-        const networkError: ApiError = {
-          message: 'Unable to connect to MantraPath services',
-          status: 0,
-          details: 'Check your internet connection and ensure backend services are running'
-        }
-        throw networkError
       }
-      
-      // For other errors (auth, validation, etc.), throw the error
       throw error
     }
   }
@@ -307,7 +297,7 @@ class ApiService {
         }>
       }>
       celebration_triggers?: string[]
-    }>>(`/api/v1/mood/?limit=${limit}`)
+    }>>(`/api/v1/mood/entries?limit=${limit}`)
   }
 
   async createMoodEntry(moodData: {
@@ -322,7 +312,7 @@ class ApiService {
     adaptive_responses?: any[]
     environmental_context?: any
   }) {
-    return this.request('/api/v1/mood/', {
+    return this.request('/api/v1/mood/entries', {
       method: 'POST',
       body: JSON.stringify(moodData),
     })
@@ -518,7 +508,7 @@ class ApiService {
         description: string
       }>
       confidence_score: number
-    }>('/api/v1/mood/emotional-weather')
+    }>('/api/v1/mood/analytics/emotional-weather')
   }
 
   async getWeeklyWeather() {
@@ -712,10 +702,9 @@ class ApiService {
       }
     }
     
-    // If no stored user, we need to make sure the user is authenticated
-    // The actual user ID should be extracted from the JWT token on the backend
-    // For now, return empty string and let the backend handle the user identification
-    return ''
+    // If no stored user, return a fallback ID
+    // The backend should extract the actual user ID from the JWT token
+    return 'current-user'
   }
 
   async getMLAnalyticsOverview() {
@@ -878,7 +867,7 @@ class ApiService {
       replies_posted: number
       likes_received: number
       help_score: number
-    }>('/community/user/stats', {}, COMMUNITY_SERVICE_URL)
+    }>('/community/user/stats')
   }
 
   async getUserActivity(limit: number = 10) {
@@ -893,7 +882,7 @@ class ApiService {
         created_at: string
         like_count: number
       }>
-    }>(`/community/user/activity?limit=${limit}`, {}, COMMUNITY_SERVICE_URL)
+    }>(`/community/user/activity?limit=${limit}`)
   }
 
   // Events & Challenges
@@ -1250,126 +1239,7 @@ class ApiService {
         avgMoodScore: 0
       }
     }
-  }  // Chatbot
-  async chatWithBot(message: string, sessionId?: string) {
-    return this.request<{
-      response: string
-      session_id: string
-      message_type: string
-      breathing_exercise?: {
-        name: string
-        description: string
-        steps: Array<{
-          action: string
-          duration: number
-          instruction: string
-        }>
-        cycles: number
-      }
-    }>('/api/chatbot/chat/intelligent', {
-      method: 'POST',
-      body: JSON.stringify({
-        message,
-        session_id: sessionId,
-        user_context_refresh: false
-      }),
-    })
-  }
-
-  // Enhanced chatbot with Action Orchestrator integration
-  async chatWithBotEnhanced(message: string, sessionId?: string, refreshContext?: boolean) {
-    // Determine if we should refresh context based on message content
-    const shouldRefreshContext = refreshContext || 
-      /mood|feeling|emotion|journal|community|track|pattern|trend|wellbeing|wellness|mental health/i.test(message)
-    
-    return this.request<{
-      response: string
-      session_id: string
-      message_type: string
-      tone: string
-      intervention_type: string
-      crisis_detected: boolean
-      confidence_score: number
-      source: string
-      intent?: {
-        intent_type: string
-        confidence: number
-        entities: any[]
-      }
-      orchestration_metadata?: {
-        workflow_id: string
-        execution_time_ms: number
-        services_involved: string[]
-        success_rate: number
-      }
-      suggested_actions?: Array<{
-        action: string
-        label: string
-        description: string
-        confidence: number
-      }>
-      mood_insights?: any
-      cultural_adaptations?: any
-      breathing_exercise?: {
-        name: string
-        description: string
-        steps: Array<{
-          action: string
-          duration: number
-          instruction: string
-        }>
-        cycles: number
-      }
-    }>('/chat/intelligent', {
-      method: 'POST',
-      body: JSON.stringify({
-        message,
-        session_id: sessionId,
-        user_context_refresh: shouldRefreshContext
-      }),
-    })
-  }
-
-  async getChatSessions() {
-    return this.request<Array<{
-      id: string
-      title: string
-      session_type: string
-      is_active: boolean
-      created_at: string
-    }>>('/api/chatbot/chat/sessions')
-  }
-
-  async getChatHistory(sessionId: string) {
-    return this.request<Array<{
-      id: string
-      sender: string
-      content: string
-      message_type: string
-      created_at: string
-    }>>(`/api/chatbot/chat/history?session_id=${sessionId}`)
-  }
-
-  async createChatSession() {
-    return this.request('/api/chatbot/chat/session', {
-      method: 'POST',
-    })
-  }
-
-  async getBreathingExercises() {
-    return this.request<{
-      exercises: Record<string, {
-        name: string
-        description: string
-        steps: Array<{
-          action: string
-          duration: number
-          instruction: string
-        }>
-        cycles: number
-      }>
-    }>('/api/chatbot/breathing-exercises')
-  }
+  }  // End legacy chatbot section (deprecated methods removed; use chatbotApi.ts)
 
   // Health check
   async healthCheck() {

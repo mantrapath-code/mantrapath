@@ -2,6 +2,7 @@
 Action Orchestrator Models
 Core data models for voice-driven cross-service workflows
 """
+import os
 from datetime import datetime, timezone
 from enum import Enum
 from typing import Dict, Any, List, Optional
@@ -247,8 +248,8 @@ class OrchestratorConfig(BaseModel):
     supported_languages: List[str] = ["en", "hi", "es", "fr", "de"]
     default_cultural_region: str = "global"
     
-    # Event processing
-    nats_url: str = "nats://localhost:4222"
+    # Event processing (use environment variable or internal DNS)
+    nats_url: str = os.getenv("NATS_URL", "nats://nats-server:4222")
     event_stream_name: str = "mantrapath.orchestrator"
     
     # Monitoring

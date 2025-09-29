@@ -9,11 +9,7 @@ import httpx
 import json
 import time
 from typing import Dict, Any
-
-# Test configuration
-API_BASE = "http://localhost:8000"  # API Gateway
-CHATBOT_DIRECT = "http://localhost:8004"  # Direct chatbot service
-PHI3_AGENT = "http://localhost:8010"  # Phi-3 agent
+from .config import API_BASE, CHATBOT_DIRECT, PHI3_AGENT
 
 # Test user credentials (you'll need to register first)
 TEST_USER = {

@@ -75,7 +75,7 @@ export async function runHealthCheck() {
       apiService.refreshToken()
       
       // Test a simple API call
-      const baseUrl = import.meta.env.VITE_API_GATEWAY_URL || import.meta.env.VITE_API_URL || 'http://localhost:8000'
+      const baseUrl = import.meta.env.VITE_API_GATEWAY_URL || import.meta.env.VITE_API_URL || 'http://api-gateway:8000'
       const response = await fetch(`${baseUrl}/api/profiles/me`, {
         headers: {
           'Authorization': `Bearer ${localStorage.getItem('mantrapath_token')}`,

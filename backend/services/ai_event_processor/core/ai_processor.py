@@ -1,4 +1,5 @@
 import asyncio
+import os
 import json
 import time
 import uuid
@@ -47,12 +48,15 @@ class AIEventProcessor:
         try:
             logger.info("Starting AI Event Processor")
             
-            # Initialize event bus
+            # Initialize event bus (Enhanced bus falls back to in-memory if NATS unavailable)
+            # Allow disabling NATS via env var USE_NATS=false
+            os.environ.setdefault("USE_NATS", os.getenv("USE_NATS", "false"))
             self.event_bus = get_enhanced_event_bus()
             await self.event_bus.connect()
             
-            # Initialize Redis for caching and state
-            self.redis_client = Redis.from_url("redis://redis:6379/3", decode_responses=True)
+            # Initialize Redis for caching and state (configurable)
+            redis_url = os.getenv("REDIS_URL", "redis://redis:6379/3")
+            self.redis_client = Redis.from_url(redis_url, decode_responses=True)
             
             # Subscribe to relevant events
             await self._setup_event_subscriptions()

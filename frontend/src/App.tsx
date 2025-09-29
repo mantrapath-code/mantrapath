@@ -2,9 +2,9 @@ import { useState, useEffect, useMemo } from "react"
 import { Button } from "@/components/ui/button"
 import { X } from "@phosphor-icons/react"
 import { JournalSection } from "@/components/journal"
-import { ChatBot } from "@/components/chatbot"
+import { MinimizableChatBot } from "@/components/chatbot"
 import { EnhancedCommunitySection } from "@/components/community"
-import { WellnessDashboard } from "@/components/dashboard"
+import { ModularWellnessDashboard } from "@/components/dashboard"
 import { CrisisDetectionDashboard } from "@/components/crisis"
 import { AuthScreen } from "@/components/auth"
 import { EmailVerification } from "@/components/auth"
@@ -12,6 +12,9 @@ import { DevelopmentBanner } from "@/components/common"
 import { ProfileDashboard } from "@/components/profile"
 import { EnhancedInsightsPage } from "@/pages/EnhancedInsightsPage"
 import { AchievementsPage } from "@/pages/AchievementsPage"
+import { MoodTestPage } from "@/pages/MoodTestPage"
+import { OptimizedMoodPage } from "@/pages/OptimizedMoodPage"
+import VoiceTestingPage from "@/pages/VoiceTestingPage"
 import { ProactiveAssistancePanel } from "@/components/assistance"
 import { SidebarLayout } from "@/components/layout/SidebarLayout"
 import { AuthProvider, useAuth } from "@/hooks/useAuth"
@@ -55,15 +58,23 @@ function AppContent() {
   const { currentTheme } = useMoodBasedTheme()
   
   // Initialize robust WebSocket connection for real-time features
-  const { isConnected, connectionError, connectionStats } = useRobustWebSocket(user?.id, {
+  const { isConnected, connectionError, connectionStats, hasAttemptedConnection, reconnectAll } = useRobustWebSocket(user?.id, {
     maxReconnectAttempts: 5,
     reconnectDelay: 1000,
     heartbeatInterval: 30000,
     enableHeartbeat: true
   })
   
-  // Fallback mode when WebSocket is not available
-  const isOfflineMode = !import.meta.env.VITE_WS_URL && !isConnected
+  // Improved offline / realtime status logic:
+  // Original logic only flagged offline when VITE_WS_URL was unset. That hid real connection issues for other devices.
+  // Now: if we attempted to connect and are still not connected after a grace period, mark realtime offline even if VITE_WS_URL is set.
+  const [graceExpired, setGraceExpired] = useState(false)
+  useEffect(() => {
+    if (!hasAttemptedConnection) return
+    const t = setTimeout(() => setGraceExpired(true), 5000)
+    return () => clearTimeout(t)
+  }, [hasAttemptedConnection])
+  const isOfflineMode = (graceExpired && hasAttemptedConnection && !isConnected)
   
   // Performance monitoring
   const { metrics, alerts, getPerformanceScore } = usePerformanceMonitor()
@@ -172,7 +183,7 @@ function AppContent() {
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
           >
-            <WellnessDashboard />
+            <ModularWellnessDashboard onNavigate={setActiveTab} />
           </motion.div>
         )
       case "insights":
@@ -202,6 +213,24 @@ function AppContent() {
             <AchievementsPage />
           </motion.div>
         )
+      case "mood-test":
+        return (
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+          >
+            <MoodTestPage />
+          </motion.div>
+        )
+      case "mood":
+        return (
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+          >
+            <OptimizedMoodPage />
+          </motion.div>
+        )
       case "journal":
         return (
           <motion.div
@@ -220,13 +249,22 @@ function AppContent() {
             <EnhancedCommunitySection />
           </motion.div>
         )
+      case "voice-testing":
+        return (
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+          >
+            <VoiceTestingPage />
+          </motion.div>
+        )
       default:
         return (
           <motion.div
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
           >
-            <WellnessDashboard />
+            <ModularWellnessDashboard onNavigate={setActiveTab} />
           </motion.div>
         )
     }
@@ -243,15 +281,37 @@ function AppContent() {
         isOfflineMode={isOfflineMode}
       >
         <DevelopmentBanner />
+        {import.meta.env.DEV && (
+          <div className="mb-4 p-2 rounded border text-xs bg-gray-50 dark:bg-gray-900">
+            <div className="flex flex-wrap gap-4">
+              <span>WS Status: {isConnected ? '✅ Connected' : '❌ Not Connected'}</span>
+              <span>Configured VITE_WS_URL: {String(import.meta.env.VITE_WS_URL || 'AUTO')}</span>
+              <span>Total Connections: {connectionStats.totalConnections}</span>
+              <span>Healthy: {connectionStats.healthyConnections}</span>
+              <span>Failed: {connectionStats.failedConnections}</span>
+              <span>Attempted: {hasAttemptedConnection ? 'Yes' : 'No'}</span>
+              {connectionError && <span className="text-red-600">Err: {connectionError}</span>}
+            </div>
+          </div>
+        )}
         
         {/* Offline Mode Notice */}
         {isOfflineMode && (
-          <div className="mb-4 p-3 bg-blue-50 dark:bg-blue-950 border border-blue-200 dark:border-blue-800 rounded-lg">
-            <div className="flex items-center gap-2">
-              <div className="w-2 h-2 rounded-full bg-blue-500"></div>
-              <span className="text-sm text-blue-800 dark:text-blue-200">
-                Offline Mode: Real-time features are disabled. Set VITE_WS_URL environment variable to enable WebSocket connections.
-              </span>
+          <div className="mb-4 p-3 bg-amber-50 dark:bg-amber-950 border border-amber-300 dark:border-amber-800 rounded-lg">
+            <div className="flex items-start gap-3">
+              <div className="mt-1 w-2 h-2 rounded-full bg-amber-500 animate-pulse"></div>
+              <div className="text-sm text-amber-800 dark:text-amber-200 space-y-1">
+                <p className="font-medium">Real-time connection unavailable</p>
+                {connectionError ? (
+                  <p className="text-xs opacity-90">{connectionError}</p>
+                ) : (
+                  <p className="text-xs opacity-90">Attempting to establish WebSocket connection failed. Background features continue using REST.</p>
+                )}
+                <div className="flex gap-2 pt-1">
+                  <Button size="sm" variant="outline" onClick={() => reconnectAll()}>Retry</Button>
+                  <Button size="sm" variant="ghost" onClick={() => window.location.reload()}>Reload</Button>
+                </div>
+              </div>
             </div>
           </div>
         )}
@@ -270,8 +330,8 @@ function AppContent() {
           </div>
         )}
         
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          <div className="lg:col-span-2">
+        <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
+          <div className="lg:col-span-3">
             {renderContent()}
           </div>
           
@@ -282,13 +342,16 @@ function AppContent() {
                 initial={{ opacity: 0, x: 20 }}
                 animate={{ opacity: 1, x: 0 }}
                 transition={{ delay: 0.2 }}
-                className="sticky top-32"
+                className="sticky top-6"
               >
-                <ChatBot />
+                <MinimizableChatBot />
               </motion.div>
             </div>
           )}
         </div>
+        
+        {/* Mobile minimizable chatbot - always rendered */}
+        {deviceCapabilities.isMobile && <MinimizableChatBot />}
       </SidebarLayout>
         
       {/* Profile Dashboard Modal */}
@@ -316,40 +379,7 @@ function AppContent() {
         )}
       </AnimatePresence>
 
-      {/* Mobile chatbot overlay */}
-      <AnimatePresence>
-        {showChat && deviceCapabilities.isMobile && (
-          <motion.div
-            initial={{ opacity: 0, y: 300 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: 300 }}
-            className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-end lg:hidden"
-            onClick={() => setShowChat(false)}
-          >
-            <motion.div
-              initial={{ opacity: 0, y: 300 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: 300 }}
-              className="bg-background rounded-t-lg w-full max-h-[80vh] overflow-hidden"
-              onClick={(e) => e.stopPropagation()}
-            >
-              <div className="flex items-center justify-between p-4 border-b">
-                <h3 className="text-lg font-semibold">AI Assistant</h3>
-                <Button
-                  onClick={() => setShowChat(false)}
-                  size="sm"
-                  variant="ghost"
-                >
-                  <X size={20} />
-                </Button>
-              </div>
-              <div className="p-4">
-                <ChatBot />
-              </div>
-            </motion.div>
-          </motion.div>
-        )}
-      </AnimatePresence>
+
       
       {/* Sprint 2: Proactive Assistance Panel */}
       <ProactiveAssistancePanel />

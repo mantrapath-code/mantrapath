@@ -1,5 +1,6 @@
 import { useState, useCallback, useRef, useEffect } from 'react'
 import { apiService } from '@/services/api'
+import { chatbotApi, ChatHistoryResponse } from '@/services/chatbotApi'
 import { toast } from 'sonner'
 
 interface ChatMessage {
@@ -105,11 +106,26 @@ Respond with empathy, understanding, and practical wellness guidance. If user se
       // Check if this is a mood/wellness related query and request context refresh
       const isMoodQuery = /mood|feeling|emotion|journal|community|track|pattern|trend|wellbeing|wellness|mental health|how have i been|how am i doing/i.test(content)
       
-      const response = await apiService.chatWithBotEnhanced(enhancedContent, currentSessionId || undefined, isMoodQuery)
-      
-      // Update session ID if this is a new conversation
+      // Replace enhanced chat with basic send + maintain session; TODO: implement enhanced endpoint bridging
       if (!currentSessionId) {
-        setCurrentSessionId(response.session_id)
+        const sessionResp = await chatbotApi.createSession()
+        const sid = (sessionResp as any).session_id
+        setCurrentSessionId(sid)
+      }
+      const sid = currentSessionId || (localStorage.getItem('chat_session_id') || '')
+      const sendResp = await chatbotApi.sendMessage(sid, enhancedContent)
+      const response = {
+        session_id: sendResp.session_id,
+        response: sendResp.response.content,
+        message_type: 'standard',
+        breathing_exercise: undefined,
+        intent: undefined,
+        orchestration_metadata: undefined,
+        suggested_actions: undefined,
+        mood_insights: undefined,
+        cultural_adaptations: undefined,
+        confidence_score: undefined,
+        source: 'chatbot'
       }
 
       const botMessage: ChatMessage = {
@@ -167,8 +183,12 @@ Respond with empathy, understanding, and practical wellness guidance. If user se
   // Start new chat session
   const startNewSession = useCallback(async () => {
     try {
-      const newSession = await apiService.createChatSession() as { id: string }
-      setCurrentSessionId(newSession.id)
+      const newSession = await chatbotApi.createSession()
+      const newId = (newSession as any).session_id || (newSession as any).id
+      if (newId) {
+        setCurrentSessionId(newId)
+        localStorage.setItem('chat_session_id', newId)
+      }
       setMessages([])
       
       // Add personalized welcome message
@@ -219,8 +239,16 @@ You can type or speak to me in any language - I'll understand and respond approp
       // Refresh token before making the request
       apiService.refreshToken()
       
-      const sessionsData = await apiService.getChatSessions()
-      setSessions(sessionsData)
+      const sessionsData = await chatbotApi.getSessions()
+      // Adapt minimal session objects if needed
+      const adapted = Array.isArray(sessionsData) ? sessionsData.map((s: any) => ({
+        id: s.session_id || s.id || s.sessionId || Math.random().toString(),
+        title: s.title || 'Session',
+        session_type: s.session_type || 'standard',
+        is_active: s.is_active ?? true,
+        created_at: s.created_at || new Date().toISOString()
+      })) : []
+      setSessions(adapted as any)
     } catch (err: any) {
       console.error('Failed to load sessions:', err)
       
@@ -242,13 +270,13 @@ You can type or speak to me in any language - I'll understand and respond approp
       // Refresh token before making the request
       apiService.refreshToken()
       
-      const history = await apiService.getChatHistory(sessionId)
-      
-      const formattedMessages: ChatMessage[] = history.map(msg => ({
-        id: msg.id,
-        sender: msg.sender as 'user' | 'assistant',
+      const historyResp = await chatbotApi.getHistory(sessionId) as ChatHistoryResponse
+      const items = historyResp?.messages || []
+      const formattedMessages: ChatMessage[] = items.map((msg: any) => ({
+        id: msg.id || Math.random().toString(),
+        sender: (msg.role === 'assistant' ? 'assistant' : 'user'),
         content: msg.content,
-        timestamp: msg.created_at,
+        timestamp: msg.created_at || new Date().toISOString(),
         messageType: msg.message_type
       }))
       
@@ -278,15 +306,8 @@ You can type or speak to me in any language - I'll understand and respond approp
   }, [])
 
   // Get breathing exercises
-  const getBreathingExercises = useCallback(async () => {
-    try {
-      const exercisesData = await apiService.getBreathingExercises()
-      return exercisesData.exercises
-    } catch (err) {
-      console.error('Failed to load breathing exercises:', err)
-      return {}
-    }
-  }, [])
+  // Placeholder until breathing exercises endpoint standardized
+  const getBreathingExercises = useCallback(async () => ({ exercises: [] }), [])
 
   // Quick actions for common scenarios
   const quickActions = {

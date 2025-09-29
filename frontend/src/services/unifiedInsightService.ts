@@ -869,7 +869,7 @@ export class UnifiedInsightService {
   async getUnifiedInsights(forceRefresh: boolean = false): Promise<UnifiedInsightsResponse> {
     try {
       // Use the ML service URL directly for the unified insights endpoint
-      const mlServiceUrl = import.meta.env.VITE_ML_SERVICE_URL || 'http://localhost:8008'
+      const mlServiceUrl = import.meta.env.VITE_ML_SERVICE_URL || 'http://ml-service:8008'
       const token = localStorage.getItem('mantrapath_token') || localStorage.getItem('authToken')
       
       if (!token) {

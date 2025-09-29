@@ -13,7 +13,9 @@ import {
   User,
   LogOut,
   Menu,
-  X
+  X,
+  Heart,
+  Mic
 } from "lucide-react"
 import { 
   Sidebar, 
@@ -88,10 +90,31 @@ export function SidebarLayout({
       group: "wellness"
     },
     {
+      id: "mood",
+      label: "Mood Tracker",
+      icon: <Heart size={20} />,
+      group: "wellness",
+      badge: "NEW"
+    },
+    {
+      id: "mood-test",
+      label: "Mood Service Test",
+      icon: <Brain size={20} />,
+      group: "wellness",
+      badge: "DEV"
+    },
+    {
       id: "journal",
       label: "Journal",
       icon: <BookOpen size={20} />,
       group: "wellness"
+    },
+    {
+      id: "voice-testing",
+      label: "Voice Testing",
+      icon: <Mic size={20} />,
+      group: "wellness",
+      badge: "TEST"
     },
     {
       id: "community",
@@ -212,7 +235,7 @@ export function SidebarLayout({
             <DropdownMenuTrigger asChild>
               <Button variant="ghost" className="w-full justify-start gap-3 h-auto p-3">
                 <Avatar className="h-8 w-8">
-                  <AvatarImage src={user?.avatar} />
+                  <AvatarImage src={''} />
                   <AvatarFallback>
                     {user?.username?.charAt(0).toUpperCase() || 'U'}
                   </AvatarFallback>

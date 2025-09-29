@@ -137,7 +137,7 @@ app = FastAPI(
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[
-        os.getenv("FRONTEND_URL", "http://localhost:5173"),
+        os.getenv("FRONTEND_URL", "http://frontend:5173"),
         os.getenv("API_GATEWAY_URL", "http://api-gateway:8000")
     ],  # Frontend URLs
     allow_credentials=True,

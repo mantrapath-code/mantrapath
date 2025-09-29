@@ -40,6 +40,7 @@ export interface WebSocketHookReturn {
   removeEventHandler: (handlerId: string) => void
   reconnectAll: () => void
   disconnectAll: () => void
+  hasAttemptedConnection: boolean
 }
 
 // Global connection manager to prevent duplicates
@@ -160,23 +161,44 @@ class WebSocketManager {
   }
 }
 
-// WebSocket URL configuration
+// WebSocket URL configuration (resilient across devices / origins)
 const getWebSocketUrls = (userId: string): string[] => {
-  let baseUrl = import.meta.env.VITE_WS_URL || 'ws://localhost:8007'
-
-  // If running under https, ensure wss and prefer same host
-  if (typeof window !== 'undefined' && window.location.protocol === 'https:') {
-    baseUrl = baseUrl.replace('ws://', 'wss://')
-    if (window.location.hostname !== 'localhost') {
-      baseUrl = `wss://${window.location.host}`
-    }
+  const uid = userId || 'anonymous'
+  
+  // 1. Get base URL from environment or derive from window location
+  let baseUrl: string
+  
+  const envWsUrl = import.meta.env.VITE_WS_URL as string | undefined
+  const envApiUrl = import.meta.env.VITE_API_URL as string | undefined
+  
+  if (envWsUrl) {
+    baseUrl = envWsUrl.replace(/\/$/, '')
+  } else if (envApiUrl) {
+    // Convert HTTP(S) URL to WebSocket URL
+    baseUrl = envApiUrl
+      .replace('http://', 'ws://')
+      .replace('https://', 'wss://')
+      .replace(/\/$/, '')
+  } else if (typeof window !== 'undefined') {
+    // Derive from current page URL
+    const proto = window.location.protocol === 'https:' ? 'wss:' : 'ws:'
+    baseUrl = `${proto}//${window.location.host}`
+  } else {
+    // Fallback for SSR
+    baseUrl = 'ws://localhost:8000'
   }
 
-  // Prefer API Gateway proxied WS endpoints under /api for unified routing
+  // Ensure secure WebSocket for HTTPS pages
+  if (typeof window !== 'undefined' && window.location.protocol === 'https:' && baseUrl.startsWith('ws:')) {
+    baseUrl = baseUrl.replace('ws://', 'wss://')
+  }
+
+  // Return multiple URLs to try in order of preference
   return [
-    `${baseUrl}/api/notifications/ws/${userId}`,
-    // Additional endpoints can be added similarly under /api/...
-  ]
+    `${baseUrl}/api/notifications/ws/${uid}`,  // Primary: Gateway proxy to notifications
+    `${baseUrl}/ws/${uid}`,                    // Fallback: Generic gateway endpoint
+    `${baseUrl.replace(':8000', ':8007')}/ws/${uid}` // Direct notifications service (last resort)
+  ].filter(Boolean)
 }
 
 export function useRobustWebSocket(
@@ -196,6 +218,8 @@ export function useRobustWebSocket(
     healthyConnections: 0,
     failedConnections: 0
   })
+  // Track whether we've actually tried to connect (for better UI state handling)
+  const [hasAttemptedConnection, setHasAttemptedConnection] = useState(false)
 
   const managerRef = useRef<WebSocketManager>(WebSocketManager.getInstance())
   const isInitializedRef = useRef(false)
@@ -388,23 +412,42 @@ export function useRobustWebSocket(
   }, [updateStats])
 
   // Initialize connections
+  // Keep previous user id to detect changes
+  const prevUserIdRef = useRef<string | undefined>(undefined)
+
   useEffect(() => {
+    // Wait until we actually have a user id before initializing.
+    if (!userId) {
+      console.debug('[WS] No userId yet; postponing WebSocket initialization')
+      return
+    }
+
+    // If user changed, reset and allow re-init
+    if (prevUserIdRef.current && prevUserIdRef.current !== userId) {
+      console.debug('[WS] Detected user change from', prevUserIdRef.current, 'to', userId, '— resetting WebSocket connections')
+      disconnectAll()
+      managerRef.current.cleanup()
+      isInitializedRef.current = false
+      setIsConnected(false)
+      setConnectionError(null)
+    }
+
+    prevUserIdRef.current = userId
+
     if (isInitializedRef.current) {
       return
     }
 
     isInitializedRef.current = true
-    // Use authenticated user ID or skip WebSocket if no user
-    if (!userId) {
-      return
-    }
+    setHasAttemptedConnection(true)
+
     const effectiveUserId = userId
     const urls = getWebSocketUrls(effectiveUserId)
+    console.debug('[WS] Initializing WebSocket connections for user', effectiveUserId, 'URLs:', urls)
 
     const initializeConnections = async () => {
       try {
-        
-        // Wait for page to be fully loaded
+        // Ensure full page load (helps on slower devices / secondary tabs)
         if (document.readyState !== 'complete') {
           await new Promise(resolve => {
             if (document.readyState === 'complete') {
@@ -414,20 +457,26 @@ export function useRobustWebSocket(
             }
           })
         }
-        
-        // Add a small delay to ensure services are ready
-        await new Promise(resolve => setTimeout(resolve, 2000))
-        
+
+        // Small delay to help when backend containers are still warming
+        await new Promise(resolve => setTimeout(resolve, 1000))
+
         for (const url of urls) {
           try {
+            console.debug('[WS] Attempting connection to', url)
             await connect(url, effectiveUserId)
+            console.debug('[WS] ✅ Connected to', url)
           } catch (error) {
-            console.error('❌ Failed to connect to:', url, error)
-            // Continue trying other URLs instead of failing completely
+            console.warn('[WS] ❌ Connection failed for', url, error)
+            // Continue trying the remaining URLs
           }
         }
+
+        if (!managerRef.current.getAllConnections().some(c => c.status === 'connected')) {
+          setConnectionError('All WebSocket connection attempts failed')
+        }
       } catch (error) {
-        console.error('Failed to initialize WebSocket connections:', error)
+        console.error('[WS] Fatal error during WebSocket initialization', error)
         setConnectionError('Failed to establish WebSocket connections')
       }
     }
@@ -435,9 +484,8 @@ export function useRobustWebSocket(
     initializeConnections()
 
     return () => {
-      // Cleanup on unmount
-      disconnectAll()
-      isInitializedRef.current = false
+      // Cleanup only when component unmounts or user changes (handled by effect rerun)
+      // We intentionally do not set isInitializedRef to false here unless user changes; unmount will reset state.
     }
   }, [userId, connect, disconnectAll])
 
@@ -514,6 +562,7 @@ export function useRobustWebSocket(
     addEventHandler,
     removeEventHandler,
     reconnectAll,
-    disconnectAll
+    disconnectAll,
+    hasAttemptedConnection
   }
 }

@@ -7,7 +7,7 @@ import { getAuthToken } from '../utils/auth'
 
 // Get environment-aware API base URL
 const getApiBaseUrl = () => {
-  return import.meta.env.VITE_API_GATEWAY_URL || import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000';
+  return import.meta.env.VITE_API_GATEWAY_URL || import.meta.env.VITE_API_BASE_URL || 'http://api-gateway:8000';
 };
 
 // Real Backend Service Endpoints - Sprint 2
@@ -66,17 +66,19 @@ const BACKEND_API_ENDPOINTS = {
   mood: {
     base: `${getApiBaseUrl()}/mood`,
     health: '/health',
-    entries: '/api/v3/mood/entries',
-    patterns: '/api/v3/mood/patterns',
-    insights: '/api/v3/mood/insights'
+    // Align with API Gateway router rules (supports /mood/* or /api/v1/mood/*)
+    entries: '/api/v1/mood/entries',
+    patterns: '/api/v1/mood/patterns',
+    insights: '/api/v1/mood/insights'
   },
   
   // Chatbot Service (Port 8004) - via API Gateway
   chatbot: {
     base: `${getApiBaseUrl()}/chatbot`,
     health: '/health',
-    chat: '/api/v3/chat',
-    sessions: '/api/v3/chat/sessions'
+    // API Gateway routes chatbot under /api/chatbot/* (and /chat/*)
+    chat: '/api/chatbot/chat',
+    sessions: '/api/chatbot/chat/sessions'
   }
 }
 
@@ -229,22 +231,7 @@ class Sprint2ApiService {
     )
   }
 
-  // Chatbot Service API calls (Port 8004)
-  async sendChatMessage(message: string, sessionId?: string): Promise<any> {
-    return this.makeRequest(
-      `${BACKEND_API_ENDPOINTS.chatbot.base}${BACKEND_API_ENDPOINTS.chatbot.chat}`,
-      {
-        method: 'POST',
-        body: JSON.stringify({ message, session_id: sessionId })
-      }
-    )
-  }
-
-  async getChatSessions(userId: string): Promise<any> {
-    return this.makeRequest(
-      `${BACKEND_API_ENDPOINTS.chatbot.base}${BACKEND_API_ENDPOINTS.chatbot.sessions}?user_id=${userId}`
-    )
-  }
+  // Chatbot Service API calls (Port 8004) - deprecated methods removed; use chatbotApi.ts
 
   // Health checks for all services
   async checkServiceHealth(): Promise<Record<string, any>> {

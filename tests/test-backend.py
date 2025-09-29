@@ -4,7 +4,10 @@ Test script to verify backend services can start
 import subprocess
 import sys
 import os
-from pathlib import Path
+from pathlib impo        print("🌐 Services available (internal DNS or localhost for dev):")
+        print("   Auth: http://auth-service:8001/docs")
+        print("   Mood: http://mood-service:8003/docs")
+        print("   Gateway: http://api-gateway:8000/docs")ath
 
 def test_auth_service():
     """Test starting the auth service"""

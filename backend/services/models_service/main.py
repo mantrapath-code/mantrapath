@@ -16,13 +16,15 @@ import json
 from datetime import datetime
 import os
 from typing import Dict, List, Optional, Any
-import torch
+try:
+    import torch  # Optional; used for GPU status and some models
+except Exception:  # ImportError or other issues
+    torch = None
 import psutil
 
 from models.stt_engine import STTEngine
 from models.tts_engine import TTSEngine  
-# Temporarily disable NLPEngine due to import issues
-# from models.nlp_engine import NLPEngine
+from models.nlp_engine import NLPEngine
 from models.model_manager import ModelManager
 from api.routes import router as api_router
 from api.translation_routes import router as translation_router, set_models_service
@@ -39,7 +41,7 @@ logger = setup_logger(__name__)
 # Global components
 stt_engine: Optional[STTEngine] = None
 tts_engine: Optional[TTSEngine] = None
-nlp_engine: Optional[Any]  # NLPEngine temporarily disabled = None
+nlp_engine: Optional[NLPEngine] = None
 model_manager: Optional[ModelManager] = None
 
 @asynccontextmanager
@@ -63,7 +65,8 @@ async def lifespan(app: FastAPI):
         # Initialize engines
         stt_engine = STTEngine(model_manager)
         tts_engine = TTSEngine(model_manager)
-        # nlp_engine = NLPEngine(model_manager)  # Temporarily disabled
+        nlp_engine = NLPEngine(model_manager)
+        await nlp_engine.initialize()
         
         # Optional preload list (comma separated)
         preload_list_env = os.getenv("MODELS_PRELOAD_LIST", "").strip()
@@ -79,7 +82,8 @@ async def lifespan(app: FastAPI):
             else:
                 await stt_engine.load_default_models()
                 await tts_engine.load_default_models()
-                await nlp_engine.load_default_models()
+                if nlp_engine is not None:
+                    await nlp_engine.load_default_models()
 
         # Handle custom preload list (works in both minimal and normal modes)
         if preload_list_env:
@@ -106,6 +110,7 @@ async def lifespan(app: FastAPI):
         
         # Set models service reference for translation routes
         set_models_service(nlp_engine)
+        logger.info("🔗 Translation routes configured with NLP engine")
         
         logger.info("✅ Models Service initialized successfully")
         
@@ -133,12 +138,6 @@ app = FastAPI(
     lifespan=lifespan
 )
 
-# Global components
-stt_engine: Optional[STTEngine] = None
-tts_engine: Optional[TTSEngine] = None
-nlp_engine: Optional[Any]  # NLPEngine temporarily disabled = None
-model_manager: Optional[ModelManager] = None
-
 # CORS
 app.add_middleware(
     CORSMiddleware,
@@ -162,8 +161,15 @@ async def health_check():
 @app.get("/status")
 async def get_status():
     """Detailed service status"""
-    gpu_available = torch.cuda.is_available()
-    gpu_count = torch.cuda.device_count() if gpu_available else 0
+    gpu_available = False
+    gpu_count = 0
+    if torch is not None:
+        try:
+            gpu_available = torch.cuda.is_available()
+            gpu_count = torch.cuda.device_count() if gpu_available else 0
+        except Exception:
+            gpu_available = False
+            gpu_count = 0
     
     status = {
         "service": "models_service",
@@ -188,12 +194,15 @@ async def get_status():
     }
     
     # Get GPU memory info
-    if gpu_available:
+    if gpu_available and torch is not None:
         for i in range(gpu_count):
-            props = torch.cuda.get_device_properties(i)
-            status["hardware"]["gpu_memory_gb"].append(
-                round(props.total_memory / (1024**3), 2)
-            )
+            try:
+                props = torch.cuda.get_device_properties(i)
+                status["hardware"]["gpu_memory_gb"].append(
+                    round(props.total_memory / (1024**3), 2)
+                )
+            except Exception:
+                break
     
     return status
 
@@ -222,7 +231,10 @@ app.include_router(translation_router, prefix="/api/v1/translation", tags=["tran
 # Include new Ollama-based routes for centralized model service (temporarily commented out)
 # app.include_router(emotion_router, tags=["emotion"])  # Includes /api/v1/emotion/*
 # app.include_router(ollama_translation_router, prefix="/api/v1/translation/ollama", tags=["ollama-translation"])
-app.include_router(text_generation_router, tags=["text-generation"])  # Includes /api/v1/nlp/*
+if os.getenv("ENABLE_OLLAMA_ROUTES", "false").lower() == "true":
+    app.include_router(text_generation_router, tags=["text-generation"])  # Includes /api/v1/nlp/*
+else:
+    logger.info("Ollama text-generation routes disabled (set ENABLE_OLLAMA_ROUTES=true to enable)")
 
 if __name__ == "__main__":
     # Get port from environment or use default

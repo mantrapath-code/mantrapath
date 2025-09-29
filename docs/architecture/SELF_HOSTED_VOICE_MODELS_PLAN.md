@@ -3,14 +3,14 @@
 
 ### 🚀 **Executive Summary**
 
-To eliminate OpenAI API quota limitations and improve response times, this document outlines a comprehensive plan to implement self-hosted, open-source TTS and STT models for the MantraPath project. These models will serve as primary engines with API-based services as fallbacks.
+This document outlines the plan to implement fully self-hosted, open-source TTS and STT models for the MantraPath project. External API dependencies have been removed; local and open models are authoritative.
 
 ---
 
 ## 📊 **Current State Analysis**
 
 ### **Current Dependencies (API-based)**
-- **STT**: OpenAI Whisper API (quota limited, slow)
+- **STT**: Whisper-compatible local model (no external API)
 - **TTS**: ElevenLabs API (quota limited, expensive)
 - **Languages**: English, Spanish, French, German, Italian, Portuguese, Chinese, Japanese, Korean, Arabic, Hindi, Russian
 
@@ -27,7 +27,7 @@ To eliminate OpenAI API quota limitations and improve response times, this docum
 
 ### **1. Speech-to-Text (STT) Models**
 
-#### **🥇 Primary: OpenAI Whisper (Local)**
+#### **🥇 Primary: Whisper-Compatible (Local)**
 ```yaml
 Model: whisper-large-v3
 Size: ~3GB
@@ -235,7 +235,7 @@ numpy>=1.24.0
 scipy>=1.10.0
 
 # Whisper Local
-openai-whisper>=20231117
+# Removed external OpenAI package pin; using faster-whisper / whisper.cpp variants
 faster-whisper>=0.9.0  # Faster inference
 
 # Coqui TTS
@@ -287,7 +287,7 @@ brew install festival espeak sox ffmpeg
 ### **Phase 1: Local Whisper Integration (Week 1)**
 1. **Install Dependencies**
    ```bash
-   pip install openai-whisper faster-whisper torch torchaudio
+    pip install faster-whisper torch torchaudio
    ```
 
 2. **Create Local Whisper Engine**
@@ -512,7 +512,7 @@ spec:
 ## 📊 **Cost Analysis**
 
 ### **Current API Costs (Monthly)**
-- **OpenAI Whisper API**: $0.006/minute → ~$180/month (5000 minutes)
+Costs tied to external APIs eliminated by local deployment; operational cost is compute only.
 - **ElevenLabs TTS**: $0.18/1000 characters → ~$540/month (3M characters)
 - **Total Monthly**: ~$720
 
@@ -661,6 +661,6 @@ The following files need to be created/modified:
 
 ---
 
-This plan provides a comprehensive path to eliminate your OpenAI quota issues while significantly improving performance and reducing long-term costs. The self-hosted approach will give you complete control over your voice processing pipeline with enterprise-grade reliability.
+This plan enables full independence from external API quotas while improving performance and reducing recurring costs. The self-hosted approach gives complete control over the voice processing pipeline with enterprise-grade reliability.
 
 Would you like me to start implementing any specific part of this plan?

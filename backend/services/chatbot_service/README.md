@@ -1,460 +1,558 @@
-# Chatbot Service - Intelligent Engine
+# MantraPath Intelligent Chatbot Service
 
 ## Overview
-The Chatbot Service is an advanced, AI-powered conversational engine that provides intelligent, contextually-aware, and mood-sensitive responses for the MantraPath platform. It integrates multiple AI services to deliver personalized mental health support, crisis intervention, and adaptive conversation management.
 
-## 🚀 Key Features
+The **Intelligent Chatbot Service** is a sophisticated, AI-powered mental health support chatbot that provides mood-aware, personalized responses with comprehensive multi-language support and voice interaction capabilities. This service serves as the conversational interface for the MantraPath platform, delivering intelligent therapeutic interventions, crisis detection, and contextual support.
 
-### Intelligent Response Generation
-- **Mood-aware responses**: Adapts communication style based on user's emotional state
-- **Context-aware conversations**: Maintains conversation history and context
-- **Crisis detection**: Automatic identification and escalation of crisis situations
-- **Personalized interactions**: Tailored responses based on user profile and history
+### Key Features
 
-### Multi-Modal Integration
-- **Voice-text coordination**: Seamless integration with voice service
-- **Emotional context**: Incorporates voice emotion analysis
-- **Multi-language support**: Conversations in multiple Indian and international languages
-- **Rich media responses**: Support for text, audio, and interactive content
+- 🧠 **Intelligent Response Generation** - Context-aware responses using advanced engine components
+- 🎯 **Mood-Aware Interactions** - Responses tailored to user emotional state and mood trends  
+- 🌍 **Multi-Language Support** - Automatic language detection with real-time translation
+- 🎙️ **Voice Integration** - Speech-to-text and text-to-speech capabilities
+- 🚨 **Crisis Detection** - Automatic identification and appropriate intervention suggestions
+- 📊 **Conversation Analytics** - Response effectiveness tracking and user engagement metrics
+- 🔄 **Service Integration** - Seamless integration with mood, profile, and ML services
+- 💾 **Session Management** - Persistent conversation history and context
 
-### Advanced AI Capabilities
-- **Natural Language Understanding**: Deep comprehension of user intent and emotion
-- **Therapeutic Techniques**: Integration of CBT, mindfulness, and other therapeutic approaches
-- **Learning and Adaptation**: Continuous improvement based on interaction patterns
-- **Safety Mechanisms**: Built-in safeguards for mental health conversations
+## Service Architecture
 
-## 📁 Directory Structure
+```
+┌─────────────────────────────────────────────────────────────┐
+│                    Chatbot Service (Port 8004)             │
+├─────────────────────────────────────────────────────────────┤
+│                                                             │
+│  ┌─────────────────┐  ┌─────────────────────────────────┐   │
+│  │   FastAPI App   │  │     Intelligent Engine          │   │
+│  │                 │  │  ┌─────────────────────────────┐ │   │
+│  │  • Auth Layer   │  │  │  Response Generator         │ │   │
+│  │  • Rate Limits  │  │  │  • Context Analyzer        │ │   │
+│  │  • CORS Config  │  │  │  • Mood-Aware Responder    │ │   │
+│  │  • Endpoints    │  │  │  • Service Integrator      │ │   │
+│  └─────────────────┘  │  └─────────────────────────────┘ │   │
+│                       └─────────────────────────────────────┘   │
+│                                                             │
+│  ┌─────────────────────────────────────────────────────┐   │
+│  │              Service Clients                        │   │
+│  │  • Mood Service      • Models Service              │   │
+│  │  • Voice Service     • ML Service                  │   │
+│  │  • Translation      • Profile Service             │   │
+│  └─────────────────────────────────────────────────────┘   │
+│                                                             │
+│  ┌─────────────────────────────────────────────────────┐   │
+│  │            Data Models & Database                   │   │
+│  │  • ChatSession       • ChatMessage                 │   │
+│  │  • SQLAlchemy ORM    • PostgreSQL                  │   │
+│  └─────────────────────────────────────────────────────┘   │
+└─────────────────────────────────────────────────────────────┘
+```
+
+## Directory Structure
 
 ```
 chatbot_service/
-├── main.py                 # FastAPI application entry point
-├── requirements.txt        # Python dependencies
-├── Dockerfile             # Container configuration
-├── .env.example           # Environment variables template
-├── src/                   # Source code
-│   ├── intelligent_engine/    # Core AI engine
-│   │   ├── mood_aware_responder.py      # Mood-based response generation
-│   │   ├── service_integrator.py        # Multi-service data integration
-│   │   ├── context_analyzer.py          # Conversation context analysis
-│   │   ├── response_generator.py        # Advanced response generation
-│   │   ├── crisis_detector.py           # Crisis intervention system
-│   │   └── learning_engine.py           # Adaptive learning system
-│   ├── models/                # Data models and schemas
-│   │   ├── conversation_models.py       # Conversation data structures
-│   │   ├── mood_models.py               # Mood and emotion models
-│   │   └── response_models.py           # Response format models
-│   ├── services/              # External service integrations
-│   │   ├── mood_service_client.py       # Mood service integration
-│   │   ├── voice_service_client.py      # Voice service integration
-│   │   ├── profile_service_client.py    # User profile integration
-│   │   └── ai_context_client.py         # AI context store integration
-│   └── utils/                 # Utility functions
-│       ├── therapeutic_tools.py         # CBT and therapeutic utilities
-│       ├── safety_filters.py            # Content safety mechanisms
-│       └── performance_tracker.py       # Performance monitoring
-└── tests/                     # Test files
+├── main.py                     # FastAPI application entry point (1025 lines)
+├── requirements.txt            # Service dependencies
+├── Dockerfile                  # Container configuration
+├── src/                        # Source code modules
+│   ├── intelligent_engine/     # AI engine components
+│   │   ├── response_generator.py     # Central response orchestration (340 lines)
+│   │   ├── context_analyzer.py       # Conversation context analysis (279 lines)  
+│   │   ├── mood_aware_responder.py   # Mood-based response generation
+│   │   └── service_integrator.py     # Multi-service data integration
+│   ├── clients/                # External service clients
+│   │   ├── mood_service_client.py         # Mood service integration (330 lines)
+│   │   ├── models_service_client.py       # Translation & ML models access
+│   │   ├── voice_service_client.py        # Voice processing integration
+│   │   ├── ml_service_client.py           # Machine learning service
+│   │   └── translation_service_client.py  # Translation service client
+│   └── models/                 # Data models
+│       └── chat_context.py     # Chat context and response models (59 lines)
+└── tests/                      # Test files
+    └── ...                     # Unit and integration tests
 ```
 
-## 🧠 AI Models and Technologies
+## API Endpoints
 
-### Language Models
-1. **Primary Conversation Model**
-   - **Model**: GPT-3.5/GPT-4 or equivalent open-source model
-   - **Fine-tuning**: Specialized for mental health conversations
-   - **Languages**: Hindi, English, Bengali, Tamil, Telugu, Gujarati, Marathi
-   - **Context Window**: 8k-32k tokens for extended conversations
+### Core Chat Endpoints
 
-2. **Mood Classification Model**
-   - **Architecture**: DistilBERT fine-tuned for emotion detection
-   - **Emotions**: Joy, Sadness, Anger, Fear, Surprise, Disgust, Neutral
-   - **Languages**: Multi-language support with regional adaptations
-   - **Accuracy**: 92%+ for clear text inputs
-
-3. **Intent Recognition Model**
-   - **Technology**: BERT-based intent classifier
-   - **Intents**: 50+ predefined intents (help-seeking, crisis, information, etc.)
-   - **Confidence Threshold**: 85% for automatic routing
-   - **Fallback**: Human handoff for unclear intents
-
-### Specialized AI Components
-1. **Crisis Detection System**
-   - **Model**: Ensemble of BERT + keyword matching + pattern recognition
-   - **Trigger Words**: Comprehensive database of crisis indicators
-   - **Risk Levels**: Low, Medium, High, Critical
-   - **Response Time**: < 500ms for crisis identification
-
-2. **Therapeutic Response Generator**
-   - **Techniques**: CBT, DBT, Mindfulness, Solution-focused therapy
-   - **Personalization**: Adapted based on user preferences and effectiveness
-   - **Evidence-based**: Responses grounded in therapeutic literature
-   - **Cultural Adaptation**: Responses adapted for Indian cultural context
-
-## 🔧 Installation & Setup
-
-### Prerequisites
-- Python 3.9+
-- PostgreSQL database (for conversation storage)
-- Redis (for session management and caching)
-- Access to external AI APIs (OpenAI, Hugging Face, etc.)
-- 8GB+ RAM for local model inference
-
-### Installation
-```bash
-# Navigate to chatbot service
-cd backend/services/chatbot_service
-
-# Install dependencies
-pip install -r requirements.txt
-
-# Set up database
-python -c "from shared.database import engine, Base; Base.metadata.create_all(engine)"
-
-# Configure environment
-cp .env.example .env
-# Edit .env with your configuration
-```
-
-### Environment Variables
-```bash
-# Service Configuration
-CHATBOT_HOST=0.0.0.0
-CHATBOT_PORT=8008
-ENVIRONMENT=production
-LOG_LEVEL=INFO
-
-# Database Configuration
-DATABASE_URL=postgresql://user:password@localhost:5432/mantrapath
-REDIS_URL=redis://localhost:6379/1
-
-# AI Model Configuration
-OPENAI_API_KEY=your_openai_key
-HUGGINGFACE_API_KEY=your_hf_key
-LOCAL_MODEL_PATH=./models/conversation_model
-USE_LOCAL_MODELS=false
-
-# Service Integration
-MOOD_SERVICE_URL=http://localhost:8003
-VOICE_SERVICE_URL=http://localhost:8011
-PROFILE_SERVICE_URL=http://localhost:8002
-AI_CONTEXT_STORE_URL=http://localhost:8013
-
-# Safety and Moderation
-ENABLE_SAFETY_FILTERS=true
-CRISIS_ESCALATION_WEBHOOK=https://crisis-team.mantrapath.com/alert
-MAX_CONVERSATION_LENGTH=100
-SESSION_TIMEOUT=3600
-
-# Personalization
-ENABLE_LEARNING=true
-FEEDBACK_THRESHOLD=0.8
-ADAPTATION_RATE=0.1
-```
-
-## 🚀 Running the Service
-
-### Development Mode
-```bash
-python main.py
-```
-
-### Production Mode
-```bash
-uvicorn main:app --host 0.0.0.0 --port 8008 --workers 4
-```
-
-### Docker
-```bash
-docker build -t chatbot-service .
-docker run -p 8008:8008 chatbot-service
-```
-
-## 📡 API Endpoints
-
-### Health Check
-```http
-GET /health
-```
-Returns service health and AI model status.
-
-### Chat Interaction
-```http
-POST /chat
-Content-Type: application/json
-Authorization: Bearer <token>
-
+#### POST `/chat/intelligent`
+**Intelligent Chat Interface**
+```json
+Request:
 {
-    "user_id": "user123",
-    "session_id": "session456",
-    "message": "I'm feeling really anxious today",
-    "context": {
-        "mood_score": 3.5,
-        "previous_topics": ["work", "relationships"],
-        "voice_emotion": "anxious",
-        "time_of_day": "evening"
-    }
+  "message": "I'm feeling overwhelmed today",
+  "session_id": "uuid-string",
+  "language": "auto",
+  "preferred_response_language": "en",
+  "user_context_refresh": false
+}
+
+Response:
+{
+  "response": "I understand you're feeling overwhelmed. That's completely valid...",
+  "session_id": "uuid-string",
+  "tone": "supportive",
+  "intervention_type": "emotional_support",
+  "breathing_exercise": {
+    "name": "4-7-8 Breathing",
+    "steps": ["Inhale for 4 counts...", "Hold for 7 counts...", "Exhale for 8 counts..."]
+  },
+  "follow_up_suggestions": ["Consider taking a short break", "Try gentle stretching"],
+  "crisis_detected": false,
+  "confidence_score": 0.92,
+  "context_summary": {
+    "mood_score": 4.2,
+    "mood_trend": "declining",
+    "user_intent": "seeking_help"
+  },
+  "detected_language": "en",
+  "response_language": "en",
+  "translation_used": false
 }
 ```
 
-### Voice-Integrated Chat
-```http
-POST /voice-chat
-Content-Type: application/json
+### Voice Integration
 
-{
-    "user_id": "user123",
-    "session_id": "session456",
-    "transcription": "I need help with my anxiety",
-    "voice_analysis": {
-        "emotion": "anxious",
-        "confidence": 0.87,
-        "energy_level": "low"
-    },
-    "audio_quality": 0.92
-}
-```
-
-### Crisis Intervention
-```http
-POST /crisis-assessment
-Content-Type: application/json
-
-{
-    "user_id": "user123",
-    "message": "I don't think I can handle this anymore",
-    "conversation_history": [...],
-    "immediate_risk_factors": [...]
-}
-```
-
-### Conversation Analytics
-```http
-GET /analytics/{user_id}?period=30d
-```
+#### POST `/api/chatbot/voice`
+**Voice Input Processing**
+- Accepts audio file uploads
+- Converts speech-to-text using voice service
+- Processes through intelligent chat pipeline
+- Returns comprehensive response with voice metadata
 
 ### Session Management
-```http
-GET /sessions/{user_id}
-POST /sessions/{user_id}/start
-PUT /sessions/{session_id}/end
+
+#### GET `/chat/sessions`
+**Get User Chat Sessions**
+- Returns list of conversation sessions
+- Includes session metadata and message counts
+- Supports pagination and filtering
+
+#### GET `/chat/history/{session_id}`
+**Get Conversation History**
+- Retrieves complete conversation thread
+- Includes message timestamps and metadata
+- Supports pagination for long conversations
+
+### Analytics & Monitoring
+
+#### GET `/chat/analytics/{user_id}`
+**Chat Analytics**
+```json
+Response:
+{
+  "total_messages": 245,
+  "session_count": 18,
+  "average_response_confidence": 0.87,
+  "crisis_interactions": 2,
+  "most_common_intervention": "emotional_support",
+  "user_engagement_score": 0.94
+}
 ```
 
-## 🔄 Conversation Processing Pipeline
+#### GET `/chat/engine/status`
+**Engine Status Monitoring**
+- Real-time status of intelligent engine components
+- Performance metrics and health checks
+- Component uptime and response tracking
 
-1. **Input Processing** → Receive and validate user message
-2. **Context Retrieval** → Get conversation history and user context
-3. **Mood Analysis** → Analyze current emotional state
-4. **Intent Recognition** → Identify user intent and needs
-5. **Crisis Assessment** → Check for crisis indicators
-6. **Response Generation** → Generate contextually appropriate response
-7. **Safety Filtering** → Apply safety and appropriateness filters
-8. **Personalization** → Adapt response to user preferences
-9. **Multi-modal Enhancement** → Add voice/media elements if needed
-10. **Learning Update** → Update user model based on interaction
+### Frontend Compatibility
 
-## 🧠 Intelligent Engine Components
+#### POST `/api/chatbot/chat`
+#### POST `/api/chatbot/enhanced/chat`
+**Frontend-Compatible Endpoints**
+- Mirror functionality of core intelligent chat
+- Standardized API format for frontend integration
+- Enhanced error handling and response formatting
+
+## Configuration
+
+### Environment Variables
+
+```bash
+# Service Configuration
+CHATBOT_SERVICE_PORT=8004
+CHATBOT_SERVICE_HOST=0.0.0.0
+
+# Database Configuration  
+DATABASE_URL=postgresql://user:pass@localhost/mantrapath
+SQLALCHEMY_DATABASE_URL=postgresql://user:pass@localhost/mantrapath
+
+# External Service URLs
+MODELS_SERVICE_URL=http://models-service:8080
+VOICE_SERVICE_URL=http://voice-service:8011
+MOOD_SERVICE_URL=http://mood-service:8003
+ML_SERVICE_URL=http://ml-service:8007
+PROFILE_SERVICE_URL=http://profile-service:8002
+
+# JWT Configuration (from shared auth)
+JWT_SECRET_KEY=your-secret-key
+JWT_ALGORITHM=HS256
+JWT_ACCESS_TOKEN_EXPIRE_MINUTES=30
+
+# Feature Flags
+CHATBOT_DEBUG=false
+ENABLE_VOICE_INTEGRATION=true
+ENABLE_TRANSLATION=true
+ENABLE_CRISIS_DETECTION=true
+```
+
+### Service Dependencies
+
+- **Models Service** (Port 8080) - Language detection and translation
+- **Voice Service** (Port 8011) - Speech-to-text processing
+- **Mood Service** (Port 8003) - User mood data and analytics
+- **ML Service** (Port 8007) - Machine learning predictions
+- **Profile Service** (Port 8002) - User profile information
+- **PostgreSQL** - Session and message persistence
+- **Redis** (Optional) - Caching and rate limiting
+
+## Intelligent Engine Components
+
+### Response Generator
+**Central orchestration component** that coordinates all intelligent engine modules:
+- Gathers comprehensive user context from multiple services
+- Analyzes conversation context and user intent
+- Generates mood-aware responses with personalization
+- Provides fallback mechanisms for service failures
+- Tracks response effectiveness and user engagement
+
+### Context Analyzer  
+**Conversation analysis engine** that provides contextual understanding:
+- **Intent Classification**: Seeking help, sharing feelings, crisis situations
+- **Emotional Intensity**: Measures emotional state (0-1 scale)
+- **Conversation Stage**: Opening, deepening, sustained support, crisis
+- **Sentiment Analysis**: Overall conversation sentiment (-1 to 1)
+- **Urgency Detection**: Crisis level assessment (1-5 scale)
 
 ### Mood-Aware Responder
-```python
-class MoodAwareResponder:
-    def __init__(self):
-        self.mood_models = load_mood_classification_models()
-        self.response_templates = load_therapeutic_templates()
+**Mood-sensitive response generation** with therapeutic interventions:
+- Integrates real-time mood data from mood service
+- Provides crisis detection and intervention suggestions  
+- Generates breathing exercises and coping strategies
+- Adapts communication style to user emotional state
+- Supports multiple intervention types (emotional support, cognitive reframing, etc.)
+
+### Service Integrator
+**Multi-service data aggregation** for comprehensive user context:
+- Collects user profile information and preferences
+- Retrieves mood history and trend analysis
+- Gathers ML-based predictions and insights
+- Manages service timeouts and fallback strategies
+- Provides unified context interface for response generation
+
+## Request Flow
+
+```mermaid
+sequenceDiagram
+    participant User
+    participant ChatBot as Chatbot Service
+    participant Engine as Intelligent Engine
+    participant Mood as Mood Service
+    participant Models as Models Service
+    participant Voice as Voice Service
+    participant DB as Database
+
+    User->>ChatBot: Send message (text/voice)
     
-    async def generate_response(self, message, mood_context):
-        # Analyze current mood
-        mood_analysis = await self.analyze_mood(message, mood_context)
-        
-        # Select appropriate response strategy
-        strategy = self.select_response_strategy(mood_analysis)
-        
-        # Generate contextual response
-        response = await self.generate_contextual_response(
-            message, mood_analysis, strategy
-        )
-        
-        return {
-            "response": response,
-            "mood_assessment": mood_analysis,
-            "strategy_used": strategy,
-            "confidence": 0.92
-        }
-```
-
-### Crisis Detection System
-```python
-class CrisisDetector:
-    def __init__(self):
-        self.crisis_model = load_crisis_detection_model()
-        self.risk_keywords = load_risk_indicators()
-        self.escalation_protocols = load_escalation_rules()
+    alt Voice Input
+        ChatBot->>Voice: Convert speech-to-text
+        Voice-->>ChatBot: Transcript + language
+    end
     
-    async def assess_crisis_risk(self, message, context):
-        # Multiple detection layers
-        keyword_risk = self.keyword_analysis(message)
-        semantic_risk = await self.semantic_analysis(message)
-        context_risk = self.context_analysis(context)
-        
-        # Combined risk assessment
-        overall_risk = self.combine_risk_scores([
-            keyword_risk, semantic_risk, context_risk
-        ])
-        
-        # Trigger appropriate response
-        if overall_risk.level >= "HIGH":
-            await self.initiate_crisis_protocol(overall_risk)
-        
-        return overall_risk
-```
-
-### Service Integration Hub
-```python
-class ServiceIntegrator:
-    def __init__(self):
-        self.mood_client = MoodServiceClient()
-        self.voice_client = VoiceServiceClient()
-        self.profile_client = ProfileServiceClient()
-        self.context_client = AIContextClient()
+    ChatBot->>Engine: Generate intelligent response
+    Engine->>Mood: Get user mood context
+    Engine->>Models: Detect language & translate
+    Engine->>Engine: Analyze conversation context
+    Engine->>Engine: Generate mood-aware response
+    Engine-->>ChatBot: Intelligent response
     
-    async def gather_user_context(self, user_id, session_id):
-        # Parallel data gathering
-        tasks = [
-            self.mood_client.get_current_mood(user_id),
-            self.profile_client.get_user_profile(user_id),
-            self.context_client.get_conversation_context(session_id),
-            self.voice_client.get_recent_voice_analysis(user_id)
-        ]
-        
-        results = await asyncio.gather(*tasks, return_exceptions=True)
-        
-        return {
-            "mood_data": results[0],
-            "profile_data": results[1],
-            "conversation_context": results[2],
-            "voice_analysis": results[3]
-        }
+    ChatBot->>DB: Save interaction (async)
+    ChatBot-->>User: Response with metadata
 ```
 
-## 🎯 Therapeutic Approaches
+## Data Models
 
-### Cognitive Behavioral Therapy (CBT)
-- **Thought challenging**: Help users identify and challenge negative thoughts
-- **Behavioral activation**: Encourage positive activities and behaviors
-- **Mood monitoring**: Track mood patterns and triggers
-- **Coping strategies**: Provide practical coping techniques
-
-### Mindfulness and Meditation
-- **Guided breathing**: Voice-guided breathing exercises
-- **Body scan meditations**: Progressive relaxation techniques
-- **Mindful awareness**: Present-moment awareness exercises
-- **Stress reduction**: Evidence-based stress management
-
-### Solution-Focused Therapy
-- **Goal setting**: Help users identify and work toward goals
-- **Strength identification**: Recognize user strengths and resources
-- **Solution building**: Focus on what works and build upon it
-- **Future orientation**: Encourage hope and forward thinking
-
-### Cultural Adaptation
-- **Indian cultural context**: Responses adapted for Indian values and beliefs
-- **Family dynamics**: Understanding of Indian family structures
-- **Regional variations**: Adaptation for different Indian regions
-- **Language nuances**: Cultural appropriateness in multiple languages
-
-## 📊 Performance Metrics
-
-### Response Quality
-- **Relevance Score**: 94%+ contextually relevant responses
-- **Therapeutic Value**: 89%+ responses incorporate therapeutic techniques
-- **Safety Score**: 99.8%+ responses pass safety filters
-- **User Satisfaction**: 4.6/5.0 average user rating
-
-### Technical Performance
-- **Response Time**: < 2 seconds for standard responses
-- **Availability**: 99.9% uptime
-- **Concurrent Users**: Support for 1000+ simultaneous conversations
-- **Error Rate**: < 0.1% unhandled errors
-
-### Therapeutic Outcomes
-- **Mood Improvement**: 78% of users report mood improvement
-- **Engagement**: 85% session completion rate
-- **Crisis Prevention**: 95% crisis situations successfully de-escalated
-- **Skill Acquisition**: 72% of users apply suggested coping strategies
-
-## 🔐 Safety and Ethics
-
-### Content Safety
-- **Harm Prevention**: Filters to prevent harmful advice
-- **Crisis Escalation**: Automatic escalation of high-risk situations
-- **Professional Boundaries**: Clear limitations and referral guidance
-- **Cultural Sensitivity**: Appropriate responses across cultures
-
-### Privacy Protection
-- **Data Minimization**: Only collect necessary conversation data
-- **Encryption**: All conversations encrypted in transit and at rest
-- **Anonymization**: Personal identifiers removed from training data
-- **User Control**: Users can delete conversation history
-
-### Ethical AI
-- **Transparency**: Clear about AI limitations and capabilities
-- **Bias Mitigation**: Regular testing for bias in responses
-- **Human Oversight**: Human review of crisis situations
-- **Continuous Improvement**: Regular updates based on feedback
-
-## 🚨 Crisis Intervention Protocol
-
-### Risk Assessment Levels
-1. **Low Risk**: General stress, mild anxiety
-   - Provide coping strategies and self-help resources
-   - Continue normal conversation flow
-
-2. **Medium Risk**: Moderate distress, relationship issues
-   - Offer additional support and resources
-   - Suggest professional help if appropriate
-
-3. **High Risk**: Severe depression, anxiety, trauma responses
-   - Provide immediate coping strategies
-   - Offer crisis helpline numbers
-   - Schedule follow-up check-ins
-
-4. **Critical Risk**: Suicidal ideation, self-harm indicators
-   - Immediate crisis intervention protocol
-   - Connect to emergency services if necessary
-   - Alert human crisis counselors
-   - Maintain engagement until professional help arrives
-
-### Escalation Procedures
+### ChatSession
 ```python
-async def handle_crisis_situation(risk_assessment):
-    if risk_assessment.level == "CRITICAL":
-        # Immediate actions
-        await alert_crisis_team(risk_assessment)
-        await provide_immediate_safety_plan(risk_assessment.user_id)
-        await offer_emergency_contacts(risk_assessment.location)
-        
-        # Continuous monitoring
-        await schedule_immediate_followup(risk_assessment.user_id)
-        await log_crisis_incident(risk_assessment)
+class ChatSession(Base):
+    __tablename__ = "chat_sessions"
+    
+    id: UUID = Column(UUID, primary_key=True)
+    user_id: str = Column(String, nullable=False, index=True)
+    title: str = Column(String, nullable=True)
+    session_type: str = Column(String, default="general")
+    is_active: bool = Column(Boolean, default=True)
+    created_at: datetime = Column(DateTime)
+    updated_at: datetime = Column(DateTime)
 ```
 
-## 🤝 Contributing
+### ChatMessage  
+```python
+class ChatMessage(Base):
+    __tablename__ = "chat_messages"
+    
+    id: UUID = Column(UUID, primary_key=True)
+    session_id: str = Column(String, nullable=False, index=True)
+    user_id: str = Column(String, nullable=False, index=True)
+    message_type: str = Column(String)  # 'user', 'assistant'
+    content: str = Column(Text, nullable=False)
+    metadata: JSON = Column(JSON, nullable=True)
+    created_at: datetime = Column(DateTime)
+```
 
-Guidelines for contributing to the chatbot service:
-1. Understand therapeutic principles and mental health considerations
-2. Test responses across different cultural contexts
-3. Ensure safety filters are comprehensive and effective
-4. Maintain conversation context and personalization
-5. Document therapeutic rationale for response strategies
+## Multi-Language Support
 
-## 📋 Dependencies
+### Automatic Language Detection
+- Real-time language detection via Models Service
+- Supports 50+ languages with confidence scoring
+- Fallback to English for unsupported languages
+- Context-aware language switching
 
-Core dependencies:
-- **FastAPI**: Web framework for API endpoints
-- **SQLAlchemy**: Database ORM for conversation storage
-- **transformers**: Hugging Face transformers for local models
-- **openai**: OpenAI API integration
-- **redis**: Session management and caching
-- **nltk**: Natural language processing utilities
-- **scikit-learn**: Machine learning utilities
-- **asyncio**: Asynchronous programming support
+### Translation Pipeline
+- Enhanced translation with context preservation
+- Fallback to simplified responses for translation failures
+- Cultural adaptation for responses
+- Maintains therapeutic tone across languages
 
-For complete dependency list, see `requirements.txt`.
+### Language Features
+```python
+# Supported languages with confidence thresholds
+SUPPORTED_LANGUAGES = {
+    "en": {"name": "English", "threshold": 0.8},
+    "es": {"name": "Spanish", "threshold": 0.7},
+    "fr": {"name": "French", "threshold": 0.7},
+    "de": {"name": "German", "threshold": 0.7},
+    "hi": {"name": "Hindi", "threshold": 0.6},
+    "zh": {"name": "Chinese", "threshold": 0.6}
+}
+```
+
+## Voice Integration
+
+### Speech-to-Text Processing
+- Real-time audio processing via Voice Service
+- Multi-language speech recognition
+- Audio quality assessment and enhancement
+- Noise reduction and clarity optimization
+
+### Voice Features
+- Supports common audio formats (MP3, WAV, M4A)
+- Automatic language detection from speech
+- Confidence scoring for transcription accuracy
+- Voice activity detection and endpoint detection
+
+## Crisis Detection & Intervention
+
+### Crisis Indicators
+The service monitors for crisis situations using multiple detection mechanisms:
+
+```python
+# Crisis detection patterns
+CRISIS_INDICATORS = {
+    "high_urgency": ["suicide", "kill myself", "end it all", "can't go on"],
+    "medium_urgency": ["hopeless", "worthless", "no point", "give up"],
+    "emotional_distress": ["overwhelmed", "breaking down", "can't cope"]
+}
+```
+
+### Intervention Strategies
+- **Immediate Response**: Crisis hotline information and emergency contacts
+- **Breathing Exercises**: Guided breathing techniques for acute stress
+- **Grounding Techniques**: 5-4-3-2-1 sensory grounding exercises  
+- **Professional Resources**: Referrals to mental health professionals
+- **Safety Planning**: Collaborative safety planning tools
+
+## Development & Testing
+
+### Running Locally
+
+```bash
+# Install dependencies
+cd /home/sachin/mantrapath/backend/services/chatbot_service
+pip install -r requirements.txt
+
+# Set environment variables
+export DATABASE_URL="postgresql://user:pass@localhost/mantrapath"
+export MODELS_SERVICE_URL="http://localhost:8080"
+export VOICE_SERVICE_URL="http://localhost:8011"
+
+# Run the service
+python main.py
+# or
+uvicorn main:app --host 0.0.0.0 --port 8004 --reload
+```
+
+### Using VS Code Tasks
+
+```bash
+# Available tasks:
+# - Start Translation Service Development
+# - Test Translation Service  
+# - Install Translation Service Dependencies
+
+# Start development server
+# Task: "Start Translation Service Development" (if available)
+```
+
+### Docker Deployment
+
+```bash
+# Build image
+docker build -t mantrapath/chatbot-service .
+
+# Run container
+docker run -d \
+  --name chatbot-service \
+  -p 8004:8004 \
+  -e DATABASE_URL="postgresql://user:pass@db:5432/mantrapath" \
+  -e MODELS_SERVICE_URL="http://models-service:8080" \
+  mantrapath/chatbot-service
+```
+
+### Testing
+
+```bash
+# Run all tests
+python -m pytest tests/ -v --cov=. --cov-report=term-missing
+
+# Test specific components
+python -m pytest tests/test_intelligent_engine.py -v
+python -m pytest tests/test_voice_integration.py -v
+python -m pytest tests/test_multilanguage.py -v
+```
+
+## Monitoring & Health Checks
+
+### Health Check Endpoint
+**GET `/health`**
+```json
+{
+  "status": "healthy",
+  "timestamp": "2024-01-15T10:30:00Z",
+  "database": "connected", 
+  "intelligent_engine": "active",
+  "components": {
+    "response_generator": "healthy",
+    "context_analyzer": "healthy",
+    "mood_responder": "healthy",
+    "service_integrator": "healthy"
+  }
+}
+```
+
+### Performance Metrics
+- Response generation time tracking
+- Service integration latency monitoring
+- Crisis detection accuracy metrics
+- User engagement and satisfaction scores
+- Translation quality and success rates
+
+### Logging
+```python
+# Comprehensive logging for debugging and monitoring
+logger.info(f"Generated intelligent response for user {user_id} in {generation_time:.2f}s with confidence {confidence_score:.2f}")
+logger.warning(f"⚠️ Translation failed for {language}, using English")
+logger.error(f"Error in intelligent chat endpoint: {str(e)}")
+```
+
+## Security & Authentication
+
+### JWT Authentication
+- Integrates with shared authentication system
+- Bearer token validation for all protected endpoints
+- User context extraction from validated tokens
+- Rate limiting and request throttling
+
+### Data Protection
+- Sensitive conversation data encryption at rest
+- PII anonymization in logs and metrics
+- GDPR compliance for user data handling
+- Secure multi-service communication
+
+## Service Integration Patterns
+
+### Mood Service Integration
+```python
+# Real-time mood context retrieval
+mood_context = await mood_client.get_user_mood_context(
+    user_id=user_id,
+    token=auth_token,
+    time_range_hours=24
+)
+```
+
+### Models Service Integration  
+```python
+# Language detection and translation
+detected_language = await detect_language(user_message, http_client)
+translated_response = await translate_text_enhanced(
+    response_text, "en", target_language, http_client
+)
+```
+
+### Voice Service Integration
+```python
+# Speech-to-text processing
+stt_result = await voice_client.convert_speech_to_text(
+    audio_file=audio_content,
+    language="auto"
+)
+```
+
+## Performance Considerations
+
+### Response Time Optimization
+- **Target Response Time**: < 2 seconds for text, < 5 seconds for voice
+- **Service Timeout Strategy**: 10s primary, 5s fallback
+- **Parallel Processing**: Concurrent service calls where possible
+- **Caching Strategy**: Context and translation caching for repeated requests
+
+### Scalability Features
+- **Horizontal Scaling**: Stateless design supports multiple instances
+- **Database Connection Pooling**: Efficient database resource management
+- **Async Processing**: Non-blocking I/O for all external service calls
+- **Background Tasks**: Async database saves and analytics processing
+
+## Future Development Plans
+
+### Phase 1 - Enhanced Intelligence (Q2 2024)
+- [ ] **Advanced NLP Models**: Integration with larger language models
+- [ ] **Emotion Recognition**: Real-time emotional state analysis from text
+- [ ] **Personality Adaptation**: Response style matching to user personality
+- [ ] **Context Memory**: Long-term conversation context retention
+
+### Phase 2 - Expanded Capabilities (Q3 2024) 
+- [ ] **Video Integration**: Facial expression analysis for mood assessment
+- [ ] **Group Chat Support**: Multi-user therapeutic group sessions
+- [ ] **Therapeutic Exercises**: Interactive CBT and mindfulness exercises
+- [ ] **Progress Tracking**: Longitudinal mental health progress monitoring
+
+### Phase 3 - Advanced Features (Q4 2024)
+- [ ] **Predictive Analytics**: Proactive intervention based on pattern recognition
+- [ ] **Integration Hub**: Third-party mental health service integrations
+- [ ] **Offline Capabilities**: Limited functionality without internet connectivity
+- [ ] **Professional Dashboard**: Clinician interface for supervised interactions
+
+## Contributing
+
+### Development Guidelines
+1. **Code Style**: Follow PEP 8 standards with type hints
+2. **Testing**: Maintain >90% test coverage for critical components
+3. **Documentation**: Update README and API docs for all changes
+4. **Security**: Security review required for authentication changes
+
+### Key Areas for Contribution
+- **Language Support**: Adding new language detection and translation capabilities
+- **Intervention Strategies**: New therapeutic intervention techniques
+- **Voice Processing**: Enhanced voice recognition and synthesis features
+- **Analytics**: Advanced conversation analysis and reporting tools
+
+---
+
+**Service Status**: ✅ Active Development  
+**Port**: 8004  
+**Version**: 2.0.0  
+**Last Updated**: January 2024  
+**Maintainer**: MantraPath Development Team

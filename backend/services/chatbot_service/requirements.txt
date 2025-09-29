@@ -1,44 +1,47 @@
+# Chatbot Service - Minimal requirements based on actual usage
+
+# Core Framework
 fastapi==0.104.1
 uvicorn[standard]==0.24.0
 pydantic==2.4.2
-pydantic-settings==2.0.3
+
+# Database & ORM
 sqlalchemy==2.0.23
-alembic==1.12.1
 psycopg2-binary==2.9.7
-redis==5.0.1
+alembic==1.12.1
+
+# HTTP clients
+httpx==0.25.2
+
+# Authentication & Security (from shared modules)
 python-jose[cryptography]==3.3.0
 pyjwt==2.8.0
 passlib[bcrypt]==1.7.4
 python-multipart==0.0.6
+
+# Templates & Files (if used)
 jinja2==3.1.2
 aiofiles==23.2.1
-httpx==0.25.2
-aiohttp==3.9.1
-websockets==12.0
-openai==1.3.7
+
+# Environment configuration
 python-dotenv==1.0.0
+
+# Logging
 loguru==0.7.2
-prometheus-client==0.19.0
-structlog==23.2.0
 
-# Testing dependencies for 80% code coverage
-pytest>=7.0.0
-pytest-asyncio>=0.21.0
-pytest-cov>=4.0.0
-pytest-mock>=3.10.0
-
-# Type checking and validation
+# Type checking
 typing-extensions>=4.0.0
 
-# Audio processing (for voice service integration)
-librosa>=0.10.0
-soundfile>=0.12.0
+# REMOVED - Not used based on analysis:
+# redis==5.0.1                  # No redis imports found
+# aiohttp==3.9.1               # Only httpx is used
+# websockets==12.0              # No websocket imports found  
+# openai==1.3.7                # No openai imports found
+# prometheus-client==0.19.0     # No prometheus imports found
+# structlog==23.2.0             # Using loguru instead
+# librosa>=0.10.0               # No audio processing imports found
+# soundfile>=0.12.0             # No audio processing imports found
+# asyncio-throttle>=1.0.2       # No throttle imports found
 
-# Async utilities
-asyncio-throttle>=1.0.2
-
-# Development dependencies
-black>=23.0.0
-isort>=5.12.0
-flake8>=6.0.0
-mypy>=1.5.0
+# DEV DEPENDENCIES REMOVED:
+# pytest, black, isort, flake8, mypy, etc.

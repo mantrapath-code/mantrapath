@@ -269,7 +269,7 @@ class ActionDispatcher:
                 "health_endpoint": "/health"
             },
             "analytics_service": {
-                "base_url": "http://ml-service:8010",
+                "base_url": "http://ml-service:8008",
                 "timeout": 60,
                 "health_endpoint": "/health"
             },

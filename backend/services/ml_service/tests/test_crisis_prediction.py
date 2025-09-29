@@ -14,9 +14,11 @@ Test Categories:
 
 import pytest
 import asyncio
-import json
 import numpy as np
-from datetime import datetime, timedelta
+import pandas as pd
+import json
+import os
+import requests
 from typing import Dict, List, Any
 import aiohttp
 import time
@@ -24,7 +26,7 @@ from unittest.mock import Mock, patch
 
 # Test configuration
 TEST_CONFIG = {
-    "ml_service_url": "http://localhost:8008",
+    "ml_service_url": os.getenv("ML_SERVICE_URL", "http://ml-service:8008"),
     "test_timeout": 30,
     "load_test_users": 500,  # Increased for more realistic production load testing
     "crisis_threshold_accuracy": 0.85,

@@ -45,7 +45,8 @@ class VoiceServiceClient:
     
     def __init__(self):
         import os
-        self.voice_service_url = os.getenv("VOICE_SERVICE_URL", "http://voice-service:8003")
+    # Canonical internal DNS endpoint (removed old 8003 port)
+    self.voice_service_url = os.getenv("VOICE_SERVICE_URL", "http://voice-service:8011")
         self.timeout = int(os.getenv("VOICE_SERVICE_TIMEOUT", "60"))  # Longer timeout for audio processing
         self.max_retries = int(os.getenv("VOICE_SERVICE_MAX_RETRIES", "3"))
         self.default_voice = os.getenv("VOICE_DEFAULT_VOICE", "hi_female_1")

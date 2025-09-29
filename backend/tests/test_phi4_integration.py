@@ -3,10 +3,11 @@
 Test script to verify PHI4 integration with the chatbot service
 """
 import requests
+from .config import CHATBOT_DIRECT
 
 # Test the chatbot endpoint
 def test_chatbot():
-    url = "http://localhost:8004/api/chatbot/test"
+    url = f"{CHATBOT_DIRECT}/api/chatbot/test"
     
     headers = {
         "Content-Type": "application/json"
@@ -40,7 +41,7 @@ def test_chatbot():
         return False
 
 def test_health():
-    url = "http://localhost:8004/health"
+    url = f"{CHATBOT_DIRECT}/health"
     
     try:
         response = requests.get(url, timeout=10)

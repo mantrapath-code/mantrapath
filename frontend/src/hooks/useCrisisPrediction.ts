@@ -72,7 +72,7 @@ interface AlertSummary {
 
 // API Service class
 class CrisisPredictionAPI {
-  private baseUrl = import.meta.env.VITE_API_GATEWAY_URL || import.meta.env.VITE_API_URL || 'http://localhost:8000'
+  private baseUrl = import.meta.env.VITE_API_GATEWAY_URL || import.meta.env.VITE_API_URL || 'http://api-gateway:8000'
   
   private async makeRequest<T>(endpoint: string, options: RequestInit = {}): Promise<T> {
     const token = localStorage.getItem('mantrapath_token')
@@ -160,7 +160,8 @@ class CrisisPredictionAPI {
   async getDashboardMetrics(): Promise<{ metrics: CrisisMetrics; status: SystemStatus }> {
     try {
       // Use ML service directly since API Gateway doesn't have ML dashboard routes
-      const publicResponse = await fetch('http://localhost:8008/dashboard/public-status')
+  const mlBase = (import.meta as any).env.VITE_ML_SERVICE_URL || 'http://ml-service:8008'
+  const publicResponse = await fetch(`${mlBase}/dashboard/public-status`)
       
       if (publicResponse.ok) {
         const publicData = await publicResponse.json()

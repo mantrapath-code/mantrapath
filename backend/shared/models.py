@@ -91,7 +91,18 @@ class MoodEntry(Base):
     stress_level = Column(Integer, default=5)  # 1-10 scale
     sleep_quality = Column(Integer, default=5)  # 1-10 scale
     notes = Column(Text)
+    description = Column(Text)  # Compatibility column for mood service
     context_tags = Column(JSON, default=list)  # ["work", "family", etc.]
+    
+    # AI Analysis results (for mood service compatibility)
+    primary_emotion = Column(String, nullable=True)
+    primary_sentiment = Column(String, nullable=True)  # positive, negative, neutral, ambiguous
+    emotion_analysis = Column(JSON, nullable=True)  # Full emotion analysis results
+    
+    # Additional context (for mood service compatibility)
+    location = Column(String, nullable=True)
+    activity = Column(String, nullable=True)
+    memory_context_id = Column(String, nullable=True)  # Links to memory service context
     
     # Phase 1 Enhancement Fields (with defaults for backward compatibility)
     emotional_granularity = Column(Integer, default=3)  # 1-5 scale for detail level user prefers

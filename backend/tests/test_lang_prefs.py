@@ -6,17 +6,18 @@ Tests GET and PUT operations with user Ramesh (Dev@#123)
 
 import requests
 import json
+from .config import PROFILE_BASE, AUTH_BASE
 
 # Configuration
-BASE_URL = "http://localhost:8002"  # Profile service port
+BASE_URL = PROFILE_BASE  # Resolved via test config (no hardcoded localhost)
 TEST_USER = {
     "email_or_username": "mydreems2good@gmail.com",
     "password": "Dev@#123"
 }
 
 def get_auth_token():
-    """Get JWT token for test user from auth service"""
-    auth_url = "http://localhost:8001/login"  # Auth service port (no /api prefix)
+    """Get JWT token for test user from auth service (dynamic URL)"""
+    auth_url = f"{AUTH_BASE}/login"  # Auth service may expose login at root
     
     try:
         response = requests.post(auth_url, json=TEST_USER)

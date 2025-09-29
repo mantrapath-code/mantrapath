@@ -299,13 +299,7 @@ class Settings(BaseSettings):
     
     # API Fallback Configuration
     FALLBACK_APIS: Dict[str, Dict] = {
-        "openai_whisper": {
-            "type": "stt",
-            "api_key_env": "OPENAI_API_KEY",
-            "endpoint": "https://api.openai.com/v1/audio/transcriptions",
-            "languages": ["en", "es", "fr", "de", "it", "pt", "ru", "ja", "ko", "zh", "hi"],
-            "max_file_size": "25MB"
-        },
+        # Removed OpenAI Whisper fallback; relying on internal/self-hosted models only
         "elevenlabs": {
             "type": "tts",
             "api_key_env": "ELEVENLABS_API_KEY",
