@@ -49,6 +49,44 @@ export interface TextToSpeechResponse {
   error?: string
 }
 
+export interface LanguageDetectionRequest {
+  text: string
+}
+
+export interface LanguageDetectionResponse {
+  detected_language: string
+  confidence: number
+  supported_languages: string[]
+}
+
+export interface VoiceTestRequest {
+  text?: string
+  language?: string
+}
+
+export interface VoiceTestResponse {
+  success: boolean
+  original_text: string
+  transcribed_text: string
+  detected_language: string
+  similarity_score: number
+  tts_model: string
+  stt_model: string
+  audio_duration: number
+  pipeline_quality: 'excellent' | 'good' | 'fair' | 'poor'
+  error?: string
+  stage?: 'tts' | 'stt'
+}
+
+export interface IndicLanguageInfo {
+  code: string
+  name: string
+  native_name: string
+  script: string
+  supported_stt: boolean
+  supported_tts: boolean
+}
+
 export interface VoiceSessionData {
   sessionId: string
   userId?: string
@@ -301,6 +339,153 @@ class VoiceServiceClient {
       return response
     } catch (error) {
       console.error('Audio chunk processing failed:', error)
+      throw error
+    }
+  }
+
+  /**
+   * Detect language from text using Indic script analysis
+   */
+  async detectLanguage(request: LanguageDetectionRequest): Promise<LanguageDetectionResponse> {
+    try {
+      const response = await post<LanguageDetectionResponse>(
+        `${this.baseUrl}/api/v1/language/detect`,
+        request
+      )
+      return response
+    } catch (error) {
+      console.error('Language detection failed:', error)
+      throw error
+    }
+  }
+
+  /**
+   * Test complete voice pipeline (TTS -> STT round-trip)
+   */
+  async testVoicePipeline(request: VoiceTestRequest): Promise<VoiceTestResponse> {
+    try {
+      const response = await post<VoiceTestResponse>(
+        `${this.baseUrl}/api/v1/test/voice-pipeline`,
+        request
+      )
+      return response
+    } catch (error) {
+      console.error('Voice pipeline test failed:', error)
+      throw error
+    }
+  }
+
+  /**
+   * Get supported Indic languages with detailed information
+   */
+  async getSupportedIndicLanguages(): Promise<IndicLanguageInfo[]> {
+    const languages: IndicLanguageInfo[] = [
+      { code: 'hi', name: 'Hindi', native_name: 'हिन्दी', script: 'Devanagari', supported_stt: true, supported_tts: true },
+      { code: 'bn', name: 'Bengali', native_name: 'বাংলা', script: 'Bengali', supported_stt: true, supported_tts: true },
+      { code: 'gu', name: 'Gujarati', native_name: 'ગુજરાતી', script: 'Gujarati', supported_stt: true, supported_tts: true },
+      { code: 'kn', name: 'Kannada', native_name: 'ಕನ್ನಡ', script: 'Kannada', supported_stt: true, supported_tts: true },
+      { code: 'ml', name: 'Malayalam', native_name: 'മലയാളം', script: 'Malayalam', supported_stt: true, supported_tts: true },
+      { code: 'mr', name: 'Marathi', native_name: 'मराठी', script: 'Devanagari', supported_stt: true, supported_tts: true },
+      { code: 'or', name: 'Odia', native_name: 'ଓଡ଼ିଆ', script: 'Odia', supported_stt: true, supported_tts: true },
+      { code: 'pa', name: 'Punjabi', native_name: 'ਪੰਜਾਬੀ', script: 'Gurmukhi', supported_stt: true, supported_tts: true },
+      { code: 'ta', name: 'Tamil', native_name: 'தமிழ்', script: 'Tamil', supported_stt: true, supported_tts: true },
+      { code: 'te', name: 'Telugu', native_name: 'తెలుగు', script: 'Telugu', supported_stt: true, supported_tts: true },
+      { code: 'ur', name: 'Urdu', native_name: 'اردو', script: 'Arabic', supported_stt: true, supported_tts: true },
+      { code: 'as', name: 'Assamese', native_name: 'অসমীয়া', script: 'Bengali', supported_stt: true, supported_tts: true },
+      { code: 'en', name: 'English', native_name: 'English', script: 'Latin', supported_stt: true, supported_tts: true },
+    ]
+    
+    return languages
+  }
+
+  /**
+   * Enhanced STT with automatic language detection
+   */
+  async speechToTextWithAutoDetect(request: SpeechToTextRequest): Promise<SpeechToTextResponse> {
+    try {
+      const formData = new FormData()
+      
+      if (request.audioData instanceof Blob) {
+        formData.append('audio', request.audioData)
+      } else if (request.audioData instanceof ArrayBuffer) {
+        const blob = new Blob([request.audioData], { type: 'audio/wav' })
+        formData.append('audio', blob)
+      }
+
+      formData.append('language', request.language || 'auto')
+      
+      if (request.options?.detectLanguage) {
+        formData.append('detect_language', 'true')
+      }
+
+      const response = await post<{
+        success: boolean
+        text?: string
+        language_detected?: string
+        confidence?: number
+        model_used?: string
+        error?: string
+      }>(`${this.baseUrl}/api/v1/stt/transcribe`, formData)
+
+      return {
+        success: response.success,
+        transcription: response.text,
+        confidence: response.confidence,
+        language: response.language_detected,
+        error: response.error
+      }
+    } catch (error) {
+      console.error('Enhanced STT failed:', error)
+      throw error
+    }
+  }
+
+  /**
+   * Enhanced TTS with automatic language detection
+   */
+  async textToSpeechWithAutoDetect(request: TextToSpeechRequest): Promise<TextToSpeechResponse> {
+    try {
+      // Auto-detect language if not specified
+      let language = request.language || 'auto'
+      
+      if (language === 'auto') {
+        try {
+          const detection = await this.detectLanguage({ text: request.text })
+          language = detection.detected_language
+        } catch (error) {
+          console.warn('Language auto-detection failed, defaulting to Hindi:', error)
+          language = 'hi' // Default to Hindi for Indic content
+        }
+      }
+
+      const response = await post<{
+        success: boolean
+        audio_data?: ArrayBuffer
+        sample_rate?: number
+        duration?: number
+        model_used?: string
+        error?: string
+      }>(`${this.baseUrl}/api/v1/tts/synthesize`, {
+        text: request.text,
+        language: language,
+        voice: request.voice
+      })
+
+      if (response.success && response.audio_data) {
+        const audioBlob = new Blob([response.audio_data], { type: 'audio/wav' })
+        return {
+          success: true,
+          audioBlob: audioBlob,
+          duration: response.duration
+        }
+      }
+
+      return {
+        success: false,
+        error: response.error || 'TTS synthesis failed'
+      }
+    } catch (error) {
+      console.error('Enhanced TTS failed:', error)
       throw error
     }
   }

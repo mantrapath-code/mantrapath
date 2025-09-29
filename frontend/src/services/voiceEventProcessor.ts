@@ -66,7 +66,8 @@ class VoiceEventProcessorClient {
   }
 
   private getVoiceEventProcessorUrl(): string {
-    return import.meta.env.VITE_VOICE_EVENT_PROCESSOR_URL || 'http://localhost:8015'
+    // Use API Gateway URL instead of direct service URL
+    return import.meta.env.VITE_API_GATEWAY_URL || import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000'
   }
 
   private getVoiceEventProcessorWsUrl(): string {
@@ -83,7 +84,7 @@ class VoiceEventProcessorClient {
    */
   async healthCheck(): Promise<{ status: string; activeConnections: number; activeStreams: number }> {
     try {
-      const response = await get<{ status: string; activeConnections: number; activeStreams: number }>(`${this.baseUrl}/health`)
+      const response = await get<{ status: string; activeConnections: number; activeStreams: number }>(`${this.baseUrl}/voice-events/health`)
       return response
     } catch (error) {
       console.error('Voice event processor health check failed:', error)
@@ -96,7 +97,7 @@ class VoiceEventProcessorClient {
    */
   async getServiceInfo(): Promise<any> {
     try {
-      const response = await get(`${this.baseUrl}/`)
+      const response = await get(`${this.baseUrl}/voice-events/`)
       return response
     } catch (error) {
       console.error('Failed to get voice event processor info:', error)
@@ -109,7 +110,7 @@ class VoiceEventProcessorClient {
    */
   async getStreamsStatus(): Promise<any> {
     try {
-      const response = await get(`${this.baseUrl}/api/v1/streams/status`)
+      const response = await get(`${this.baseUrl}/voice-events/api/v1/streams/status`)
       return response
     } catch (error) {
       console.error('Failed to get streams status:', error)
@@ -122,9 +123,13 @@ class VoiceEventProcessorClient {
    */
   async processVoiceChunk(audioData: Uint8Array, config?: VoiceStreamConfig): Promise<{ success: boolean; events: VoiceEvent[] }> {
     try {
+      const voiceCommand = {
+        audioData: Array.from(audioData),
+        config: config || {}
+      }
       const response = await post<{ success: boolean; events: VoiceEvent[] }>(
-        `${this.baseUrl}/api/v1/voice/process`,
-        audioData
+        `${this.baseUrl}/voice-events/api/v1/voice/process`,
+        voiceCommand
       )
       return response
     } catch (error) {
@@ -138,7 +143,7 @@ class VoiceEventProcessorClient {
    */
   async getAnalytics(): Promise<AnalyticsData> {
     try {
-      const response = await get<AnalyticsData>(`${this.baseUrl}/api/v1/stats`)
+      const response = await get<AnalyticsData>(`${this.baseUrl}/voice-events/api/v1/stats`)
       return response
     } catch (error) {
       console.error('Failed to get analytics:', error)
@@ -151,7 +156,7 @@ class VoiceEventProcessorClient {
    */
   async getConfig(): Promise<any> {
     try {
-      const response = await get(`${this.baseUrl}/api/v1/config`)
+      const response = await get(`${this.baseUrl}/voice-events/api/v1/config`)
       return response
     } catch (error) {
       console.error('Failed to get config:', error)
