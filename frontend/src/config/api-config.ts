@@ -42,6 +42,7 @@ export const getServiceUrls = () => {
       MOOD_SERVICE_URL: origin,
       // IMPORTANT: Keep chatbot pointing to origin; helper methods supply full path.
       CHATBOT_SERVICE_URL: origin,
+      VOICE_SERVICE_URL: origin,
     };
   }
   
@@ -58,6 +59,7 @@ export const getServiceUrls = () => {
     MOOD_SERVICE_URL: origin,
     // Keep chatbot pointing to origin; helper methods supply full path.
     CHATBOT_SERVICE_URL: origin,
+    VOICE_SERVICE_URL: origin,
   };
 };
 
