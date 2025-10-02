@@ -58,6 +58,36 @@ class TTSEngine:
             "en": ["facebook/mms-tts-eng"],
             "auto": ["facebook/mms-tts-eng"]  # Auto-detection defaults to English
         }
+    
+    async def load_default_models(self):
+        """Load default TTS models (Hindi Indic-TTS and MMS)"""
+        logger.info("🔊 TTS Engine: Loading default models...")
+        
+        try:
+            # Load default Hindi models
+            default_lang = "hi"  # Hindi
+            if default_lang in self.language_models:
+                logger.info(f"🔊 TTS Engine: Loading default {default_lang} models...")
+                
+                # Load MMS-TTS first (preferred - more reliable than AI4Bharat Indic-TTS)
+                if INDIC_AVAILABLE and default_lang not in self.indic_models:
+                    self.indic_models[default_lang] = IndicTTS(lang=default_lang, engine="mms")
+                    logger.info(f"✅ TTS Engine: Loaded {default_lang} MMS-TTS model")
+                
+                # Also load MMS as fallback
+                mms_key = f"{default_lang}_mms"
+                if mms_key not in self.indic_models:
+                    self.indic_models[mms_key] = IndicTTS(lang=default_lang, engine="mms")
+                    logger.info(f"✅ TTS Engine: Loaded {default_lang} MMS-TTS model")
+                
+                logger.info("✅ TTS Engine: Default Hindi models loaded successfully")
+                return True
+            else:
+                logger.warning(f"⚠️ TTS Engine: Default language {default_lang} not in supported languages")
+                return False
+        except Exception as e:
+            logger.error(f"❌ TTS Engine: Failed to load default models: {e}")
+            return False
         
     async def synthesize(self, text: str, language: str = "en", voice: Optional[str] = None, model_preference: Optional[str] = None) -> Dict[str, Any]:
         """Main synthesis method - prioritizes Indic models"""
@@ -98,11 +128,23 @@ class TTSEngine:
                 return {"success": False, "error": "Indic models not available"}
 
             if language not in self.indic_models:
-                self.indic_models[language] = IndicTTS(lang=language, engine="indic")
-                logger.info(f"📥 Loaded Indic-TTS model for {language}")
+                self.indic_models[language] = IndicTTS(lang=language, engine="mms")
+                logger.info(f"📥 Loaded MMS-TTS model for {language}")
 
             with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as tmp:
                 out_path = self.indic_models[language].speak(text, out_path=tmp.name)
+                logger.info(f"🔊 IndicTTS speak returned path: '{out_path}'")
+                
+                # Check if file was actually created
+                if not out_path or not os.path.exists(out_path):
+                    logger.error(f"❌ TTS file not created: path='{out_path}', exists={os.path.exists(out_path) if out_path else False}")
+                    return {"success": False, "error": f"TTS file not created: {out_path}"}
+                
+                # Check file size
+                file_size = os.path.getsize(out_path)
+                logger.info(f"🔊 TTS file size: {file_size} bytes")
+                if file_size == 0:
+                    return {"success": False, "error": "TTS generated empty file"}
 
             # Read & enhance
             audio_np, sr = sf.read(out_path)
@@ -139,6 +181,18 @@ class TTSEngine:
 
             with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as tmp:
                 out_path = self.indic_models[language].speak(text, out_path=tmp.name)
+                logger.info(f"🔊 MMS TTS speak returned path: '{out_path}'")
+                
+                # Check if file was actually created
+                if not out_path or not os.path.exists(out_path):
+                    logger.error(f"❌ MMS TTS file not created: path='{out_path}', exists={os.path.exists(out_path) if out_path else False}")
+                    return {"success": False, "error": f"MMS TTS file not created: {out_path}"}
+                
+                # Check file size
+                file_size = os.path.getsize(out_path)
+                logger.info(f"🔊 MMS TTS file size: {file_size} bytes")
+                if file_size == 0:
+                    return {"success": False, "error": "MMS TTS generated empty file"}
 
             audio_np, sr = sf.read(out_path)
             audio_np = self._post_process(audio_np, sr)
@@ -229,3 +283,27 @@ class TTSEngine:
         buf = io.BytesIO()
         sf.write(buf, audio_np, sr, format='WAV')
         return buf.getvalue()
+
+    async def load_default_models(self) -> bool:
+        """Load default TTS models for enhanced voice stack"""
+        try:
+            logger.info("🔊 Loading default TTS models...")
+            
+            if not INDIC_AVAILABLE:
+                logger.warning("⚠️ Indic TTS components not available")
+                return False
+            
+            # Load Hindi model as default (most commonly used)
+            default_language = "hi"
+            if default_language in self.language_models:
+                logger.info(f"📥 Loading default TTS model for {default_language}")
+                self.indic_models[default_language] = IndicTTS(lang=default_language, engine="mms")
+                logger.info(f"✅ Default TTS model loaded: {default_language}")
+                return True
+            else:
+                logger.warning(f"⚠️ Default language {default_language} not found in available models")
+                return False
+                
+        except Exception as e:
+            logger.error(f"❌ Failed to load default TTS models: {e}")
+            return False

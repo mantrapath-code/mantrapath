@@ -7,12 +7,20 @@ WORKDIR /app
 ARG TARGETARCH
 ENV TARGETARCH=${TARGETARCH}
 
-# System deps kept minimal for audio I/O; avoid heavy toolchains unless required at runtime
+# System deps for audio I/O and TTS model support
 RUN apt-get update && apt-get install -y --no-install-recommends \
     ffmpeg \
     libsndfile1 \
+    libsndfile1-dev \
     libasound2 \
+    libasound2-dev \
     libgomp1 \
+    libavcodec-dev \
+    libavformat-dev \
+    libavutil-dev \
+    libswscale-dev \
+    libswresample-dev \
+    pkg-config \
     build-essential \
     git \
     curl \
@@ -63,7 +71,6 @@ ENV PYTHONPATH=/app \
     MODELS_DIR=/app/models \
     CACHE_DIR=/app/cache \
     LOGS_DIR=/app/logs \
-    MODELS_SERVICE_MODE=minimal \
     PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1
 

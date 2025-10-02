@@ -11,17 +11,7 @@ import sys
 from pathlib import Path
 from typing import Dict, List, Optional, Union, Any
 
-# Import embeddings_client with absolute import
-try:
-    from embeddings_integration import embeddings_client
-except ImportError:
-    # Add parent directory to sys.path and try again
-    import sys
-    import os
-    parent_dir = os.path.dirname(os.path.dirname(__file__))
-    if parent_dir not in sys.path:
-        sys.path.insert(0, parent_dir)
-    from embeddings_integration import embeddings_client
+# Embeddings functionality removed - focusing on Phi-4 text generation
 
 logger = logging.getLogger(__name__)
 
@@ -33,37 +23,42 @@ class NLPEngine:
         self.is_initialized = False
         self.loaded_models = {}
         
-        # Supported tasks (TEI for embeddings; others may be routed elsewhere)
+        # Supported tasks (Phi-4 text generation)
         self.supported_tasks = {
-            "embeddings": ["tei"],
+            "text_generation": ["phi4"],
         }
     
     async def initialize(self):
-        """Initialize the NLP engine with Phi-3"""
-        logger.info("🧠 Initializing NLP Engine (embeddings via TEI)...")
+        """Initialize the NLP engine with Phi-4"""
+        logger.info("🧠 Initializing NLP Engine (Phi-4 text generation)...")
         self.is_initialized = True
-        self.loaded_models["tei_embeddings"] = {"type": "embeddings", "backend": "tei"}
-        logger.info("✅ NLP Engine ready (TEI embeddings enabled)")
+        logger.info("✅ NLP Engine ready (Phi-4 text generation enabled)")
         return True
     
     async def load_default_models(self):
-        """Load default NLP models (Phi-3) gracefully"""
-        logger.info("🧠 Attempting to load default NLP models...")
-        
-        # Check if we're in minimal mode
-        if os.environ.get("MODELS_SERVICE_MODE") == "minimal":
-            logger.info("✅ NLP Engine initialized in minimal mode (models will load on-demand)")
-            return True
+        """Load default NLP models (Phi-4 text generation)"""
+        logger.info("🧠 NLP Engine: Loading default models...")
         
         try:
+            # Initialize NLP engine
             success = await self.initialize()
             if success:
-                logger.info("✅ NLP Engine initialized successfully")
+                logger.info("✅ NLP Engine: Base engine initialized")
+                
+                # Add Phi-4 model info (will be loaded on-demand via text generation routes)
+                phi4_model = "microsoft/phi-4"  # Latest Phi-4 model
+                self.loaded_models["phi4_text_generation"] = {
+                    "type": "text_generation", 
+                    "model": phi4_model,
+                    "status": "ready_on_demand"
+                }
+                logger.info(f"✅ NLP Engine: Phi-4 model configured: {phi4_model}")
+                return True
             else:
-                logger.warning("⚠️ NLP Engine initialization failed - service will continue without NLP")
-            return success
+                logger.warning("⚠️ NLP Engine: Initialization failed")
+                return False
         except Exception as e:
-            logger.warning(f"⚠️ Could not initialize NLP engine: {e}")
+            logger.error(f"❌ NLP Engine: Failed to load default models: {e}")
             return False
     
     async def translate(self, *args, **kwargs) -> Dict[str, Any]:
@@ -84,7 +79,7 @@ class NLPEngine:
     
     def get_model_info(self) -> Dict[str, Any]:
         if self.is_initialized:
-            return {"embeddings_backend": "tei"}
+            return {"text_generation": "phi4", "status": "ready"}
         return {"error": "NLP Engine not initialized"}
     
     async def cleanup(self):
@@ -92,11 +87,4 @@ class NLPEngine:
         logger.info("🧹 Cleaning up NLP Engine...")
         self.is_initialized = False
 
-    async def get_embeddings(self, text: str, model_name: str = "tei") -> Dict[str, Any]:
-        """Get text embeddings via TEI server."""
-        if not self.is_initialized:
-            return {"success": False, "error": "NLP Engine not initialized"}
-
-        inputs = [text]
-        result = await embeddings_client.embed(inputs)
-        return result
+    # Embeddings functionality removed - use models_service text generation endpoints instead

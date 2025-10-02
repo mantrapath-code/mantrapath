@@ -6,13 +6,400 @@ The **MantraPath Models Service** is a centralized AI model management and infer
 
 ### Key Capabilities
 
-- 🎤 **Speech-to-Text Processing** - Multi-engine STT with Whisper, Vosk, and Wav2Vec2
-- 🔊 **Text-to-Speech Synthesis** - High-quality TTS with Coqui TTS, eSpeak, and Festival
-- 🧠 **Natural Language Processing** - Embeddings, translation, and text analysis
+- 🎤 **Speech-to-Text Processing** - Multi-engine STT with AI4Bharat IndicWav2Vec, Whisper, and Vosk
+- 🔊 **Text-to-Speech Synthesis** - High-quality TTS with AI4Bharat Indic-TTS, Meta MMS-TTS, and lightweight alternatives
+- 🧠 **Natural Language Processing** - Embeddings via TEI, translation, and text analysis with Phi-4
 - 📦 **Dynamic Model Management** - Automated model downloading, caching, and lifecycle management
-- 🌍 **Multi-Language Support** - Comprehensive support for Indian and international languages
-- ⚡ **Performance Optimization** - GPU acceleration, model caching, and load balancing
+- 🌍 **Multi-Language Support** - Specialized Indian language models with international language fallbacks
+- ⚡ **Performance Optimization** - GPU acceleration, model caching, and intelligent load balancing
 - 🔄 **Service Integration** - Seamless integration with all MantraPath platform services
+
+## Models Used and Their Purposes
+
+### 1. Speech-to-Text (STT) Models
+
+#### AI4Bharat IndicWav2Vec Models (Primary) 🎯
+**Purpose**: High-quality speech recognition specifically optimized for Indian languages
+**Architecture**: Wav2Vec2-based Connectionist Temporal Classification (CTC)
+**Why Chosen**: Provides superior accuracy for Indian languages compared to generic multilingual models
+
+**Supported Models**:
+- `ai4bharat/indicwav2vec_v1_hindi` - Hindi speech recognition
+- `ai4bharat/indicwav2vec_v1_bengali` - Bengali speech recognition  
+- `ai4bharat/indicwav2vec_v1_gujarati` - Gujarati speech recognition
+- `ai4bharat/indicwav2vec_v1_kannada` - Kannada speech recognition
+- `ai4bharat/indicwav2vec_v1_malayalam` - Malayalam speech recognition
+- `ai4bharat/indicwav2vec_v1_marathi` - Marathi speech recognition
+- `ai4bharat/indicwav2vec_v1_odia` - Odia speech recognition
+- `ai4bharat/indicwav2vec_v1_punjabi` - Punjabi speech recognition
+- `ai4bharat/indicwav2vec_v1_tamil` - Tamil speech recognition
+- `ai4bharat/indicwav2vec_v1_telugu` - Telugu speech recognition
+- `ai4bharat/indicwav2vec_v1_urdu` - Urdu speech recognition
+- `ai4bharat/indicwav2vec_v1_assamese` - Assamese speech recognition
+
+#### OpenAI Whisper (Emergency Fallback) ⚠️
+**Model**: `openai/whisper-small`
+**Purpose**: Fallback speech recognition for unsupported languages or system failures
+**Why Used**: Broad language support when IndicWav2Vec models are unavailable
+**Status**: Disabled by default to ensure consistent quality, enabled via `ENABLE_WHISPER_FALLBACK=true`
+
+#### Vosk (Lightweight Alternative) 🪶
+**Purpose**: Resource-efficient speech recognition for minimal deployments
+**Why Used**: Smaller memory footprint for constrained environments
+**Use Case**: Basic STT functionality when full models are too resource-intensive
+
+### 2. Text-to-Speech (TTS) Models
+
+#### AI4Bharat Indic-TTS Models (Primary) 🗣️
+**Purpose**: Natural, high-quality speech synthesis for Indian languages
+**Why Chosen**: Specialized pronunciation and intonation patterns for authentic Indian language speech
+
+**Supported Models**:
+- `ai4bharat/indictts_v1_hi` - Hindi text-to-speech
+- `ai4bharat/indictts_v1_bn` - Bengali text-to-speech
+- `ai4bharat/indictts_v1_gu` - Gujarati text-to-speech
+- `ai4bharat/indictts_v1_kn` - Kannada text-to-speech
+- `ai4bharat/indictts_v1_ml` - Malayalam text-to-speech
+- `ai4bharat/indictts_v1_mr` - Marathi text-to-speech
+- `ai4bharat/indictts_v1_or` - Odia text-to-speech
+- `ai4bharat/indictts_v1_pa` - Punjabi text-to-speech
+- `ai4bharat/indictts_v1_ta` - Tamil text-to-speech
+- `ai4bharat/indictts_v1_te` - Telugu text-to-speech
+- `ai4bharat/indictts_v1_ur` - Urdu text-to-speech
+- `ai4bharat/indictts_v1_as` - Assamese text-to-speech
+
+#### Meta MMS-TTS (Universal Fallback) 🌐
+**Purpose**: Multilingual text-to-speech using VITS architecture
+**Why Used**: Comprehensive language coverage when Indic-TTS models are unavailable
+
+**Language Mappings**:
+- `facebook/mms-tts-hin` - Hindi
+- `facebook/mms-tts-ben` - Bengali
+- `facebook/mms-tts-tel` - Telugu
+- `facebook/mms-tts-tam` - Tamil
+- `facebook/mms-tts-mar` - Marathi
+- `facebook/mms-tts-guj` - Gujarati
+- `facebook/mms-tts-kan` - Kannada
+- `facebook/mms-tts-mal` - Malayalam
+- `facebook/mms-tts-ori` - Odia
+- `facebook/mms-tts-pan` - Punjabi
+- `facebook/mms-tts-asm` - Assamese
+- `facebook/mms-tts-eng` - English
+
+#### AI4Bharat Indic Parler-TTS (Advanced) 🎭
+**Model**: `ai4bharat/indic-parler-tts`
+**Purpose**: Advanced multilingual TTS with controllable voice characteristics
+**Why Used**: Supports style control and multiple speaking characteristics for enhanced user experience
+
+#### Lightweight TTS Options (Minimal Mode) 📱
+- **pyttsx3**: System-level TTS for basic functionality
+- **gTTS (Google Text-to-Speech)**: Cloud-based TTS for English
+**Purpose**: Minimal resource footprint for constrained deployments
+
+### 3. Natural Language Processing (NLP) Models
+
+#### Text Embeddings Inference (TEI) 🔍
+**Default Model**: `google/embeddinggemma-300m`
+**Purpose**: Generate semantic text embeddings for similarity search and NLP tasks
+**Why Used**: High-quality embeddings for content understanding, semantic search, and downstream NLP applications
+**Integration**: External TEI server provides scalable embedding generation
+
+#### Microsoft Phi-4 (Advanced NLP) 🧠
+**Model**: `microsoft/Phi-4-mini-instruct` (Primary) / `microsoft/Phi-4-mini-flash-reasoning` (Advanced)
+**Purpose**: Multilingual text generation, translation, and instruction-following tasks
+**Supported Languages**: 25+ languages including all major Indian languages
+**Why Chosen**:
+- **Significantly improved** over Phi-3 with better reasoning capabilities
+- Enhanced architecture with 64K context window (vs 4K in Phi-3)
+- Superior performance on mathematical and logical reasoning tasks
+- Advanced multilingual capabilities including Indian languages
+- Instruction-following for complex NLP tasks
+- 10x better throughput for long-context generation
+- Efficient translation between Indian languages and English
+- Advanced reasoning capabilities for chatbot and content generation
+
+**⚠️ UPGRADE REQUIRED**: Currently using deprecated Phi-3 model - needs migration to Phi-4
+
+### 4. Legacy/Compatibility Models
+
+#### Facebook Wav2Vec2 (Legacy STT) 🏛️
+**Purpose**: Backward compatibility for existing integrations
+**Status**: Superseded by IndicWav2Vec but maintained for compatibility
+
+**Legacy Models**:
+- `facebook/wav2vec2-large-xlsr-53-hindi`
+- `facebook/wav2vec2-large-xlsr-53-bengali`
+- `facebook/wav2vec2-large-xlsr-53-telugu`
+- `facebook/wav2vec2-large-xlsr-53-tamil`
+
+## Model Selection Strategy 🎯
+
+### 1. **Indian Languages Priority**
+- **STT**: AI4Bharat IndicWav2Vec models (primary) → Meta MMS (fallback)
+- **TTS**: AI4Bharat Indic-TTS (primary) → Meta MMS-TTS (fallback)
+- **Rationale**: Models trained specifically for Indian languages provide superior accuracy and naturalness
+
+### 2. **English/International Languages**
+- **STT**: Whisper (when enabled) or universal models
+- **TTS**: Meta MMS models for broad language coverage
+- **NLP**: Phi-4 for advanced multilingual processing (upgrade from Phi-3 required)
+
+### 3. **Fallback Hierarchy**
+1. Specialized Indian language models (AI4Bharat)
+2. Universal multilingual models (Meta MMS)
+3. Lightweight alternatives (Vosk, pyttsx3, gTTS)
+4. Emergency fallbacks (Whisper when enabled)
+
+### 4. **Deployment Modes**
+
+#### Enhanced Voice Stack Mode (`VOICE_STACK_MODE=enhanced`)
+- **Purpose**: Maximum quality for production voice applications
+- **Behavior**: Preloads Indian language models for immediate availability
+- **Use Case**: Production deployments prioritizing voice quality
+
+#### Minimal Mode (`MODELS_SERVICE_MODE=minimal`)
+- **Purpose**: Resource conservation
+- **Behavior**: On-demand model loading, lightweight alternatives
+- **Use Case**: Development environments or resource-constrained deployments
+
+#### Standard Mode (Default)
+- **Purpose**: Balanced performance and resource usage
+- **Behavior**: Intelligent caching with fallback strategies
+- **Use Case**: General production deployments
+
+## 🚨 **Critical Architecture Issues & Recommendations**
+
+### **Issue 1: Outdated Phi-3 Usage**
+**Problem**: Currently using `microsoft/Phi-3-mini-4k-instruct` when Phi-4 offers significant improvements:
+- **64K context** vs 4K context (16x improvement)
+- **10x better throughput** for long sequences
+- **Superior reasoning capabilities** for mathematical and logical tasks
+- **Better multilingual performance**
+
+**Recommendation**: 
+```python
+# CURRENT (Deprecated)
+self.model_name = "microsoft/Phi-3-mini-4k-instruct"
+
+# RECOMMENDED (Upgrade Required)
+self.model_name = "microsoft/Phi-4-mini-instruct"  # General use
+# OR
+self.model_name = "microsoft/Phi-4-mini-flash-reasoning"  # Advanced reasoning
+```
+
+### **Issue 2: Duplicate Service Architecture**
+**Problem**: Two services handling similar NLP tasks:
+- `models_service` (Port 8080) - Has `phi3_engine.py` using Phi-3
+# phi3_agent service removed - Phi-4 functionality integrated into models_service
+
+**Current Architecture Problems**:
+```
+models_service:8080 ──► phi3_engine.py ──► Phi-3 (Direct HuggingFace)
+                    │
+                    └──► ollama_integration.py ──► phi3:mini (Ollama)
+
+# phi3_agent:8016 removed - now: models_service:8081 ──► Phi-4 (Direct Transformers)
+```
+
+**Recommended Solution**:
+1. **✅ COMPLETED: Consolidated to Models Service**: Removed separate `phi3_agent` service
+2. **Upgrade to Phi-4**: Update `phi3_engine.py` to use Phi-4 models
+3. **Dual Integration**: Support both direct HuggingFace and Ollama backends
+
+### **Issue 3: Inconsistent Model References**
+**Problem**: Code contains mixed references:
+- `emotion_routes.py` mentions "Phi-4" but uses `ollama_client.analyze_emotion_via_phi4()` (not implemented)
+- `text_generation_routes.py` defaults to `model: Optional[str] = "phi4"`
+- `translation_routes.py` uses `engine: str = "phi3"`
+
+**Fix Required**: Update all references to use consistent Phi-4 models
+
+### **Recommended Migration Plan**
+
+#### **Phase 1: Immediate Updates (Week 1)**
+1. **Update Model References**:
+   ```python
+   # models/phi3_engine.py → models/phi4_engine.py
+   self.model_name = "microsoft/Phi-4-mini-instruct"
+   ```
+
+2. **Fix API Routes**:
+   ```python
+   # Update all default model references
+   model: Optional[str] = "phi4-mini-instruct"
+   ```
+
+#### **Phase 2: Service Consolidation (Week 2)**
+1. **Merge Phi3_Agent functionality** into Models Service
+2. **Remove duplicate service** to reduce complexity
+3. **Update service discovery** and routing
+
+#### **Phase 3: Performance Optimization (Week 3)**
+1. **Implement Phi-4 Flash Reasoning** for advanced tasks
+2. **Add context window optimization** (64K vs 4K)
+3. **Performance benchmarking** and comparison
+
+## Quality Assurance Strategy 🔒
+
+### Model Quality Hierarchy
+1. **Tier 1**: AI4Bharat specialized models (highest quality for Indian languages)
+2. **Tier 2**: Meta MMS universal models (consistent quality across languages)  
+3. **Tier 3**: Microsoft Phi-4 models (advanced reasoning and multilingual NLP)
+4. **Tier 4**: Legacy/lightweight models (basic functionality)
+
+### Strict Model Enforcement
+- **Default Behavior**: Only high-quality models are used
+- **Fallback Prevention**: Whisper fallback disabled by default to prevent quality degradation
+- **Language Validation**: Unsupported languages return explicit errors rather than silent fallbacks
+- **Version Control**: Automatic deprecation warnings for outdated models (Phi-3)
+
+### Performance Monitoring
+- Model usage statistics tracking
+- Quality metrics collection
+- Automatic model health checks
+- Resource utilization monitoring
+- **Context window utilization** tracking for Phi-4
+
+## Technical Specifications 📋
+
+### Model Sizes and Requirements
+
+#### STT Models (AI4Bharat IndicWav2Vec)
+- **Model Size**: ~1.2GB per language model
+- **Memory Requirements**: 2-4GB RAM per loaded model
+- **Processing**: 16kHz mono audio input required
+- **Architecture**: Wav2Vec2 with CTC head
+- **Languages**: 12 Indian languages supported
+
+#### TTS Models 
+**AI4Bharat Indic-TTS**:
+- **Model Size**: ~500MB - 1GB per language
+- **Memory Requirements**: 1-2GB RAM per loaded model
+- **Output**: 22kHz/44kHz audio synthesis
+- **Architecture**: Neural vocoder-based synthesis
+
+**Meta MMS-TTS**:
+- **Model Size**: ~400-800MB per language
+- **Memory Requirements**: 1-1.5GB RAM per loaded model
+- **Output**: 16kHz audio synthesis
+- **Architecture**: VITS (Variational Inference Text-to-Speech)
+
+#### NLP Models
+**Microsoft Phi-4**:
+- **Model Size**: ~7.5GB (64K context, mini variant)
+- **Memory Requirements**: 8-16GB RAM (CPU) / 8GB VRAM (GPU)
+- **Context Window**: 65,536 tokens (16x larger than Phi-3)
+- **Parameters**: ~3.8 billion
+- **Performance**: 10x better throughput for long sequences
+- **Architecture**: Hybrid decoder with state space models
+
+**Embedding Gemma-300M**:
+- **Model Size**: ~600MB
+- **Memory Requirements**: 1-2GB RAM
+- **Embedding Dimension**: 768
+- **Max Sequence Length**: 512 tokens
+
+### Hardware Recommendations
+
+#### Minimum Requirements
+- **CPU**: 4 cores, 2.5GHz
+- **RAM**: 8GB
+- **Storage**: 50GB for basic model set
+- **Network**: 1Gbps for model downloading
+
+#### Recommended (Production)
+- **CPU**: 8+ cores, 3.0GHz (Intel Xeon/AMD EPYC)
+- **RAM**: 32GB+
+- **GPU**: NVIDIA GPU with 8GB+ VRAM (optional but recommended)
+- **Storage**: 200GB+ SSD for model caching
+- **Network**: 10Gbps for rapid model deployment
+
+#### Optimal (High-Load Production)
+- **CPU**: 16+ cores, 3.5GHz
+- **RAM**: 64GB+
+- **GPU**: NVIDIA A100/V100 or equivalent (40GB+ VRAM)
+- **Storage**: 500GB+ NVMe SSD
+- **Network**: 25Gbps+ for model synchronization
+
+### Performance Characteristics
+
+#### Latency Benchmarks (Typical)
+- **STT (IndicWav2Vec)**: 0.5-2.0x real-time processing
+- **TTS (Indic-TTS)**: 0.3-1.0x real-time synthesis
+- **TTS (MMS)**: 0.2-0.8x real-time synthesis
+- **Embeddings (TEI)**: 10-50ms per request
+- **Phi-4 Generation**: 15-40 tokens/second (CPU), 80-150 tokens/second (GPU)
+- **Phi-4 Long Context**: Up to 10x faster for sequences >2K tokens
+
+#### Throughput Capacity
+- **Concurrent STT Streams**: 5-20 (depending on hardware)
+- **Concurrent TTS Requests**: 10-30 (depending on model)
+- **Embedding Requests/sec**: 100-500 (with TEI)
+- **NLP Generation Requests**: 5-15 concurrent (GPU recommended)
+
+## Configuration Options ⚙️
+
+### Environment Variables
+
+#### Core Service Configuration
+```bash
+# Service mode
+MODELS_SERVICE_MODE=minimal|standard|enhanced
+VOICE_STACK_MODE=enhanced  # Preload voice models
+
+# Model selection
+MODELS_PRELOAD_LIST=hi,bn,te,ta  # Comma-separated language codes
+MODELS_PRELOAD_BACKGROUND=true   # Preload models in background
+MODELS_SERVICE_SKIP_DEFAULTS=false  # Skip default model loading
+
+# Emergency fallbacks
+ENABLE_WHISPER_FALLBACK=false  # Enable Whisper fallback (not recommended)
+```
+
+#### External Service Integration
+```bash
+# TEI Embeddings Server
+TEI_BASE_URL=http://ext-embeddings-inference:80
+TEI_MODEL_ID=google/embeddinggemma-300m
+TEI_TIMEOUT_SECONDS=15
+
+# Ollama Integration (Optional)
+OLLAMA_BASE_URL=http://localhost:11434
+OLLAMA_MODEL=phi3:mini
+OLLAMA_TIMEOUT_SECONDS=30
+```
+
+#### Hardware Optimization
+```bash
+# GPU Configuration
+CUDA_VISIBLE_DEVICES=0,1  # GPU selection
+TORCH_DEVICE=auto|cpu|cuda
+
+# Memory Management
+MAX_GPU_MEMORY=0.8  # Use 80% of GPU memory
+MODEL_CACHE_SIZE=5  # Number of models to keep in memory
+MAX_CONCURRENT_REQUESTS=10
+```
+
+### Language Configuration
+
+#### Supported Language Codes
+```python
+# Indian Languages (Primary Support)
+INDIAN_LANGUAGES = {
+    "hi": "Hindi",      "bn": "Bengali",    "te": "Telugu",
+    "ta": "Tamil",      "mr": "Marathi",    "gu": "Gujarati", 
+    "kn": "Kannada",    "ml": "Malayalam",  "pa": "Punjabi",
+    "or": "Odia",       "as": "Assamese",   "ur": "Urdu"
+}
+
+# International Languages (Fallback Support)
+INTERNATIONAL_LANGUAGES = {
+    "en": "English",    "es": "Spanish",    "fr": "French",
+    "de": "German",     "zh": "Chinese",    "ja": "Japanese",
+    "ko": "Korean",     "ru": "Russian",    "ar": "Arabic"
+}
+```
 
 ## Service Architecture
 
@@ -48,12 +435,14 @@ The **MantraPath Models Service** is a centralized AI model management and infer
 ┌─────────────────────────────────────────────────────────────────┐
 │                      AI Model Repository                        │
 │  ┌─────────────┐  ┌─────────────┐  ┌─────────────────────────┐ │
-│  │   Whisper   │  │ Coqui TTS   │  │    Sentence             │ │
-│  │   Models    │  │   Models    │  │  Transformers           │ │
+│  │AI4Bharat    │  │AI4Bharat    │  │   Google Embedding      │ │
+│  │IndicWav2Vec │  │ Indic-TTS   │  │    Gemma-300M          │ │
+│  │(STT Models) │  │(TTS Models) │  │   (via TEI)            │ │
 │  └─────────────┘  └─────────────┘  └─────────────────────────┘ │
 │  ┌─────────────┐  ┌─────────────┐  ┌─────────────────────────┐ │
-│  │    Vosk     │  │   eSpeak    │  │     Phi-3               │ │
-│  │   Models    │  │   Voices    │  │    Models               │ │
+│  │   Meta      │  │  Microsoft  │  │      Whisper            │ │
+│  │  MMS-TTS    │  │   Phi-3     │  │   (Emergency            │ │
+│  │  (Fallback) │  │  (4K-Mini)  │  │    Fallback)           │ │
 │  └─────────────┘  └─────────────┘  └─────────────────────────┘ │
 └─────────────────────────────────────────────────────────────────┘
 ```
@@ -1415,19 +1804,71 @@ Innovation_Research:
 └── Cross-modal learning (audio-visual-text)
 ```
 
+### **Immediate Action Plan: Phi-3 to Phi-4 Migration** 🚀
+
+#### **Week 1: Critical Fixes**
+```bash
+# 1. Update model engine
+mv models/phi3_engine.py models/phi4_engine.py
+
+# 2. Update model name in phi4_engine.py
+- self.model_name = "microsoft/Phi-3-mini-4k-instruct"
++ self.model_name = "microsoft/Phi-4-mini-instruct"
+
+# 3. Fix API route defaults
+- model: Optional[str] = "phi3:mini"
++ model: Optional[str] = "phi4-mini-instruct"
+
+# 4. Update imports
+- from models.phi3_engine import Phi3Engine
++ from models.phi4_engine import Phi4Engine
+```
+
+#### **Week 2: Service Architecture Decision**
+**Option A: Consolidate Services (Recommended)**
+```bash
+# Remove separate phi3_agent service
+rm -rf backend/services/phi3_agent/
+
+# Integrate functionality into models_service
+# Update docker-compose to remove phi3_agent:8016
+```
+
+**Option B: Keep Separate but Specialized**
+```bash
+# models_service:8080 → STT/TTS/Basic NLP
+# phi3_agent:8016 → Advanced reasoning/conversation
+# Update service responsibilities documentation
+```
+
+#### **Week 3: Performance Validation**
+```python
+# Benchmark comparison
+Phi-3 Performance:
+├── Context: 4K tokens
+├── Speed: 50-100 tokens/sec (GPU)
+└── Memory: 8GB VRAM
+
+Phi-4 Expected Performance:
+├── Context: 64K tokens (16x improvement)
+├── Speed: 80-150 tokens/sec (GPU) 
+└── Memory: 8GB VRAM (similar)
+```
+
 ### Development Roadmap Timeline
 
 ```
-2025 Q4: Real-time Processing & Performance
-├── Week 1-4: WebSocket streaming implementation
-├── Week 5-8: Voice activity detection and incremental STT
-├── Week 9-12: Real-time translation pipeline
-└── Week 13-16: Performance optimization and testing
+2025 Q4: Phi-4 Migration & Real-time Processing
+├── Week 1-2: CRITICAL - Phi-3 to Phi-4 migration
+├── Week 3-4: Service architecture consolidation  
+├── Week 5-8: WebSocket streaming implementation
+├── Week 9-12: Voice activity detection and incremental STT
+└── Week 13-16: Real-time translation pipeline
 
-2026 Q1: Advanced AI Features
-├── Month 1: Emotion-aware processing implementation
-├── Month 2: Advanced conversational AI capabilities
-└── Month 3: Voice personalization features
+2026 Q1: Advanced AI Features (Phi-4 Powered)
+├── Month 1: Phi-4 Flash Reasoning integration
+├── Month 2: 64K context window optimization
+└── Month 3: Advanced conversational AI capabilities
 
 2026 Q2: Enterprise Platform Development
 ├── Month 1: Model management platform

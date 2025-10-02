@@ -9,7 +9,7 @@ import httpx
 import json
 import time
 from typing import Dict, Any
-from .config import API_BASE, CHATBOT_DIRECT, PHI3_AGENT
+from .config import API_BASE, CHATBOT_DIRECT
 
 # Test user credentials (you'll need to register first)
 TEST_USER = {
@@ -79,7 +79,7 @@ class ChatbotTester:
         services = [
             ("API Gateway", f"{API_BASE}/health"),
             ("Chatbot Service", f"{CHATBOT_DIRECT}/health"),
-            ("Phi-3 Agent", f"{PHI3_AGENT}/health"),
+            # Phi-3 Agent removed - functionality moved to models_service
         ]
         
         async with httpx.AsyncClient(timeout=10.0) as client:
@@ -172,40 +172,34 @@ class ChatbotTester:
                 except Exception as e:
                     print(f"❌ Error: {e}")
     
-    async def test_phi3_direct(self):
-        """Test Phi-3 agent directly"""
-        print("\n🧠 Testing Phi-3 agent directly...")
+    async def test_phi4_models_service(self):
+        """Test Phi-4 via models service (replaces phi3_agent)"""
+        print("\n🧠 Testing Phi-4 via models service...")
+        
+        # Test text generation endpoint in models service
+        models_service_url = API_BASE.replace("/api/v1", ":8081")  # Models service on port 8081
         
         async with httpx.AsyncClient(timeout=30.0) as client:
             try:
                 response = await client.post(
-                    f"{PHI3_AGENT}/v1/chat/completions",
+                    f"{models_service_url}/api/v1/nlp/generate",
                     json={
-                        "model": "phi3-mini",
-                        "messages": [
-                            {
-                                "role": "system",
-                                "content": "You are a helpful mental health support assistant."
-                            },
-                            {
-                                "role": "user",
-                                "content": "Hello, can you help me with anxiety?"
-                            }
-                        ],
+                        "prompt": "You are a helpful mental health support assistant. User: Hello, can you help me with anxiety? Assistant:",
                         "max_tokens": 100,
-                        "temperature": 0.7
+                        "temperature": 0.7,
+                        "model": "phi4"
                     }
                 )
                 
                 if response.status_code == 200:
                     data = response.json()
-                    message = data["choices"][0]["message"]["content"]
-                    print(f"✅ Phi-3 direct response: {message[:100]}...")
+                    message = data["generated_text"]
+                    print(f"✅ Phi-4 models service response: {message[:100]}...")
                 else:
-                    print(f"❌ Phi-3 direct test failed: HTTP {response.status_code}")
+                    print(f"❌ Phi-4 models service test failed: HTTP {response.status_code}")
                     
             except Exception as e:
-                print(f"❌ Phi-3 direct test error: {e}")
+                print(f"❌ Phi-4 models service test error: {e}")
     
     async def run_all_tests(self):
         """Run all tests"""

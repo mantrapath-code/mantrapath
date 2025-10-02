@@ -29,7 +29,6 @@ from models.model_manager import ModelManager
 from api.routes import router as api_router
 from api.translation_routes import router as translation_router, set_models_service
 # from api.emotion_routes import router as emotion_router
-# from api.translation_routes_ollama import router as ollama_translation_router
 from api.text_generation_routes import router as text_generation_router
 from config.settings import get_settings
 from utils.logger import setup_logger
@@ -78,17 +77,22 @@ async def lifespan(app: FastAPI):
         background_preload = os.getenv("MODELS_PRELOAD_BACKGROUND", "true").lower() == "true"
         
         # Enhanced Voice Stack: Always preload Indic models for immediate availability
-        enhanced_mode = os.getenv("VOICE_STACK_MODE") == "enhanced"
+        voice_stack_mode = os.getenv("VOICE_STACK_MODE", "standard")
+        enhanced_mode = voice_stack_mode == "enhanced"
+        logger.info(f"🔧 Voice Stack Mode: {voice_stack_mode}, Enhanced: {enhanced_mode}")
+        
         if enhanced_mode:
-            logger.info("🎤 Enhanced Voice Stack Mode - Preloading Indic models...")
+            logger.info("🎤 Enhanced Voice Stack Mode - Loading default models...")
             
-            # For now, just load default models since preload methods aren't working
-            await stt_engine.load_default_models()
-            await tts_engine.load_default_models()
+            # Load default models
+            stt_success = await stt_engine.load_default_models()
+            tts_success = await tts_engine.load_default_models()
+            nlp_success = True
             if nlp_engine is not None:
-                await nlp_engine.load_default_models()
-                
-            logger.info("✅ Enhanced Voice Stack initialized (on-demand loading)")
+                nlp_success = await nlp_engine.load_default_models()
+            
+            logger.info(f"✅ Model loading results: STT={stt_success}, TTS={tts_success}, NLP={nlp_success}")
+            logger.info("✅ Enhanced Voice Stack initialization complete")
         else:
             # Legacy/minimal mode behavior
             if minimal_mode:
@@ -278,13 +282,12 @@ async def get_loaded_models():
 app.include_router(api_router, prefix="/api/v1")
 app.include_router(translation_router, prefix="/api/v1/translation", tags=["translation"])
 
-# Include new Ollama-based routes for centralized model service (temporarily commented out)
-# app.include_router(emotion_router, tags=["emotion"])  # Includes /api/v1/emotion/*
-# app.include_router(ollama_translation_router, prefix="/api/v1/translation/ollama", tags=["ollama-translation"])
-if os.getenv("ENABLE_OLLAMA_ROUTES", "false").lower() == "true":
+# Include text generation routes (Phi-4 based)
+if os.getenv("ENABLE_TEXT_GENERATION", "true").lower() == "true":
     app.include_router(text_generation_router, tags=["text-generation"])  # Includes /api/v1/nlp/*
+    logger.info("Phi-4 text-generation routes enabled")
 else:
-    logger.info("Ollama text-generation routes disabled (set ENABLE_OLLAMA_ROUTES=true to enable)")
+    logger.info("Text-generation routes disabled (set ENABLE_TEXT_GENERATION=true to enable)")
 
 if __name__ == "__main__":
     # Get port from environment or use default

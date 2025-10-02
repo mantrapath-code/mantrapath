@@ -1517,17 +1517,12 @@ echo "Deployment completed successfully"
 
 ---
 
-### **🎭 Phi-3 Agent Service (Port 8016) - Local AI Generation**
-```
-📁 phi3_agent/
-├── main.py                      # FastAPI application
-├── Dockerfile                   # Container configuration
-└── requirements.txt            # Dependencies
-```
+### **🎭 Phi-4 Text Generation (Integrated in Models Service)**
+*Note: Phi-3 Agent service has been consolidated into Models Service for better efficiency*
 
 **🎯 Core Functions:**
-- **Local AI Text Generation**: Phi-4 model via Ollama
-- **Translation Support**: Multi-language text processing
+- **Local AI Text Generation**: Phi-4 model via direct Transformers integration
+- **Translation Support**: Multi-language text processing integrated in Models Service
 - **Cultural Adaptation**: Context-aware text generation
 - **Fallback Integration**: Backup processing when available
 

@@ -218,6 +218,52 @@ async def get_voices(language: str):
         logger.error(f"Error getting voices: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
+@router.post("/voice/test")
+async def test_voice_pipeline():
+    """Test the complete voice pipeline (STT + TTS) with a simple test"""
+    try:
+        from main import stt_engine, tts_engine
+        
+        if not stt_engine or not tts_engine:
+            raise HTTPException(status_code=503, detail="Voice engines not initialized")
+        
+        # Test text for TTS
+        test_text = "नमस्ते, यह एक परीक्षण है।"  # "Hello, this is a test" in Hindi
+        test_language = "hi"
+        
+        # Test TTS synthesis
+        tts_result = await tts_engine.synthesize(
+            text=test_text,
+            language=test_language
+        )
+        
+        if not tts_result.get("success"):
+            return {
+                "success": False,
+                "error": f"TTS test failed: {tts_result.get('error')}",
+                "stt_available": len(getattr(stt_engine, 'indic_models', {})) > 0,
+                "tts_available": len(getattr(tts_engine, 'indic_models', {})) > 0
+            }
+        
+        return {
+            "success": True,
+            "message": "Voice pipeline test completed successfully",
+            "tts_test": {
+                "text": test_text,
+                "language": test_language,
+                "model_used": tts_result.get("model_used"),
+                "duration": tts_result.get("duration")
+            },
+            "models_loaded": {
+                "stt_models": list(getattr(stt_engine, 'indic_models', {}).keys()),
+                "tts_models": list(getattr(tts_engine, 'indic_models', {}).keys())
+            }
+        }
+        
+    except Exception as e:
+        logger.error(f"Voice pipeline test error: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
 # NLP Endpoints
 @router.post("/nlp/translate")
 async def translate_text(request: TranslationRequest):

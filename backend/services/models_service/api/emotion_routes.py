@@ -1,7 +1,7 @@
 # models_service/api/emotion_routes.py
 """
-Centralized emotion analysis using Phi-4 via Ollama
-Replaces individual transformers models in other services
+Centralized emotion analysis using Phi-4 directly
+Replaces Ollama dependency with lightweight Phi-4 implementation
 """
 
 from fastapi import APIRouter, HTTPException
@@ -9,16 +9,38 @@ from pydantic import BaseModel
 from typing import Dict, Any, List, Optional
 import logging
 import time
-import sys
-import os
-
-# Add the parent directory to the path to import ollama_integration
-sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-from ollama_integration import ollama_client
+import torch
+from transformers import AutoTokenizer, AutoModelForCausalLM
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/v1/emotion", tags=["emotion"])
+
+# Global model cache
+_phi4_model = None
+_phi4_tokenizer = None
+
+async def _get_phi4_model():
+    """Load Phi-4 model on demand"""
+    global _phi4_model, _phi4_tokenizer
+    
+    if _phi4_model is None:
+        model_name = "microsoft/phi-4"
+        logger.info(f"Loading Phi-4 model for emotion analysis: {model_name}")
+        
+        _phi4_tokenizer = AutoTokenizer.from_pretrained(model_name, trust_remote_code=True)
+        _phi4_model = AutoModelForCausalLM.from_pretrained(
+            model_name,
+            torch_dtype=torch.float16 if torch.cuda.is_available() else torch.float32,
+            device_map="auto" if torch.cuda.is_available() else "cpu",
+            trust_remote_code=True,
+            low_cpu_mem_usage=True,  # Reduce CPU memory usage during loading
+            use_cache=False,  # Disable KV cache to save memory
+            attn_implementation="eager"  # Use memory-efficient attention
+        )
+        logger.info("✅ Phi-4 model loaded for emotion analysis")
+    
+    return _phi4_model, _phi4_tokenizer
 
 class EmotionRequest(BaseModel):
     text: str
@@ -41,31 +63,76 @@ class BatchEmotionRequest(BaseModel):
 @router.post("/analyze", response_model=EmotionResponse)
 async def analyze_emotion(request: EmotionRequest) -> EmotionResponse:
     """
-    Centralized emotion analysis using Phi-4 via Ollama
-    Replaces transformers models in ai_event_processor
+    Centralized emotion analysis using Phi-4 directly
+    Replaces Ollama dependency with direct model inference
     """
     start_time = time.time()
     
     try:
-        # Use Phi-4 for emotion analysis
-        result = await ollama_client.analyze_emotion_via_phi4(request.text)
+        # Load Phi-4 model
+        model, tokenizer = await _get_phi4_model()
         
-        # Add cultural adaptation if provided
-        cultural_adaptation = None
-        if request.cultural_context:
-            cultural_adaptation = await _apply_cultural_context(
-                result, request.cultural_context
+        # Create emotion analysis prompt
+        prompt = f"""Analyze the emotion in this text and respond with only the emotion name and confidence score.
+
+Text: "{request.text}"
+
+Respond in this exact format:
+Emotion: [emotion_name]
+Confidence: [0.0-1.0]
+Reasoning: [brief explanation]
+
+Possible emotions: joy, sadness, anger, fear, surprise, disgust, neutral"""
+
+        # Generate emotion analysis
+        inputs = tokenizer(prompt, return_tensors="pt")
+        
+        # Move inputs to same device as model
+        if torch.cuda.is_available():
+            inputs = {k: v.cuda() for k, v in inputs.items()}
+        
+        with torch.no_grad():
+            outputs = model.generate(
+                inputs.input_ids,
+                max_new_tokens=100,
+                temperature=0.3,
+                do_sample=True,
+                pad_token_id=tokenizer.eos_token_id,
+                eos_token_id=tokenizer.eos_token_id,
+                use_cache=True
             )
+        
+        response_text = tokenizer.decode(outputs[0], skip_special_tokens=True)
+        # Remove input prompt from output
+        response_text = response_text[len(prompt):].strip()
+        
+        # Parse the response (simple parsing)
+        emotion = "neutral"
+        confidence = 0.5
+        reasoning = "Analysis completed"
+        
+        # Try to extract emotion and confidence from response
+        lines = response_text.split('\n')
+        for line in lines:
+            if line.startswith('Emotion:'):
+                emotion = line.split(':', 1)[1].strip().lower()
+            elif line.startswith('Confidence:'):
+                try:
+                    confidence = float(line.split(':', 1)[1].strip())
+                except:
+                    confidence = 0.5
+            elif line.startswith('Reasoning:'):
+                reasoning = line.split(':', 1)[1].strip()
         
         processing_time = (time.time() - start_time) * 1000
         
         return EmotionResponse(
-            emotion=result["emotion"],
-            confidence=result["confidence"],
-            reasoning=result["reasoning"],
+            emotion=emotion,
+            confidence=confidence,
+            reasoning=reasoning,
             processing_time_ms=processing_time,
-            model_used=result["model_used"],
-            cultural_adaptation=cultural_adaptation
+            model_used="microsoft/phi-4",
+            cultural_adaptation=None
         )
         
     except Exception as e:

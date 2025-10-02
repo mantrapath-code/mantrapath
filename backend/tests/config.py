@@ -64,14 +64,14 @@ def test_service_url(key: str) -> str:
 # Convenience named constants for existing tests
 API_BASE = test_service_url("api_gateway")
 CHATBOT_DIRECT = test_service_url("chatbot")
-PHI3_AGENT = test_service_url("translation")  # adjust if phi3 agent separate later
+# PHI3_AGENT removed - functionality moved to models_service
 PROFILE_BASE = test_service_url("profile")
 AUTH_BASE = test_service_url("auth")
 
 __all__ = [
     "API_BASE",
     "CHATBOT_DIRECT",
-    "PHI3_AGENT",
+
     "PROFILE_BASE",
     "AUTH_BASE",
     "test_service_url",

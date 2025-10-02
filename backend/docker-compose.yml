@@ -915,6 +915,13 @@ services:
       dockerfile: services/models_service/Dockerfile
     ports:
       - "${MODELS_SERVICE_EXTERNAL_PORT:-8081}:${MODELS_SERVICE_INTERNAL_PORT:-8080}"
+    # Memory limits for STT/TTS models only
+    deploy:
+      resources:
+        limits:
+          memory: 4G  # Sufficient for STT/TTS models
+        reservations:
+          memory: 2G  # Reserve minimum memory
     env_file:
       - .env
     environment:
@@ -934,6 +941,8 @@ services:
       - INDIC_MODELS_ENABLE=true           # Enable Indic models
       - LEGACY_MODELS_DISABLE=true         # Disable Whisper/Vosk/Coqui
       - VOICE_STACK_MODE=enhanced          # Enhanced natural voice mode
+      - MODELS_SERVICE_SKIP_DEFAULTS=false # Force loading default models
+      - ENABLE_TEXT_GENERATION=false      # Disable text generation for now
       - RASA_ENABLE=false              # Disable dialogue management for now
       # Hardware settings
       - MAX_GPU_MEMORY=0.8

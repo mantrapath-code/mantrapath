@@ -305,10 +305,70 @@ sudo ./scripts/deploy.sh
 
 #### Monitoring & Health Checks
 - **Real-time Monitoring**: Automated health checks every 5 minutes
-- **Service Status**: All 18 microservices health monitoring
+- **Service Status**: All 21 microservices health monitoring
 - **Resource Monitoring**: CPU, memory, and disk usage tracking
 - **Log Management**: Centralized logging with rotation
 - **Alert System**: Automated alerts for service failures
+
+## 🔧 Current Service Status
+
+### **Platform Services Overview**
+
+| Service | Status | Port | Resources | Replicas | Notes |
+|---------|--------|------|-----------|----------|-------|
+| **🎨 Frontend Services** |
+| React Frontend | 🟢 Active | 80/443 | 2 vCPU, 4GB RAM | 3 | Production ready |
+| **🧠 AI/ML Services** |
+| Models Service | 🟡 NLP-Only | 8080 | 4 vCPU, 16GB RAM, 1 GPU | 2 | Voice models removed |
+| AI Context Store | 🟢 Active | 8013 | 2 vCPU, 8GB RAM, 0.5 GPU | 2 | Conversation context |
+| AI Event Processor | 🟢 Active | 8014 | 2 vCPU, 8GB RAM, 0.5 GPU | 2 | Real-time AI processing |
+| **🎤 Voice Services** |
+| Voice Service | 🔴 Disabled | 8011 | 1 vCPU, 2GB RAM | 0 | Ready for reintegration |
+| Voice Event Processor | 🔴 Disabled | 8015 | 1 vCPU, 2GB RAM | 0 | Voice analytics ready |
+| **🌐 Core Application Services** |
+| API Gateway | 🟢 Active | 8000 | 2 vCPU, 4GB RAM | 3 | Load balancing + routing |
+| Auth Service | 🟢 Active | 8001 | 1 vCPU, 2GB RAM | 3 | JWT authentication |
+| Profile Service | 🟢 Active | 8002 | 1 vCPU, 2GB RAM | 2 | User management |
+| Mood Service | 🟢 Active | 8003 | 1 vCPU, 2GB RAM | 2 | Mood tracking + analytics |
+| Chatbot Service | 🟢 Active | 8004 | 2 vCPU, 4GB RAM | 2 | AI conversations |
+| Translation Service | 🟢 Active | 8005 | 1 vCPU, 2GB RAM | 2 | Multi-language support |
+| Content Service | 🟢 Active | 8006 | 1 vCPU, 2GB RAM | 2 | Content management |
+| Community Service | 🟢 Active | 8007 | 1 vCPU, 2GB RAM | 2 | Forums + peer support |
+| **📊 Processing Services** |
+| Notification Service | 🟢 Active | 8008 | 1 vCPU, 2GB RAM | 2 | Push + email notifications |
+| Media Service | 🟢 Active | 8009 | 2 vCPU, 4GB RAM | 2 | File upload + processing |
+| Memory Service | 🟢 Active | 8017 | 1 vCPU, 2GB RAM | 2 | Session management |
+| Action Orchestrator | 🟢 Active | 8012 | 1 vCPU, 2GB RAM | 2 | Workflow coordination |
+| Proactive Assistance | 🟢 Active | 8018 | 1 vCPU, 2GB RAM | 2 | Smart recommendations |
+| Deployment API | 🟢 Active | 8019 | 1 vCPU, 2GB RAM | 1 | Infrastructure management |
+| **🏗️ Infrastructure Services** |
+| PostgreSQL | 🟢 Active | 5432 | 4 vCPU, 16GB RAM | 1 | Primary database |
+| Redis Primary | 🟢 Active | 6379 | 2 vCPU, 8GB RAM | 1 | Session cache |
+| Redis Agent | 🟢 Active | 6380 | 2 vCPU, 8GB RAM | 1 | ML model cache |
+| Redis Event | 🟢 Active | 6381 | 2 vCPU, 8GB RAM | 1 | Event streaming |
+| NATS JetStream | 🟢 Active | 4222 | 2 vCPU, 4GB RAM | 1 | Message broker |
+
+### **Resource Allocation Summary**
+
+| Pool Type | Active Nodes | Total Resources | Services | Optimization |
+|-----------|--------------|----------------|----------|--------------|
+| **Frontend Pool** | 3 nodes | 6 vCPU, 12GB RAM | 1 service | Auto-scaling enabled |
+| **GPU Pool** | 1 node | 4 vCPU, 16GB RAM, 1x T4 | 3 services | 50% cost reduction |
+| **CPU Pool** | 6 nodes | 24 vCPU, 96GB RAM | 12 services | Load balanced |
+| **Memory Pool** | 3 nodes | 6 vCPU, 24GB RAM | 3 services | Cache optimized |
+| **Storage Pool** | 3 nodes | 10 vCPU, 28GB RAM | 2 services | SSD storage |
+
+### **Status Legend**
+- 🟢 **Active**: Service running in production
+- 🟡 **Limited**: Service running with reduced functionality
+- 🔴 **Disabled**: Service disabled, ready for activation
+- ⚠️ **Development**: Service in development phase
+
+### **Recent Optimizations**
+- **Voice Integration Removal**: Clean removal of STT/TTS for future reintegration
+- **GPU Optimization**: Reduced from 2 GPU nodes to 1 node (50% cost savings)
+- **Resource Efficiency**: Optimized replica counts based on usage patterns
+- **Infrastructure Ready**: All disabled services maintain deployment configurations
 
 For detailed deployment instructions, configuration options, and troubleshooting, see our comprehensive [Deployment Guide](DEPLOYMENT.md).
 

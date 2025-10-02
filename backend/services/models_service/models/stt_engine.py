@@ -62,6 +62,34 @@ class STTEngine:
         self.enable_whisper_fallback = os.getenv("ENABLE_WHISPER_FALLBACK", "false").lower() == "true"
         if self.enable_whisper_fallback:
             logger.warning("⚠️ Whisper fallback ENABLED via ENABLE_WHISPER_FALLBACK=true (not recommended in production)")
+    
+    async def load_default_models(self):
+        """Load default STT models (Hindi IndicWav2Vec)"""
+        logger.info("🎤 STT Engine: Loading default models...")
+        
+        if not INDIC_AVAILABLE:
+            logger.warning("⚠️ STT Engine: IndicWav2Vec not available, skipping model loading")
+            return False
+        
+        try:
+            # Load default Hindi model
+            default_lang = "hi"  # Hindi
+            if default_lang in self.language_models:
+                logger.info(f"🎤 STT Engine: Loading default {default_lang} model...")
+                model_name = self._select_model(default_lang)
+                # Actually load the model
+                if default_lang not in self.indic_models:
+                    self.indic_models[default_lang] = IndicSTT(lang=default_lang, model_id=model_name)
+                    logger.info(f"✅ STT Engine: Loaded {default_lang} IndicWav2Vec model: {model_name}")
+                else:
+                    logger.info(f"✅ STT Engine: {default_lang} model already loaded")
+                return True
+            else:
+                logger.warning(f"⚠️ STT Engine: Default language {default_lang} not in supported languages")
+                return False
+        except Exception as e:
+            logger.error(f"❌ STT Engine: Failed to load default models: {e}")
+            return False
         
     async def transcribe(self, audio_data: bytes, language: str = "auto", model_preference: Optional[str] = None) -> Dict[str, Any]:
         """Main transcription method - prioritizes Indic models"""
@@ -393,6 +421,30 @@ class STTEngine:
         except Exception as e:
             logger.error(f"Whisper transcription failed: {e}")
             return {"success": False, "error": str(e)}
+
+    async def load_default_models(self) -> bool:
+        """Load default STT models for enhanced voice stack"""
+        try:
+            logger.info("🎤 Loading default STT models...")
+            
+            if not INDIC_AVAILABLE:
+                logger.warning("⚠️ Indic speech transformers not available")
+                return False
+            
+            # Load Hindi model as default (most commonly used)
+            default_language = "hi"
+            if default_language in INDICWAV2VEC_MODELS:
+                logger.info(f"📥 Loading default STT model for {default_language}")
+                self.indic_models[default_language] = IndicSTT(lang=default_language)
+                logger.info(f"✅ Default STT model loaded: {default_language}")
+                return True
+            else:
+                logger.warning(f"⚠️ Default language {default_language} not found in available models")
+                return False
+                
+        except Exception as e:
+            logger.error(f"❌ Failed to load default STT models: {e}")
+            return False
 
     async def get_supported_languages(self) -> List[str]:
         """Get list of supported languages"""
