@@ -54,8 +54,8 @@ cp frontend/.env.example frontend/.env
 ./start.sh full
 
 # 4. Access the application
-# Internal (Docker network): Frontend: http://frontend:80  API: http://api-gateway:8000/docs
-# Host machine (mapped ports): http://localhost:5173 (frontend dev)  http://localhost:8000/docs (API)
+# Frontend: http://localhost:5173
+# API Docs: http://localhost:8000/docs
 ```
 
 ### Production Deployment
@@ -70,6 +70,7 @@ For production deployment on a self-hosted GitHub Actions runner, see our compre
 **Required GitHub Secrets:**
 - `POSTGRES_PASSWORD` - Database password
 - `JWT_SECRET_KEY` - JWT authentication secret
+- `OPENAI_API_KEY` - OpenAI API key (optional)
 - `SMTP_*` - Email configuration
 - `DOMAIN` - Your domain name
 
@@ -88,7 +89,7 @@ For production deployment on a self-hosted GitHub Actions runner, see our compre
 ## Usage
 
 ### Basic Usage
-1. **Access the Application**: Inside Docker network use http://frontend or on host http://localhost:5173
+1. **Access the Application**: Open http://localhost:5173 in your browser
 2. **Create Account**: Register with email and password
 3. **Start Tracking**: Log your daily mood and activities
 4. **Engage with AI**: Chat with the context-aware AI assistant
@@ -108,24 +109,20 @@ For production deployment on a self-hosted GitHub Actions runner, see our compre
 |---------|-------------|--------|
 | 🎭 **Enhanced Mood Tracking** | 10-point mood tracking with energy, stress, sleep analytics | ✅ Production |
 | 🧠 **AI Crisis Prediction** | 87.3% accuracy ML-powered mental health risk assessment | ✅ Production |
-| 🤖 **Context-Aware Chatbot** | Self-hosted / local model pipeline with full user context and crisis support | ✅ Production |
+| 🤖 **Context-Aware Chatbot** | OpenAI GPT integration with full user context and crisis support | ✅ Production |
 | 📝 **Smart Journaling** | Sentiment analysis with mood correlation and pattern recognition | ✅ Production |
 | 👥 **Community Platform** | Forums, discussions, peer support with AI content moderation | ✅ Production |
-| 🎤 **Voice Commands** | Multilingual voice processing with 17+ language support | ✅ **Production Ready** |
+| 🎤 **Voice Commands** | Multilingual voice processing with 17+ language support | ✅ Production |
 | 🌍 **Translation Service** | Multi-engine translation with cultural context adaptation | ✅ Production |
 | 🔔 **Smart Notifications** | ML-optimized notification timing with +40% engagement improvement | ✅ Production |
 | 🏆 **Achievement System** | Gamification with celebration detection and motivation tracking | ✅ Production |
-| 🔌 **Robust WebSocket System** | Enhanced real-time communication with connection pooling and auto-reconnect | ✅ **Production Ready** |
-| 🔐 **JWT Authentication** | Secure user authentication with bcrypt password hashing and token management | ✅ **Production Ready** |
+| 🔌 **Robust WebSocket System** | Enhanced real-time communication with connection pooling and auto-reconnect | ✅ Production |
 
-### Recent Improvements *(September 2025)*
-- **✅ Authentication System**: JWT authentication fully operational with bcrypt password hashing and fallback implementation
-- **✅ Voice Service Integration**: Complete voice processing pipeline with TTS/STT, session management, and multilingual support (17+ languages)
-- **✅ WebSocket Infrastructure**: Robust real-time communication system with multiple connection fallbacks and automatic reconnection
-- **✅ API Gateway Routing**: Enhanced routing system with voice service endpoints and WebSocket proxy functionality
-- **✅ Cross-Service Communication**: Seamless service integration through Docker networking and service discovery
-- **Frontend Performance**: Framer Motion animations with proper key management and responsive design
-- **Backend Optimization**: Duplicate code removal, enhanced data models, and improved error handling
+### Recent Improvements
+- **WebSocket System Enhancement**: Robust connection management with heartbeat monitoring
+- **Service Communication**: Docker-based service discovery without localhost dependencies
+- **Frontend UI/UX**: Framer Motion animations with proper key management
+- **Backend Service Improvements**: Duplicate code removal and enhanced data models
 
 ## Configuration
 
@@ -152,22 +149,11 @@ NOTIFICATION_SERVICE_URL=http://notification-service:8007
 
 #### Frontend (.env)
 ```bash
-# API Configuration (prefer internal DNS; dev host fallback allowed)
-VITE_API_BASE_URL=http://api-gateway:8000
-VITE_API_GATEWAY_URL=http://api-gateway:8000
-VITE_WS_URL=ws://api-gateway:8080
-VITE_ML_SERVICE_URL=http://ml-service:8008
-VITE_VOICE_SERVICE_URL=http://voice-service:8011
-VITE_CHATBOT_SERVICE_URL=http://chatbot-service:8004
-VITE_MOOD_SERVICE_URL=http://mood-service:8003
-VITE_AI_CONTEXT_URL=http://ai-context-store:8013
-VITE_AI_EVENT_PROCESSOR_URL=http://ai-event-processor:8014
-VITE_ASSISTANCE_ENGINE_URL=http://proactive-assistance-engine:8018
+# API Configuration
+VITE_API_BASE_URL=http://localhost:8000
+VITE_WS_URL=ws://localhost:8007
 
-# Host override examples (uncomment if running frontend outside Docker)
-# VITE_API_BASE_URL=http://localhost:8000
-# VITE_WS_URL=ws://localhost:8080
-
+# Environment
 VITE_ENVIRONMENT=development
 ```
 
@@ -217,31 +203,26 @@ src/
 └── utils/           # Utility functions
 ```
 
-### Technology Stack *(Verified Working)*
-- **Frontend**: React 19, TypeScript 5.7, Vite 6.3, Tailwind CSS 4.0 ✅
-- **Backend**: FastAPI 0.104, SQLAlchemy 2.0, PostgreSQL 15.4, Redis 7.2 ✅
-- **Authentication**: JWT with bcrypt password hashing and fallback support ✅
-- **Real-time**: WebSocket infrastructure with multi-endpoint fallback ✅
-- **Voice Processing**: TTS/STT with multilingual support (17+ languages) ✅
-- **AI/ML**: OpenAI GPT, scikit-learn, transformers, 87.3% prediction accuracy ✅
-- **Infrastructure**: Docker 24.0, Docker Compose 2.21, Nginx 1.25 ✅
+### Technology Stack
+- **Frontend**: React 19, TypeScript 5.7, Vite 6.3, Tailwind CSS 4.0
+- **Backend**: FastAPI 0.104, SQLAlchemy 2.0, PostgreSQL 15.4, Redis 7.2
+- **AI/ML**: OpenAI GPT, scikit-learn, transformers, 87.3% prediction accuracy
+- **Infrastructure**: Docker 24.0, Docker Compose 2.21, Nginx 1.25
 
 ## API Documentation
 
-### Core Endpoints *(Verified Working)*
-- **Authentication**: `/api/v1/auth/login`, `/api/v1/auth/register`, `/api/v1/auth/refresh-token` ✅
-- **Voice Services**: `/api/v1/voice/text-to-speech`, `/api/v1/voice/speech-to-text`, `/api/v1/session/start` ✅
-- **WebSocket Real-time**: `/ws/{user_id}`, `/api/notifications/ws/{user_id}` ✅
-- **Mood Tracking**: `/api/v1/mood/entries`, `/api/v1/mood/analytics` ✅
-- **AI Chatbot**: `/api/chatbot/enhanced/chat`, `/api/chatbot/chat/session` ✅
-- **Community**: `/forums`, `/threads`, `/posts` ✅
-- **Notifications**: `/api/notifications/smart-schedule` ✅
-- **ML Services**: `/api/ml/predict-timing`, `/api/ml/analyze-patterns` ✅
+### Core Endpoints
+- **Authentication**: `/login`, `/register`, `/refresh-token`
+- **Mood Tracking**: `/api/v1/mood/entries`, `/api/v1/mood/analytics`
+- **AI Chatbot**: `/api/chatbot/enhanced/chat`
+- **Community**: `/forums`, `/threads`, `/posts`
+- **Notifications**: `/api/notifications/smart-schedule`
+- **ML Services**: `/api/ml/predict-timing`, `/api/ml/analyze-patterns`
 
 ### Interactive API Documentation
-- **Swagger UI (internal)**: http://api-gateway:8000/docs (host: http://localhost:8000/docs)
-- **ReDoc (internal)**: http://api-gateway:8000/redoc
-- **Health Check (internal)**: http://api-gateway:8000/health
+- **Swagger UI**: http://localhost:8000/docs
+- **ReDoc**: http://localhost:8000/redoc
+- **Health Check**: http://localhost:8000/health
 
 ## Deployment
 
@@ -305,70 +286,10 @@ sudo ./scripts/deploy.sh
 
 #### Monitoring & Health Checks
 - **Real-time Monitoring**: Automated health checks every 5 minutes
-- **Service Status**: All 21 microservices health monitoring
+- **Service Status**: All 18 microservices health monitoring
 - **Resource Monitoring**: CPU, memory, and disk usage tracking
 - **Log Management**: Centralized logging with rotation
 - **Alert System**: Automated alerts for service failures
-
-## 🔧 Current Service Status
-
-### **Platform Services Overview**
-
-| Service | Status | Port | Resources | Replicas | Notes |
-|---------|--------|------|-----------|----------|-------|
-| **🎨 Frontend Services** |
-| React Frontend | 🟢 Active | 80/443 | 2 vCPU, 4GB RAM | 3 | Production ready |
-| **🧠 AI/ML Services** |
-| Models Service | 🟡 NLP-Only | 8080 | 4 vCPU, 16GB RAM, 1 GPU | 2 | Voice models removed |
-| AI Context Store | 🟢 Active | 8013 | 2 vCPU, 8GB RAM, 0.5 GPU | 2 | Conversation context |
-| AI Event Processor | 🟢 Active | 8014 | 2 vCPU, 8GB RAM, 0.5 GPU | 2 | Real-time AI processing |
-| **🎤 Voice Services** |
-| Voice Service | 🔴 Disabled | 8011 | 1 vCPU, 2GB RAM | 0 | Ready for reintegration |
-| Voice Event Processor | 🔴 Disabled | 8015 | 1 vCPU, 2GB RAM | 0 | Voice analytics ready |
-| **🌐 Core Application Services** |
-| API Gateway | 🟢 Active | 8000 | 2 vCPU, 4GB RAM | 3 | Load balancing + routing |
-| Auth Service | 🟢 Active | 8001 | 1 vCPU, 2GB RAM | 3 | JWT authentication |
-| Profile Service | 🟢 Active | 8002 | 1 vCPU, 2GB RAM | 2 | User management |
-| Mood Service | 🟢 Active | 8003 | 1 vCPU, 2GB RAM | 2 | Mood tracking + analytics |
-| Chatbot Service | 🟢 Active | 8004 | 2 vCPU, 4GB RAM | 2 | AI conversations |
-| Translation Service | 🟢 Active | 8005 | 1 vCPU, 2GB RAM | 2 | Multi-language support |
-| Content Service | 🟢 Active | 8006 | 1 vCPU, 2GB RAM | 2 | Content management |
-| Community Service | 🟢 Active | 8007 | 1 vCPU, 2GB RAM | 2 | Forums + peer support |
-| **📊 Processing Services** |
-| Notification Service | 🟢 Active | 8008 | 1 vCPU, 2GB RAM | 2 | Push + email notifications |
-| Media Service | 🟢 Active | 8009 | 2 vCPU, 4GB RAM | 2 | File upload + processing |
-| Memory Service | 🟢 Active | 8017 | 1 vCPU, 2GB RAM | 2 | Session management |
-| Action Orchestrator | 🟢 Active | 8012 | 1 vCPU, 2GB RAM | 2 | Workflow coordination |
-| Proactive Assistance | 🟢 Active | 8018 | 1 vCPU, 2GB RAM | 2 | Smart recommendations |
-| Deployment API | 🟢 Active | 8019 | 1 vCPU, 2GB RAM | 1 | Infrastructure management |
-| **🏗️ Infrastructure Services** |
-| PostgreSQL | 🟢 Active | 5432 | 4 vCPU, 16GB RAM | 1 | Primary database |
-| Redis Primary | 🟢 Active | 6379 | 2 vCPU, 8GB RAM | 1 | Session cache |
-| Redis Agent | 🟢 Active | 6380 | 2 vCPU, 8GB RAM | 1 | ML model cache |
-| Redis Event | 🟢 Active | 6381 | 2 vCPU, 8GB RAM | 1 | Event streaming |
-| NATS JetStream | 🟢 Active | 4222 | 2 vCPU, 4GB RAM | 1 | Message broker |
-
-### **Resource Allocation Summary**
-
-| Pool Type | Active Nodes | Total Resources | Services | Optimization |
-|-----------|--------------|----------------|----------|--------------|
-| **Frontend Pool** | 3 nodes | 6 vCPU, 12GB RAM | 1 service | Auto-scaling enabled |
-| **GPU Pool** | 1 node | 4 vCPU, 16GB RAM, 1x T4 | 3 services | 50% cost reduction |
-| **CPU Pool** | 6 nodes | 24 vCPU, 96GB RAM | 12 services | Load balanced |
-| **Memory Pool** | 3 nodes | 6 vCPU, 24GB RAM | 3 services | Cache optimized |
-| **Storage Pool** | 3 nodes | 10 vCPU, 28GB RAM | 2 services | SSD storage |
-
-### **Status Legend**
-- 🟢 **Active**: Service running in production
-- 🟡 **Limited**: Service running with reduced functionality
-- 🔴 **Disabled**: Service disabled, ready for activation
-- ⚠️ **Development**: Service in development phase
-
-### **Recent Optimizations**
-- **Voice Integration Removal**: Clean removal of STT/TTS for future reintegration
-- **GPU Optimization**: Reduced from 2 GPU nodes to 1 node (50% cost savings)
-- **Resource Efficiency**: Optimized replica counts based on usage patterns
-- **Infrastructure Ready**: All disabled services maintain deployment configurations
 
 For detailed deployment instructions, configuration options, and troubleshooting, see our comprehensive [Deployment Guide](DEPLOYMENT.md).
 

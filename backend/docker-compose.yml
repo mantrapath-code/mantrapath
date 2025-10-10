@@ -34,7 +34,28 @@ services:
       retries: 5
       start_period: 30s
 
-
+  # Phi-4 Agent Service (Dedicated AI Text Generation via Ollama)
+  phi3-agent:
+    build:
+      context: .
+      dockerfile: services/phi3_agent/Dockerfile
+    ports:
+      - "${PHI4_AGENT_PORT}:8000"
+    environment:
+      - OLLAMA_BASE_URL=http://139.84.213.185:11434
+      - LOG_LEVEL=INFO
+      - PHI4_AGENT_PORT=8000
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    networks:
+      - mantrapath-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 60s
+      timeout: 30s
+      retries: 3
+      start_period: 60s
 
   # NATS for real-time messaging and WebSocket clustering with JetStream
   nats:
@@ -49,8 +70,7 @@ services:
     networks:
       - mantrapath-network
     healthcheck:
-      # Use internal DNS name (nats) instead of localhost
-      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://nats:8222/healthz"]
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:8222/healthz"]
       interval: 30s
       timeout: 10s
       retries: 5
@@ -136,6 +156,7 @@ services:
       - SERVICE_VOICE_SERVICE_URL=http://voice-service:${VOICE_SERVICE_PORT}
       - SERVICE_AI_CONTEXT_STORE_URL=http://ai-context-store:${AI_CONTEXT_STORE_PORT}
       - SERVICE_AUTH_SERVICE_URL=http://auth-service:${AUTH_SERVICE_PORT}
+      - SERVICE_MODELS_SERVICE_URL=http://models-service:${MODELS_SERVICE_INTERNAL_PORT}
     depends_on:
       redis:
         condition: service_healthy
@@ -143,8 +164,7 @@ services:
       - mantrapath-network
     restart: unless-stopped
     healthcheck:
-      # Internal DNS reference
-      test: ["CMD", "curl", "-f", "http://api-gateway:8000/health/live"]
+      test: ["CMD", "curl", "-f", "http://localhost:${API_GATEWAY_PORT}/health/live"]
       interval: 30s
       timeout: 10s
       retries: 3
@@ -259,6 +279,7 @@ services:
       - OLLAMA_URL=http://139.84.213.185:11434
       
       # Phase 1 Service Integration URLs (using environment variables)
+      - MODELS_SERVICE_URL=http://models-service:${MODELS_SERVICE_INTERNAL_PORT}
       - ML_SERVICE_URL=http://ml-service:${ML_SERVICE_PORT}
       - AI_CONTEXT_STORE_URL=http://ai-context-store:${AI_CONTEXT_STORE_PORT}
       - TRANSLATION_SERVICE_URL=http://translation-service:${TRANSLATION_SERVICE_PORT}
@@ -266,6 +287,8 @@ services:
       - ACTION_ORCHESTRATOR_URL=http://action-orchestrator:${ACTION_ORCHESTRATOR_PORT}
       
       # Service Configuration
+      - MODELS_SERVICE_TIMEOUT=30
+      - MODELS_SERVICE_ENABLED=true
       - ML_SERVICE_ENABLED=true
       - AI_CONTEXT_STORE_ENABLED=true
       - TRANSLATION_SERVICE_ENABLED=true
@@ -300,13 +323,15 @@ services:
         condition: service_healthy
       agent-redis:
         condition: service_healthy
+      models-service:
+        condition: service_healthy
       ml-service:
         condition: service_healthy
     networks:
       - mantrapath-network
     restart: unless-stopped
     healthcheck:
-      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://chatbot-service:8004/health')"]
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8004/health')"]
       interval: 30s
       timeout: 10s
       retries: 5
@@ -405,13 +430,65 @@ services:
       - mantrapath-network
     restart: unless-stopped
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://ml-service:8008/health"]
+      test: ["CMD", "curl", "-f", "http://localhost:8008/health"]
       interval: 30s
       timeout: 10s
       retries: 3
       start_period: 60s
 
-
+  # Models Service (NEW - BK-008 Integration)
+  models-service:
+    build:
+      context: ./services/models_service
+      dockerfile: Dockerfile
+    command: ["./start_simple.sh"]  # Use simple startup for faster initialization
+    ports:
+      - "${MODELS_SERVICE_EXTERNAL_PORT}:${MODELS_SERVICE_INTERNAL_PORT}"
+    env_file:
+      - .env
+    environment:
+      - MODELS_SERVICE_HOST=0.0.0.0
+      - MODELS_SERVICE_PORT=${MODELS_SERVICE_INTERNAL_PORT}
+      - MODELS_CACHE_DIR=/app/cache
+      - HUGGINGFACE_CACHE_DIR=/app/cache/huggingface
+      - PYTORCH_CACHE_DIR=/app/cache/pytorch
+      - WHISPER_CACHE_DIR=/app/cache/whisper
+      - TTS_CACHE_DIR=/app/cache/tts
+      - MODELS_DOWNLOAD_DIR=/app/models
+      - LOG_LEVEL=INFO
+      - ENABLE_GPU=false
+      - MAX_WORKERS=4
+      - REQUEST_TIMEOUT=120
+      - MODEL_TIMEOUT=300
+      # STT Configuration
+      - STT_DEFAULT_MODEL=whisper_base
+      - STT_LANGUAGES=en,hi,te,ta,bn,mr,gu,kn,ml,pa,ur,as,or,ne,si
+      # TTS Configuration  
+      - TTS_DEFAULT_ENGINE=espeak
+      - TTS_LANGUAGES=en,hi,te,ta,bn,mr,gu,kn,ml,pa,ur,as,or,ne,si
+      # NLP Configuration
+      - NLP_DEFAULT_ENGINE=transformers
+      - TRANSLATION_DEFAULT_ENGINE=marian
+      - SENTIMENT_DEFAULT_MODEL=cardiffnlp/twitter-roberta-base-sentiment-latest
+    volumes:
+      - models_cache:/app/cache
+      - models_data:/app/models
+      - ./services/models_service/logs:/app/logs
+    networks:
+      - mantrapath-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
+      interval: 45s
+      timeout: 15s
+      retries: 3
+      start_period: 120s  # Models service needs more time to start
+    deploy:
+      resources:
+        limits:
+          memory: 4G
+        reservations:
+          memory: 2G
 
   # AI Context Store Service
   ai-context-store:
@@ -443,7 +520,7 @@ services:
       - mantrapath-network
     restart: unless-stopped
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://ai-context-store:8013/health"]
+      test: ["CMD", "curl", "-f", "http://localhost:8013/health"]
       interval: 30s
       timeout: 10s
       retries: 3
@@ -483,6 +560,7 @@ services:
     environment:
       - DATABASE_URL=postgresql://mantrapath:mantrapath123@postgres:5432/mantrapath
       - REDIS_URL=redis://redis:6379/2
+      - MODELS_SERVICE_URL=http://models-service:${MODELS_SERVICE_INTERNAL_PORT}
       - JWT_SECRET_KEY=${JWT_SECRET_KEY:-your-super-secret-jwt-key-change-in-production}
       # Translation Service Configuration
       - TRANSLATION_PORT=${TRANSLATION_SERVICE_PORT}
@@ -492,12 +570,13 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
+      models-service:
+        condition: service_healthy
     networks:
       - mantrapath-network
     restart: unless-stopped
     healthcheck:
-      # Use internal service DNS name instead of localhost for consistency
-      test: ["CMD", "curl", "-f", "http://translation-service:8010/health"]
+      test: ["CMD", "curl", "-f", "http://localhost:8010/health"]
       interval: 30s
       timeout: 10s
       retries: 3
@@ -506,8 +585,8 @@ services:
   # Voice Service - Clean Implementation with Indian Language Support
   voice-service:
     build:
-      context: .
-      dockerfile: services/voice_service/Dockerfile
+      context: ./services/voice_service
+      dockerfile: Dockerfile
     ports:
       - "${VOICE_SERVICE_PORT:-8011}:8011"
     env_file:
@@ -520,20 +599,15 @@ services:
       - LOG_LEVEL=INFO
       - ENVIRONMENT=development
       # Service Integration URLs
-      - CHATBOT_SERVICE_URL=http://chatbot-service:${CHATBOT_SERVICE_PORT:-8004}
-      - MOOD_SERVICE_URL=http://mood-service:${MOOD_SERVICE_PORT:-8003}
+      - CHATBOT_SERVICE_URL=http://chatbot-service:${CHATBOT_SERVICE_PORT:-8003}
+      - MOOD_SERVICE_URL=http://mood-service:${MOOD_SERVICE_PORT:-8004}
       - ANALYTICS_SERVICE_URL=http://analytics-service:${ANALYTICS_SERVICE_PORT:-8008}
-      - MODELS_SERVICE_URL=http://models-service:${MODELS_SERVICE_INTERNAL_PORT:-8080}
       # Indian Language Support
       - DEFAULT_LANGUAGE=hi
       - SUPPORTED_LANGUAGES=hi,en,bn,ta,te,gu,mr,pa,ur,ml,kn
-      # Vosk Configuration (Legacy)
+      # Vosk Configuration
       - VOSK_MODELS_DIR=/app/voice_models
-      - VOSK_DOWNLOAD_ENABLED=false
-      # New Indic Models Configuration
-      - ENABLE_INDIC_MODELS=true
-      - STT_ENGINE=indicwav2vec
-      - TTS_ENGINE=indic-tts
+      - VOSK_DOWNLOAD_ENABLED=true
     volumes:
       - voice_models:/app/voice_models
     depends_on:
@@ -541,14 +615,11 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
-      models-service:
-        condition: service_healthy
     networks:
       - mantrapath-network
     restart: unless-stopped
     healthcheck:
-      # Use internal DNS name (voice-service) instead of localhost for consistency
-      test: ["CMD", "curl", "-f", "http://voice-service:8011/health"]
+      test: ["CMD", "curl", "-f", "http://localhost:8011/health"]
       interval: 30s
       timeout: 10s
       retries: 3
@@ -567,6 +638,7 @@ services:
       - DATABASE_URL=postgresql://mantrapath:mantrapath123@postgres:5432/mantrapath
       - REDIS_URL=redis://redis:6379
       - JWT_SECRET_KEY=${JWT_SECRET_KEY:-your-super-secret-jwt-key-change-in-production}
+      # Removed OPENAI_API_KEY - using only open source models
       - ORCHESTRATOR_PORT=${ACTION_ORCHESTRATOR_PORT}
       - AUTH_SERVICE_URL=http://auth-service:${AUTH_SERVICE_PORT}
       - PROFILE_SERVICE_URL=http://profile-service:${PROFILE_SERVICE_PORT}
@@ -589,7 +661,7 @@ services:
       - mantrapath-network
     restart: unless-stopped
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://action-orchestrator:8012/health"]
+      test: ["CMD", "curl", "-f", "http://localhost:8012/health"]
       interval: 30s
       timeout: 10s
       retries: 3
@@ -624,6 +696,11 @@ services:
       - EVENT_PROCESSING_TIMEOUT=300
       - CONTEXT_CACHE_TTL=3600
       - METRICS_EXPORT_INTERVAL=60
+      # Models Service Integration
+      - MODELS_SERVICE_URL=http://models-service:${MODELS_SERVICE_INTERNAL_PORT}
+      - MODELS_SERVICE_ENABLED=true
+      - USE_MODELS_SERVICE=true
+      - MODELS_SERVICE_TIMEOUT=30
     volumes:
       - ai_models_cache:/app/models_cache
     depends_on:
@@ -633,11 +710,13 @@ services:
         condition: service_healthy
       nats:
         condition: service_healthy
+      models-service:
+        condition: service_healthy
     networks:
       - mantrapath-network
     restart: unless-stopped
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://ai-event-processor:8014/health"]
+      test: ["CMD", "curl", "-f", "http://localhost:8014/health"]
       interval: 30s
       timeout: 10s
       retries: 3
@@ -666,6 +745,7 @@ services:
       - AI_EVENT_PROCESSOR_URL=http://ai-event-processor:${AI_EVENT_PROCESSOR_PORT}
       - AI_CONTEXT_STORE_URL=http://ai-context-store:${AI_CONTEXT_STORE_PORT}
       - CULTURAL_INTELLIGENCE_URL=http://memory-service:${MEMORY_SERVICE_PORT}
+      - MODELS_SERVICE_URL=http://models-service:${MODELS_SERVICE_INTERNAL_PORT}  # NEW - Models Service Integration
       # Performance Configuration
       - MAX_CONCURRENT_EVALUATIONS=50
       - EVALUATION_TIMEOUT=30
@@ -690,11 +770,13 @@ services:
         condition: service_healthy
       ai-context-store:
         condition: service_healthy
+      models-service:  # NEW - Models Service dependency
+        condition: service_healthy
     networks:
       - mantrapath-network
     restart: unless-stopped
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://proactive-assistance-engine:8018/health"]
+      test: ["CMD", "curl", "-f", "http://localhost:8018/health"]
       interval: 30s
       timeout: 10s
       retries: 3
@@ -740,7 +822,7 @@ services:
       - mantrapath-network
     restart: unless-stopped
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://voice-event-processor:8015/health"]
+      test: ["CMD", "curl", "-f", "http://localhost:8015/health"]
       interval: 30s
       timeout: 10s
       retries: 3
@@ -816,60 +898,26 @@ services:
       - mantrapath-network
     restart: unless-stopped
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://memory-service:8017/health/live"]
+      test: ["CMD", "curl", "-f", "http://localhost:8017/health/live"]
       interval: 30s
       timeout: 10s
       retries: 3
       start_period: 60s
 
-  # Achievement Service temporarily disabled (directory missing: services/achievement_service)
-  # achievement-service:
-  #   build:
-  #     context: .
-  #     dockerfile: services/achievement_service/Dockerfile
-  #   ports:
-  #     - "8016:8016"
-  #   env_file:
-  #     - .env
-  #   environment:
-  #     - DATABASE_URL=postgresql://mantrapath:mantrapath123@postgres:5432/mantrapath
-  #     - REDIS_URL=redis://redis:6379
-  #     - JWT_SECRET_KEY=${JWT_SECRET_KEY:-your-super-secret-jwt-key-change-in-production}
-  #     - ACHIEVEMENT_SERVICE_PORT=8016
-  #     - MOOD_SERVICE_URL=http://mood-service:8003
-  #     - COMMUNITY_SERVICE_URL=http://community-service:8006
-  #   depends_on:
-  #     postgres:
-  #       condition: service_healthy
-  #     redis:
-  #       condition: service_healthy
-  #   networks:
-  #     - mantrapath-network
-  #   restart: unless-stopped
-  #   healthcheck:
-  #     test: ["CMD", "curl", "-f", "http://localhost:8016/health"]
-  #     interval: 30s
-  #     timeout: 10s
-  #     retries: 3
-  #     start_period: 30s
-
-
-
   # Frontend Service - React Application
   frontend:
     build:
       context: ../frontend
-      # Use the Dockerfile that exists in the frontend directory
-      dockerfile: Dockerfile
+      dockerfile: ../deployment/Dockerfile.frontend
       args:
         - VITE_API_GATEWAY_URL=${VITE_API_GATEWAY_URL}
         - VITE_WS_URL=${VITE_WS_URL}
         - VITE_API_URL=${VITE_API_URL}
         - VITE_API_BASE_URL=${VITE_API_BASE_URL}
         - VITE_ML_SERVICE_URL=${VITE_ML_SERVICE_URL}
-    # Expose frontend directly (reverse proxy disabled)
-    ports:
-      - "80:80"  # Map host port 80 to container port 80 for external access
+    # Ports handled by nginx reverse proxy
+    # ports:
+    #   - "${FRONTEND_PORT}:80"  # Expose on port 80 inside container, mapped to FRONTEND_PORT
     environment:
       - VITE_FRONTEND_PORT=${VITE_FRONTEND_PORT}
       - VITE_API_GATEWAY_URL=${VITE_API_GATEWAY_URL}
@@ -881,7 +929,7 @@ services:
       - mantrapath-network
     restart: unless-stopped
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://frontend:80/"]
+      test: ["CMD", "curl", "-f", "http://localhost:80/ || exit 1"]
       interval: 30s
       timeout: 10s
       retries: 3
@@ -889,98 +937,35 @@ services:
     depends_on:
       - api-gateway
 
-  # Nginx reverse proxy disabled for now (missing config/certs). Frontend exposed directly.
-  # nginx:
-  #   image: nginx:alpine
-  #   container_name: mantrapath-nginx
-  #   ports:
-  #     - "80:80"
-  #     - "443:443"
-  #   volumes:
-  #     - ./nginx/nginx-ssl.conf:/etc/nginx/nginx.conf:ro
-  #     - ./ssl_certs:/etc/nginx/ssl:ro
-  #   environment:
-  #     - DOMAIN=${DOMAIN:-139.84.213.185}
-  #   networks:
-  #     - mantrapath-network
-  #   depends_on:
-  #     - frontend
-  #     - api-gateway
-  #   restart: unless-stopped
-
-  # Models Service - AI/ML model hosting and processing
-  models-service:
-    build:
-      context: .
-      dockerfile: services/models_service/Dockerfile
+  # Nginx reverse proxy with SSL termination
+  nginx:
+    image: nginx:alpine
+    container_name: mantrapath-nginx
     ports:
-      - "${MODELS_SERVICE_EXTERNAL_PORT:-8081}:${MODELS_SERVICE_INTERNAL_PORT:-8080}"
-    # Memory limits for STT/TTS models only
-    deploy:
-      resources:
-        limits:
-          memory: 4G  # Sufficient for STT/TTS models
-        reservations:
-          memory: 2G  # Reserve minimum memory
-    env_file:
-      - .env
-    environment:
-      - SERVICE_NAME=models_service
-      - SERVICE_PORT=${MODELS_SERVICE_INTERNAL_PORT:-8080}
-      - MODELS_SERVICE_HOST=0.0.0.0
-      - MODELS_SERVICE_PORT=${MODELS_SERVICE_INTERNAL_PORT:-8080}
-      - DEBUG=true
-      - USE_GPU=false  # Set to true if GPU available
-      - TORCH_DEVICE=cpu
-      - MODELS_DIR=/app/models
-      - CACHE_DIR=/app/cache
-      - LOGS_DIR=/app/logs
-      # Enhanced Voice Stack - Indic Models Only
-      - DEFAULT_STT_MODEL=indicwav2vec_hi  # AI4Bharat IndicWav2Vec
-      - DEFAULT_TTS_MODEL=mms_tts_hi       # Meta MMS-TTS
-      - INDIC_MODELS_ENABLE=true           # Enable Indic models
-      - LEGACY_MODELS_DISABLE=true         # Disable Whisper/Vosk/Coqui
-      - VOICE_STACK_MODE=enhanced          # Enhanced natural voice mode
-      - MODELS_SERVICE_SKIP_DEFAULTS=false # Force loading default models
-      - ENABLE_TEXT_GENERATION=false      # Disable text generation for now
-      - RASA_ENABLE=false              # Disable dialogue management for now
-      # Hardware settings
-      - MAX_GPU_MEMORY=0.8
-      - MAX_CONCURRENT_REQUESTS=10
-      - MODEL_CACHE_SIZE=5
-      # Network and service discovery
-      - DATABASE_URL=postgresql://mantrapath:mantrapath123@postgres:5432/mantrapath
-      - REDIS_URL=redis://redis:6379/4
-      - JWT_SECRET_KEY=${JWT_SECRET_KEY:-your-super-secret-jwt-key-change-in-production}
+      - "80:80"
+      - "443:443"
     volumes:
-      # Persist models and cache
-      - models_data:/app/models
-      - models_cache:/app/cache
-      - ./services/models_service/logs:/app/logs
+      - ./nginx/nginx-ssl.conf:/etc/nginx/nginx.conf:ro
+      - ./ssl_certs:/etc/nginx/ssl:ro
+    environment:
+      - DOMAIN=${DOMAIN:-139.84.213.185}
     networks:
       - mantrapath-network
     depends_on:
-      postgres:
-        condition: service_healthy
-      redis:
-        condition: service_healthy
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://models-service:8080/health"]
-      interval: 30s
-      timeout: 15s
-      retries: 3
-      start_period: 60s
+      - frontend
+      - api-gateway
+    restart: unless-stopped
 
 volumes:
   postgres_data:
   agent_redis_data:
   nats_data:
   ai_models_cache:
+  models_cache:    # NEW - Models Service cache
+  models_data:     # NEW - Models Service model storage
   voice_models:    # NEW - Voice Service Vosk models
   voice_audio:     # NEW - Voice Service audio files
-  models_data:     # NEW - Models Service data
-  models_cache:    # NEW - Models Service cache
-
+  phi3_cache:      # NEW - Phi-3 Agent cache
 
 networks:
   mantrapath-network:
