@@ -1,12 +1,12 @@
 # models_service/api/text_generation_routes.py
 """
-Centralized text generation using Phi-4 directly via Transformers
-Replaces Ollama dependency with lightweight Phi-4 implementation
+Centralized text generation using Gemma-3 directly via Transformers
+Lightweight and efficient text generation for chatbot responses
 """
 
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
-from typing import Dict, Any, Optional
+from typing import Dict, Any, Optional, List
 import logging
 import time
 import torch
@@ -18,86 +18,113 @@ router = APIRouter(prefix="/api/v1/nlp", tags=["text-generation"])
 
 class TextGenerationRequest(BaseModel):
     prompt: str
-    max_tokens: Optional[int] = 1000
+    message: Optional[str] = None  # Alternative to prompt for chatbot use
+    max_tokens: Optional[int] = 256
     temperature: Optional[float] = 0.7
-    model: Optional[str] = "phi4"
+    model: Optional[str] = "gemma3"
+    system_prompt: Optional[str] = None
+    context: Optional[Dict[str, Any]] = None
 
 class TextGenerationResponse(BaseModel):
     generated_text: str
+    response: Optional[str] = None  # Alias for generated_text
     model_used: str
     tokens_generated: int
     processing_time_ms: float
     success: bool
+    confidence: Optional[float] = 0.85
 
 # Global model cache
-_phi4_model = None
-_phi4_tokenizer = None
+_gemma_model = None
+_gemma_tokenizer = None
 
-async def _get_phi4_model():
-    """Load Phi-4 model on demand"""
-    global _phi4_model, _phi4_tokenizer
+async def _get_gemma_model():
+    """Load lightweight model on demand"""
+    global _gemma_model, _gemma_tokenizer
     
-    if _phi4_model is None:
-        model_name = "microsoft/Phi-3.5-mini-instruct"  # Using smaller model to avoid OOM
-        logger.info(f"Loading Phi-4 model: {model_name}")
+    if _gemma_model is None:
+        # Using TinyLlama - very lightweight and memory efficient
+        model_name = "TinyLlama/TinyLlama-1.1B-Chat-v1.0"
+        logger.info(f"Loading model: {model_name}")
         
-        _phi4_tokenizer = AutoTokenizer.from_pretrained(model_name, trust_remote_code=True)
-        _phi4_model = AutoModelForCausalLM.from_pretrained(
-            model_name,
-            torch_dtype=torch.float16 if torch.cuda.is_available() else torch.float32,
-            device_map="auto" if torch.cuda.is_available() else "cpu",
-            trust_remote_code=True,
-            low_cpu_mem_usage=True,  # Reduce CPU memory usage during loading
-            use_cache=False,  # Disable KV cache to save memory
-            attn_implementation="eager"  # Use memory-efficient attention
-        )
-        logger.info("✅ Phi-4 model loaded successfully")
+        try:
+            _gemma_tokenizer = AutoTokenizer.from_pretrained(model_name)
+            _gemma_model = AutoModelForCausalLM.from_pretrained(
+                model_name,
+                torch_dtype=torch.float16 if torch.cuda.is_available() else torch.float32,
+                device_map="auto" if torch.cuda.is_available() else "cpu",
+                low_cpu_mem_usage=True
+            )
+            logger.info(f"✅ Model loaded successfully on {next(_gemma_model.parameters()).device}")
+        except Exception as e:
+            logger.error(f"Failed to load model: {e}")
+            raise
     
-    return _phi4_model, _phi4_tokenizer
+    return _gemma_model, _gemma_tokenizer
 
 @router.post("/generate", response_model=TextGenerationResponse)
 async def generate_text(request: TextGenerationRequest) -> TextGenerationResponse:
     """
-    Centralized text generation using Phi-4 directly
+    Centralized text generation using Gemma-3 directly
     Used by chatbot service and other services needing text generation
+    Supports both prompt-based and chat-based generation
     """
     start_time = time.time()
     
     try:
-        # Load Phi-4 model
-        model, tokenizer = await _get_phi4_model()
+        # Load Gemma model
+        model, tokenizer = await _get_gemma_model()
         
-        # Generate text with compatible parameters
-        inputs = tokenizer(request.prompt, return_tensors="pt")
+        # Determine the user message
+        user_message = request.message or request.prompt
         
-        # Move inputs to same device as model
-        if torch.cuda.is_available():
-            inputs = {k: v.cuda() for k, v in inputs.items()}
+        # Build messages for chat template
+        messages = []
         
+        # Add system prompt if provided
+        if request.system_prompt:
+            messages.append({"role": "user", "content": request.system_prompt})
+        
+        # Add user message
+        messages.append({"role": "user", "content": user_message})
+        
+        # Apply chat template and prepare inputs
+        inputs = tokenizer.apply_chat_template(
+            messages,
+            add_generation_prompt=True,
+            tokenize=True,
+            return_dict=True,
+            return_tensors="pt",
+        ).to(model.device)
+        
+        # Generate response
         with torch.no_grad():
             outputs = model.generate(
-                inputs.input_ids,
-                max_new_tokens=request.max_tokens or 1000,
+                **inputs,
+                max_new_tokens=request.max_tokens or 256,
                 temperature=request.temperature or 0.7,
                 do_sample=True if request.temperature > 0 else False,
-                pad_token_id=tokenizer.eos_token_id,
+                pad_token_id=tokenizer.pad_token_id,
                 eos_token_id=tokenizer.eos_token_id,
-                use_cache=True  # Explicitly enable cache
             )
         
-        generated_text = tokenizer.decode(outputs[0], skip_special_tokens=True)
-        # Remove input prompt from output
-        generated_text = generated_text[len(request.prompt):].strip()
+        # Decode only the generated part (exclude input)
+        generated_text = tokenizer.decode(
+            outputs[0][inputs["input_ids"].shape[-1]:],
+            skip_special_tokens=True
+        ).strip()
         
         processing_time = (time.time() - start_time) * 1000
-        tokens_generated = len(tokenizer.encode(generated_text))
+        tokens_generated = outputs.shape[-1] - inputs["input_ids"].shape[-1]
         
         return TextGenerationResponse(
             generated_text=generated_text,
-            model_used="microsoft/phi-4",
+            response=generated_text,  # Alias for chatbot compatibility
+            model_used="TinyLlama/TinyLlama-1.1B-Chat-v1.0",
             tokens_generated=tokens_generated,
             processing_time_ms=processing_time,
-            success=True
+            success=True,
+            confidence=0.85
         )
         
     except Exception as e:
@@ -105,37 +132,44 @@ async def generate_text(request: TextGenerationRequest) -> TextGenerationRespons
         raise HTTPException(status_code=500, detail=f"Text generation failed: {str(e)}")
 
 @router.get("/health")
-async def check_phi4_health():
+async def check_gemma_health():
     """
-    Check if Phi-4 model is healthy and responsive
+    Check if Gemma model is healthy and responsive
     """
     try:
         # Quick test generation
-        model, tokenizer = await _get_phi4_model()
+        model, tokenizer = await _get_gemma_model()
         
-        # Simple test
-        test_input = "Hello"
-        inputs = tokenizer(test_input, return_tensors="pt")
+        # Simple test with chat template
+        messages = [{"role": "user", "content": "Hi"}]
+        inputs = tokenizer.apply_chat_template(
+            messages,
+            add_generation_prompt=True,
+            tokenize=True,
+            return_dict=True,
+            return_tensors="pt",
+        ).to(model.device)
+        
         with torch.no_grad():
             outputs = model.generate(
-                inputs.input_ids,
+                **inputs,
                 max_new_tokens=5,
                 temperature=0.1,
                 do_sample=True
             )
         
         return {
-            "phi4_available": True,
-            "model_used": "microsoft/phi-4",
+            "gemma_available": True,
+            "model_used": "TinyLlama/TinyLlama-1.1B-Chat-v1.0",
             "status": "healthy",
             "device": str(next(model.parameters()).device),
             "dtype": str(next(model.parameters()).dtype)
         }
         
     except Exception as e:
-        logger.error(f"Phi-4 health check failed: {e}")
+        logger.error(f"Gemma health check failed: {e}")
         return {
-            "phi4_available": False,
+            "gemma_available": False,
             "status": "unhealthy", 
             "error": str(e)
         }

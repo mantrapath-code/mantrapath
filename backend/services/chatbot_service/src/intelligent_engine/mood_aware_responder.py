@@ -355,16 +355,19 @@ I care about your safety and wellbeing. Would you like me to help you connect wi
         Returns:
             MoodAwareResponse: Generated response
         """
-        # Primary: Lightweight embeddings-based template selection (no large models)
-        embeddings_response = await self._generate_via_embeddings_templates(
-            user_message, mood_context, strategy, conversation_history
-        )
-        if embeddings_response:
-            return embeddings_response
+        # Primary: Use actual AI models from models service
+        try:
+            model_response = await self._generate_via_models_service(
+                user_message, mood_context, strategy, conversation_history
+            )
+            if model_response:
+                return model_response
+        except Exception as e:
+            logger.error(f"Models service generation failed: {e}")
         
-        # If embeddings fail, the error will be raised to caller
-        logger.error("No AI response available from embeddings pipeline")
-        raise RuntimeError("No AI response available")
+        # If models service fails, raise error (no fallback)
+        logger.error("No AI response available from models service")
+        raise RuntimeError("No AI response available from models service")
     
     def _build_system_prompt(self, mood_context: MoodContext, strategy: str) -> str:
         """
@@ -442,6 +445,95 @@ Response Guidelines:
             ])
         
         return suggestions[:3]  # Limit to 3 suggestions
+    
+    async def _generate_via_models_service(
+        self,
+        user_message: str,
+        mood_context: MoodContext,
+        strategy: str,
+        conversation_history: Optional[List[Dict[str, Any]]] = None
+    ) -> Optional[MoodAwareResponse]:
+        """
+        Generate response using the actual Models Service AI
+        
+        Args:
+            user_message (str): User's message
+            mood_context (MoodContext): Current mood context
+            strategy (str): Selected response strategy
+            conversation_history (List[Dict]): Previous conversation messages
+            
+        Returns:
+            MoodAwareResponse: AI-generated response or None if failed
+        """
+        try:
+            from ..clients.models_service_client import models_client
+            
+            # Check if models service is available
+            is_healthy = await models_client.health_check()
+            if not is_healthy:
+                logger.warning("Models service is not healthy")
+                return None
+            
+            # Build system prompt with mood context
+            system_prompt = self._build_system_prompt(mood_context, strategy)
+            
+            # Build conversation context
+            conversation_context_str = ""
+            if conversation_history:
+                for msg in conversation_history[-3:]:  # Last 3 messages for context
+                    role = "User" if msg.get("sender") == "user" else "Assistant"
+                    conversation_context_str += f"{role}: {msg.get('content', '')}\n"
+            
+            # Create complete context for the AI
+            context = {
+                "system_prompt": system_prompt,
+                "conversation_history": conversation_context_str,
+                "mood_score": mood_context.current_mood_score,
+                "mood_trend": mood_context.mood_trend,
+                "stress_level": mood_context.stress_level,
+                "energy_level": mood_context.energy_level,
+                "strategy": strategy
+            }
+            
+            # Generate response using models service
+            result = await models_client.generate_response(
+                message=user_message,
+                language="en",  # TODO: Support multi-language
+                context=context
+            )
+            
+            if result and result.get("response"):
+                ai_text = result.get("response", "").strip()
+                
+                # Determine if breathing exercise should be suggested
+                breathing_exercise = None
+                if mood_context.stress_level >= 7 or "anxious" in user_message.lower() or "stress" in user_message.lower():
+                    breathing_exercise = {
+                        "name": "4-7-8 Calming Breath",
+                        "description": "A powerful technique to reduce anxiety and stress",
+                        "steps": [
+                            {"action": "inhale", "duration": 4, "instruction": "Breathe in slowly through your nose"},
+                            {"action": "hold", "duration": 7, "instruction": "Hold your breath gently"},
+                            {"action": "exhale", "duration": 8, "instruction": "Exhale completely through your mouth"}
+                        ],
+                        "cycles": 4
+                    }
+                
+                return MoodAwareResponse(
+                    response_text=ai_text,
+                    tone=self._determine_response_tone(mood_context),
+                    intervention_type=strategy,
+                    breathing_exercise=breathing_exercise,
+                    confidence_score=result.get("confidence", 0.85),
+                    follow_up_suggestions=self._generate_follow_up_suggestions(mood_context)
+                )
+            else:
+                logger.warning("Models service returned empty response")
+                return None
+                    
+        except Exception as e:
+            logger.error(f"Models service request failed: {e}")
+            return None
     
     async def _generate_via_models_service_ollama(
         self,

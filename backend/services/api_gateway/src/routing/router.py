@@ -199,7 +199,7 @@ class RequestRouter:
                 methods=[HTTPMethod.GET, HTTPMethod.POST, HTTPMethod.PUT, HTTPMethod.DELETE],
                 service_name="chatbot",
                 strip_prefix=False,
-                timeout=60,  # Longer timeout for AI processing
+                timeout=120,  # Extended timeout for AI model generation (TinyLlama takes 30-60s)
                 retries=1,   # Fewer retries for AI calls
                 auth_required=True
             ),
@@ -210,7 +210,7 @@ class RequestRouter:
                 methods=[HTTPMethod.GET, HTTPMethod.POST, HTTPMethod.PUT, HTTPMethod.DELETE],
                 service_name="chatbot",
                 strip_prefix=False,
-                timeout=60,  # Longer timeout for AI processing
+                timeout=120,  # Extended timeout for AI model generation
                 retries=1,   # Fewer retries for AI calls
                 auth_required=True
             ),

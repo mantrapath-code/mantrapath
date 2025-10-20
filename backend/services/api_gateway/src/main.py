@@ -913,7 +913,7 @@ async def route_request(
         
         # Proxy request to target service
         try:
-            response = await request_proxy.proxy_request(proxy_request, target_service)
+            response = await request_proxy.proxy_request(proxy_request, target_service, timeout=route.timeout)
             circuit_breaker.record_success(service_name)
             
             # Apply cultural adaptation to response

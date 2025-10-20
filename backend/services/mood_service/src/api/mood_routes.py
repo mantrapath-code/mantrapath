@@ -1,6 +1,7 @@
 """API endpoints for mood operations."""
 
 import logging
+from datetime import datetime
 from typing import List, Optional
 from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks
 from sqlalchemy.orm import Session
@@ -105,6 +106,136 @@ async def get_mood_entries(
     except Exception as e:
         logger.error(f"Failed to get mood entries: {e}")
         raise HTTPException(status_code=500, detail="Failed to retrieve mood entries")
+
+
+@router.get("/entries/{entry_id}", response_model=MoodEntryResponse)
+async def get_mood_entry(
+    entry_id: int,
+    db: Session = Depends(get_db),
+    current_user: dict = Depends(get_current_user)
+):
+    """
+    Get a specific mood entry by ID.
+    
+    Only returns the entry if it belongs to the authenticated user.
+    """
+    try:
+        entry = db.query(MoodEntry).filter(
+            MoodEntry.id == entry_id,
+            MoodEntry.user_id == current_user["user_id"]
+        ).first()
+        
+        if not entry:
+            raise HTTPException(status_code=404, detail="Mood entry not found")
+        
+        return MoodEntryResponse.model_validate(entry)
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Failed to get mood entry: {e}")
+        raise HTTPException(status_code=500, detail="Failed to retrieve mood entry")
+
+
+@router.put("/entries/{entry_id}", response_model=MoodEntryResponse)
+async def update_mood_entry(
+    entry_id: int,
+    mood_data: MoodCreateRequest,
+    background_tasks: BackgroundTasks,
+    db: Session = Depends(get_db),
+    current_user: dict = Depends(get_current_user)
+):
+    """
+    Update an existing mood entry.
+    
+    Only allows updating entries that belong to the authenticated user.
+    """
+    try:
+        # Find the entry
+        entry = db.query(MoodEntry).filter(
+            MoodEntry.id == entry_id,
+            MoodEntry.user_id == current_user["user_id"]
+        ).first()
+        
+        if not entry:
+            raise HTTPException(status_code=404, detail="Mood entry not found")
+        
+        # Perform emotion analysis if description changed
+        emotion_analysis = None
+        if mood_data.description and mood_data.description.strip():
+            try:
+                analysis_result = await emotion_service.analyze_emotion(mood_data.description)
+                emotion_analysis = analysis_result.model_dump()
+            except Exception as e:
+                logger.warning(f"Emotion analysis failed for mood entry update: {e}")
+        
+        # Update the entry
+        entry.mood_score = mood_data.mood_score
+        entry.description = mood_data.description
+        entry.stress_level = mood_data.stress_level
+        entry.energy_level = mood_data.energy_level
+        entry.context_tags = mood_data.context_tags
+        entry.location = mood_data.location
+        entry.activity = mood_data.activity
+        
+        if emotion_analysis:
+            entry.emotion_analysis = emotion_analysis
+        
+        entry.updated_at = datetime.utcnow()
+        
+        db.commit()
+        db.refresh(entry)
+        
+        # Background task: notify chatbot about mood changes
+        background_tasks.add_task(
+            memory_integration_service.notify_chatbot_mood_change,
+            user_id=current_user["user_id"],
+            mood_entry=MoodEntryResponse.model_validate(entry).model_dump()
+        )
+        
+        return MoodEntryResponse.model_validate(entry)
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Failed to update mood entry: {e}")
+        db.rollback()
+        raise HTTPException(status_code=500, detail="Failed to update mood entry")
+
+
+@router.delete("/entries/{entry_id}")
+async def delete_mood_entry(
+    entry_id: int,
+    db: Session = Depends(get_db),
+    current_user: dict = Depends(get_current_user)
+):
+    """
+    Delete a mood entry.
+    
+    Only allows deleting entries that belong to the authenticated user.
+    """
+    try:
+        # Find the entry
+        entry = db.query(MoodEntry).filter(
+            MoodEntry.id == entry_id,
+            MoodEntry.user_id == current_user["user_id"]
+        ).first()
+        
+        if not entry:
+            raise HTTPException(status_code=404, detail="Mood entry not found")
+        
+        # Delete the entry
+        db.delete(entry)
+        db.commit()
+        
+        return {"success": True, "message": "Mood entry deleted successfully"}
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Failed to delete mood entry: {e}")
+        db.rollback()
+        raise HTTPException(status_code=500, detail="Failed to delete mood entry")
 
 
 @router.get("/analytics/overview", response_model=MoodAnalyticsOverview)

@@ -264,6 +264,9 @@ services:
       - TRANSLATION_SERVICE_URL=http://translation-service:${TRANSLATION_SERVICE_PORT}
       - VOICE_SERVICE_URL=http://voice-service:${VOICE_SERVICE_PORT}
       - ACTION_ORCHESTRATOR_URL=http://action-orchestrator:${ACTION_ORCHESTRATOR_PORT}
+      - MODELS_SERVICE_URL=http://models-service:${MODELS_SERVICE_INTERNAL_PORT:-8080}
+      - MODELS_SERVICE_TIMEOUT=120
+      - MODELS_SERVICE_ENABLED=true
       
       # Service Configuration
       - ML_SERVICE_ENABLED=true
@@ -915,11 +918,11 @@ services:
       dockerfile: services/models_service/Dockerfile
     ports:
       - "${MODELS_SERVICE_EXTERNAL_PORT:-8081}:${MODELS_SERVICE_INTERNAL_PORT:-8080}"
-    # Memory limits for STT/TTS models only
+    # Memory limits for STT/TTS models and TinyLlama text generation
     deploy:
       resources:
         limits:
-          memory: 4G  # Sufficient for STT/TTS models
+          memory: 4G  # Sufficient for lightweight models
         reservations:
           memory: 2G  # Reserve minimum memory
     env_file:
@@ -942,8 +945,8 @@ services:
       - LEGACY_MODELS_DISABLE=true         # Disable Whisper/Vosk/Coqui
       - VOICE_STACK_MODE=enhanced          # Enhanced natural voice mode
       - MODELS_SERVICE_SKIP_DEFAULTS=false # Force loading default models
-      - ENABLE_TEXT_GENERATION=false      # Disable text generation for now
-      - RASA_ENABLE=false              # Disable dialogue management for now
+      - ENABLE_TEXT_GENERATION=true        # Enable Gemma-3 text generation
+      - RASA_ENABLE=false                  # Disable dialogue management for now
       # Hardware settings
       - MAX_GPU_MEMORY=0.8
       - MAX_CONCURRENT_REQUESTS=10

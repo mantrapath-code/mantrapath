@@ -44,19 +44,24 @@ class ModelsServiceClient:
         self.cache_ttl = int(os.getenv("MODELS_SERVICE_CACHE_TTL", "3600"))
         self.is_enabled = os.getenv("MODELS_SERVICE_ENABLED", "true").lower() == "true"
         
-        logger.info(f"Models Service Client initialized - URL: {self.models_service_url}, Enabled: {self.is_enabled}")
+        logger.info(f"Models Service Client initialized - URL: {self.models_service_url}, Enabled: {self.is_enabled}, Timeout: {self.timeout}s")
     
     async def health_check(self) -> bool:
         """Check if Models Service is healthy"""
         if not self.is_enabled:
+            logger.warning("Models service is disabled in configuration")
             return False
             
         try:
             async with httpx.AsyncClient(timeout=5) as client:
+                logger.debug(f"Attempting health check at {self.models_service_url}/health")
                 response = await client.get(f"{self.models_service_url}/health")
+                logger.info(f"Health check response: status={response.status_code}, body={response.text[:200]}")
                 return response.status_code == 200
         except Exception as e:
-            logger.error(f"Models Service health check failed: {e}")
+            logger.error(f"Models Service health check failed: {type(e).__name__}: {str(e)}")
+            import traceback
+            logger.error(f"Health check traceback: {traceback.format_exc()}")
             return False
     
     async def analyze_sentiment(self, text: str, language: str = "en") -> Optional[SentimentAnalysis]:
@@ -244,18 +249,28 @@ class ModelsServiceClient:
             return None
             
         try:
+            # Build the prompt with system prompt and context
+            system_prompt_text = context.get("system_prompt") if context else "You are Mantra-Mitra, an empathetic AI wellness companion. Respond in the user's language with empathy, understanding, and practical wellness guidance."
+            
+            # Build full prompt with context
+            full_prompt = f"{system_prompt_text}\n\nUser: {message}\nAssistant:"
+            
             payload = {
-                "message": message,
-                "language": language,
-                "context": context or {},
-                "system_prompt": "You are Mantra-Mitra, an empathetic AI wellness companion. Respond in the user's language with empathy, understanding, and practical wellness guidance."
+                "prompt": full_prompt,  # Changed from "message" to "prompt"
+                "max_tokens": 100,  # Reduced from 256 to speed up generation
+                "temperature": 0.7
             }
             
             headers = {}
             if jwt_token:
                 headers["Authorization"] = f"Bearer {jwt_token}"
             
-            async with httpx.AsyncClient(timeout=self.timeout) as client:
+            # Create timeout config - httpx Timeout needs all timeout values explicit
+            # read=None means no read timeout (allow long model generation)
+            timeout_config = httpx.Timeout(connect=10.0, read=self.timeout, write=10.0, pool=10.0)
+            logger.debug(f"Using timeout config: read={self.timeout}s, connect=10s")
+            
+            async with httpx.AsyncClient(timeout=timeout_config) as client:
                 response = await client.post(
                     f"{self.models_service_url}/api/v1/nlp/generate",
                     json=payload,
@@ -265,8 +280,8 @@ class ModelsServiceClient:
                 if response.status_code == 200:
                     data = response.json()
                     return {
-                        "response": data.get("response", ""),
-                        "confidence": data.get("confidence", 0.0),
+                        "response": data.get("generated_text", data.get("response", "")),
+                        "confidence": data.get("confidence", 0.85),
                         "model_used": data.get("model_used", "unknown"),
                         "language": language
                     }
@@ -275,7 +290,9 @@ class ModelsServiceClient:
                     return None
                     
         except Exception as e:
-            logger.error(f"Error in response generation: {e}")
+            logger.error(f"Error in response generation: {type(e).__name__}: {str(e)}")
+            import traceback
+            logger.error(f"Response generation traceback: {traceback.format_exc()}")
             return None
     
     def _classify_intent_from_analysis(self, text: str, sentiment: SentimentAnalysis) -> str:
