@@ -17,49 +17,43 @@ export const getApiBaseUrl = (): string => {
     return import.meta.env.VITE_NGROK_BACKEND_URL || 'https://f5b4589b2fdf.ngrok-free.app';
   }
   
-  // Prioritize environment variable first, then fall back to origin-based URL
-  // This ensures proper configuration for server deployment
-  return import.meta.env.VITE_API_BASE_URL || import.meta.env.VITE_API_GATEWAY_URL || `${window.location.origin}/api`;
+  // Return empty string so endpoints that already include /api/ work correctly
+  // The /api/ prefix is handled by nginx proxy
+  return '';
 };
 
 // Function to get service URLs based on environment
 export const getServiceUrls = () => {
   const baseUrl = getApiBaseUrl();
-  const origin = window.location.origin; // Root origin without /api
   
   if (isAccessedThroughNgrok()) {
     // When accessed through ngrok, all services still go through the API Gateway.
-    // Use origin-level base for custom calls so endpoints can include "/api/..." paths once.
     return {
       API_BASE_URL: baseUrl,
-      // Custom bases for service-specific calls (endpoints will include /api/.. or /api/ml/..)
-      ML_SERVICE_URL: origin,
-      COMMUNITY_SERVICE_URL: origin,
-      PROFILE_SERVICE_URL: origin,
-      AI_CONTEXT_SERVICE_URL: origin,
-      AI_EVENT_PROCESSOR_URL: origin,
-      ASSISTANCE_ENGINE_URL: origin,
-      MOOD_SERVICE_URL: origin,
-      // IMPORTANT: Keep chatbot pointing to origin; helper methods supply full path.
-      CHATBOT_SERVICE_URL: origin,
-      VOICE_SERVICE_URL: origin,
+      ML_SERVICE_URL: baseUrl,
+      COMMUNITY_SERVICE_URL: baseUrl,
+      PROFILE_SERVICE_URL: baseUrl,
+      AI_CONTEXT_SERVICE_URL: baseUrl,
+      AI_EVENT_PROCESSOR_URL: baseUrl,
+      ASSISTANCE_ENGINE_URL: baseUrl,
+      MOOD_SERVICE_URL: baseUrl,
+      CHATBOT_SERVICE_URL: baseUrl,
+      VOICE_SERVICE_URL: baseUrl,
     };
   }
   
-  // Local development - use API Gateway for consistency
+  // For production/deployment - use relative paths
   return {
     API_BASE_URL: baseUrl,
-    // For custom calls, use origin-level base; endpoints will include /api/... paths
-    ML_SERVICE_URL: origin,
-    COMMUNITY_SERVICE_URL: origin,
-    PROFILE_SERVICE_URL: origin,
-    AI_CONTEXT_SERVICE_URL: origin,
-    AI_EVENT_PROCESSOR_URL: origin,
-    ASSISTANCE_ENGINE_URL: origin,
-    MOOD_SERVICE_URL: origin,
-    // Keep chatbot pointing to origin; helper methods supply full path.
-    CHATBOT_SERVICE_URL: origin,
-    VOICE_SERVICE_URL: origin,
+    ML_SERVICE_URL: baseUrl,
+    COMMUNITY_SERVICE_URL: baseUrl,
+    PROFILE_SERVICE_URL: baseUrl,
+    AI_CONTEXT_SERVICE_URL: baseUrl,
+    AI_EVENT_PROCESSOR_URL: baseUrl,
+    ASSISTANCE_ENGINE_URL: baseUrl,
+    MOOD_SERVICE_URL: baseUrl,
+    CHATBOT_SERVICE_URL: baseUrl,
+    VOICE_SERVICE_URL: baseUrl,
   };
 };
 

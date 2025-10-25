@@ -135,6 +135,10 @@ class JournalEntry(Base):
     word_count = Column(Integer, default=0)
     reading_time = Column(Integer, default=0)  # in seconds
     
+    # Video journal support
+    entry_type = Column(String, default="text")  # "text" or "video"
+    video_analysis = Column(JSON, default=None)  # Video emotion analysis data
+    
     created_at = Column(DateTime, default=utcnow)
     updated_at = Column(DateTime, default=utcnow, onupdate=utcnow)
     

@@ -88,12 +88,25 @@ class MoodServiceClient {
 
   refreshToken() {
     this.token = getAuthToken();
+    if (isDevMode() && !this.token) {
+      console.warn('[MoodService] No auth token found in localStorage');
+    }
   }
 
   private async makeRequest<T>(endpoint: string, options: RequestInit = {}): Promise<T> {
     try {
       // Refresh token before each request to ensure we have the latest
       this.refreshToken();
+      
+      // Debug: Check if token exists in localStorage
+      const rawToken = localStorage.getItem('mantrapath_token');
+      if (isDevMode()) {
+        console.log('[MoodService] localStorage token check:', !!rawToken);
+        console.log('[MoodService] This.token value:', !!this.token);
+        if (rawToken && !this.token) {
+          console.error('[MoodService] TOKEN EXISTS IN STORAGE BUT NOT IN SERVICE INSTANCE!');
+        }
+      }
       
       // Normalize endpoint to avoid double /api (common bug we observed)
       let normalizedEndpoint = endpoint
@@ -107,17 +120,28 @@ class MoodServiceClient {
         console.log(`[MoodService] Token available: ${!!this.token}`);
         if (this.token) {
           console.log(`[MoodService] Token preview: ${this.token.substring(0, 20)}...`);
+        } else {
+          console.error('[MoodService] No token available - request will likely fail with 401');
         }
       }
       
-      const defaultOptions: RequestInit = {
-        headers: {
-          'Content-Type': 'application/json',
-          ...(this.token && { Authorization: `Bearer ${this.token}` }),
-        },
+      // Build headers, ensuring Authorization is included if token exists
+      const headers: HeadersInit = {
+        'Content-Type': 'application/json',
       };
 
-      const response = await fetch(url, { ...defaultOptions, ...options });
+      if (this.token) {
+        headers.Authorization = `Bearer ${this.token}`;
+      }
+
+      // Merge with any headers passed in options
+      const mergedHeaders = { ...headers, ...(options.headers || {}) };
+
+      if (isDevMode()) {
+        console.log('[MoodService] Request headers:', mergedHeaders);
+      }
+
+      const response = await fetch(url, { ...options, headers: mergedHeaders });
 
       if (!response.ok) {
         if (isDevMode()) {

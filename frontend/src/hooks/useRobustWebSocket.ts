@@ -165,39 +165,24 @@ class WebSocketManager {
 const getWebSocketUrls = (userId: string): string[] => {
   const uid = userId || 'anonymous'
   
-  // 1. Get base URL from environment or derive from window location
+  // Always derive from current page URL to use Nginx proxy
+  // This ensures we never hardcode ports or bypass the proxy
   let baseUrl: string
   
-  const envWsUrl = import.meta.env.VITE_WS_URL as string | undefined
-  const envApiUrl = import.meta.env.VITE_API_URL as string | undefined
-  
-  if (envWsUrl) {
-    baseUrl = envWsUrl.replace(/\/$/, '')
-  } else if (envApiUrl) {
-    // Convert HTTP(S) URL to WebSocket URL
-    baseUrl = envApiUrl
-      .replace('http://', 'ws://')
-      .replace('https://', 'wss://')
-      .replace(/\/$/, '')
-  } else if (typeof window !== 'undefined') {
-    // Derive from current page URL
+  if (typeof window !== 'undefined') {
+    // Derive from current page URL (same-origin)
     const proto = window.location.protocol === 'https:' ? 'wss:' : 'ws:'
     baseUrl = `${proto}//${window.location.host}`
   } else {
-    // Fallback for SSR
-    baseUrl = 'ws://localhost:8000'
-  }
-
-  // Ensure secure WebSocket for HTTPS pages
-  if (typeof window !== 'undefined' && window.location.protocol === 'https:' && baseUrl.startsWith('ws:')) {
-    baseUrl = baseUrl.replace('ws://', 'wss://')
+    // Fallback for SSR (should not happen in browser)
+    baseUrl = 'wss://localhost'
   }
 
   // Return multiple URLs to try in order of preference
+  // All URLs use same-origin to go through Nginx proxy
   return [
-    `${baseUrl}/api/notifications/ws/${uid}`,  // Primary: Gateway proxy to notifications
-    `${baseUrl}/ws/${uid}`,                    // Fallback: Generic gateway endpoint
-    `${baseUrl.replace(':8000', ':8007')}/ws/${uid}` // Direct notifications service (last resort)
+    `${baseUrl}/notifications/ws/${uid}`,  // Primary: Nginx proxy to notification service
+    `${baseUrl}/ws/${uid}`                 // Fallback: Generic gateway WebSocket endpoint
   ].filter(Boolean)
 }
 

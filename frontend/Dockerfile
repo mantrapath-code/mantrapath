@@ -32,14 +32,37 @@ RUN npm run build
 # Production stage
 FROM nginx:alpine
 
+# Install openssl for certificate generation
+RUN apk add --no-cache openssl
+
 # Copy built files to nginx
 COPY --from=builder /app/dist /usr/share/nginx/html
 
 # Copy nginx configuration
 COPY nginx.conf /etc/nginx/nginx.conf
 
-# Expose port
-EXPOSE 80
+# Create entrypoint script to generate SSL certs
+RUN echo '#!/bin/sh' > /docker-entrypoint.sh && \
+    echo 'set -e' >> /docker-entrypoint.sh && \
+    echo '' >> /docker-entrypoint.sh && \
+    echo '# Generate SSL certificate if it does not exist' >> /docker-entrypoint.sh && \
+    echo 'if [ ! -f /etc/nginx/ssl/cert.pem ] || [ ! -f /etc/nginx/ssl/key.pem ]; then' >> /docker-entrypoint.sh && \
+    echo '    echo "Generating self-signed SSL certificate..."' >> /docker-entrypoint.sh && \
+    echo '    mkdir -p /etc/nginx/ssl' >> /docker-entrypoint.sh && \
+    echo '    openssl req -x509 -nodes -days 365 -newkey rsa:2048 \' >> /docker-entrypoint.sh && \
+    echo '        -keyout /etc/nginx/ssl/key.pem \' >> /docker-entrypoint.sh && \
+    echo '        -out /etc/nginx/ssl/cert.pem \' >> /docker-entrypoint.sh && \
+    echo '        -subj "/C=US/ST=State/L=City/O=Organization/CN=localhost"' >> /docker-entrypoint.sh && \
+    echo '    echo "SSL certificate generated successfully"' >> /docker-entrypoint.sh && \
+    echo 'fi' >> /docker-entrypoint.sh && \
+    echo '' >> /docker-entrypoint.sh && \
+    echo '# Start nginx' >> /docker-entrypoint.sh && \
+    echo 'exec nginx -g "daemon off;"' >> /docker-entrypoint.sh && \
+    chmod +x /docker-entrypoint.sh
 
-# Start nginx
+# Expose ports
+EXPOSE 80 443
+
+# Use custom entrypoint
+ENTRYPOINT ["/docker-entrypoint.sh"]
 CMD ["nginx", "-g", "daemon off;"]

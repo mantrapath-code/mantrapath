@@ -5,6 +5,7 @@ import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
 import { Badge } from "@/components/ui/badge"
 import { Skeleton } from "@/components/ui/skeleton"
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { 
   BookOpen, 
   Sparkle, 
@@ -20,6 +21,7 @@ import {
 import { useJournal } from "@/hooks/useJournal"
 import { motion, AnimatePresence } from "framer-motion"
 import { toast } from "sonner"
+import { VideoJournalEntry } from "./VideoJournalEntry"
 
 export function JournalSection() {
   const { 
@@ -183,6 +185,13 @@ export function JournalSection() {
           </CardTitle>
         </CardHeader>
         <CardContent>
+          <Tabs defaultValue="text">
+            <TabsList className="w-full">
+              <TabsTrigger value="text">📝 Write</TabsTrigger>
+              <TabsTrigger value="video">🎥 Video</TabsTrigger>
+            </TabsList>
+            
+            <TabsContent value="text" className="mt-4">
           {!isWriting ? (
             <div className="space-y-4">
               <div className="text-center p-6 bg-muted/50 rounded-lg">
@@ -312,6 +321,15 @@ export function JournalSection() {
               </div>
             </motion.div>
           )}
+            </TabsContent>
+            
+            <TabsContent value="video" className="mt-4">
+              <VideoJournalEntry onSuccess={() => {
+                refresh()
+                toast.success('Video journal entry saved!')
+              }} />
+            </TabsContent>
+          </Tabs>
         </CardContent>
       </Card>
       

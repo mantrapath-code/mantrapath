@@ -479,9 +479,11 @@ async def notifications_websocket_proxy(websocket: WebSocket, user_id: str):
                     async def forward_to_backend():
                         try:
                             async for message in websocket.iter_text():
-                                if backend_ws.closed:
+                                try:
+                                    await backend_ws.send(message)
+                                except Exception as e:
+                                    logger.error(f"Error sending to backend: {e}")
                                     break
-                                await backend_ws.send(message)
                         except WebSocketDisconnect:
                             logger.info("Frontend WebSocket disconnected")
                         except Exception as e:
@@ -490,9 +492,12 @@ async def notifications_websocket_proxy(websocket: WebSocket, user_id: str):
                     async def forward_to_frontend():
                         try:
                             async for message in backend_ws:
-                                if websocket.client_state.name != 'CONNECTED':
+                                try:
+                                    if websocket.client_state.name == 'CONNECTED':
+                                        await websocket.send_text(message)
+                                except Exception as e:
+                                    logger.error(f"Error sending to frontend: {e}")
                                     break
-                                await websocket.send_text(message)
                         except ConnectionClosed:
                             logger.info("Backend WebSocket connection closed")
                         except Exception as e:

@@ -54,8 +54,8 @@ class ApiService {
 
     this.backendCheckPromise = new Promise(async (resolve) => {
       try {
-        // Prefer the gateway health/live endpoint via base URL
-        const response = await fetch(`${this.baseUrl}/health/live`, {
+        // Check gateway health endpoint via nginx proxy
+        const response = await fetch(`/health/live`, {
           method: 'GET',
           headers: { 'Content-Type': 'application/json' },
           signal: AbortSignal.timeout(5000) // 5 second timeout
@@ -549,6 +549,75 @@ class ApiService {
     is_private?: boolean
   }) {
     return this.request('/api/v1/journal/', {
+      method: 'POST',
+      body: JSON.stringify(journalData),
+    })
+  }
+
+  // Video Journal Methods
+  async transcribeVideo(videoBlob: Blob): Promise<{
+    transcript: string
+    language: string
+    confidence: number
+    duration: number
+    segments?: Array<{ start: number; end: number; text: string }>
+  }> {
+    const formData = new FormData()
+    // Backend expects 'audio' field name, not 'audio_file'
+    formData.append('audio', videoBlob, 'video.webm')
+    
+    const headers: HeadersInit = {}
+    if (this.token) {
+      headers.Authorization = `Bearer ${this.token}`
+    }
+
+    const response = await fetch(`${this.baseUrl}/api/v1/voice/stt`, {
+      method: 'POST',
+      headers,
+      body: formData
+    })
+
+    if (!response.ok) {
+      throw new Error(`Speech-to-text failed: ${response.statusText}`)
+    }
+
+    return response.json()
+  }
+
+  async analyzeTextEmotion(text: string, language: string = 'en'): Promise<{
+    emotion: string
+    confidence: number
+    all_emotions: Record<string, number>
+    processing_time_ms?: number
+    language: string
+  }> {
+    const response = await this.request('/ai-events/api/v1/analyze/emotion', {
+      method: 'POST',
+      body: JSON.stringify({ 
+        text, 
+        language,
+        user_id: this.getUserId() 
+      }),
+    }) as any
+    
+    // Transform response to match expected format
+    return {
+      emotion: response.result?.emotion || 'neutral',
+      confidence: response.result?.confidence || 0.5,
+      all_emotions: response.result?.emotions || {},
+      processing_time_ms: response.processing_time_ms,
+      language: response.language || language
+    }
+  }
+
+  async createVideoJournalEntry(journalData: {
+    title?: string
+    content: string
+    entry_type: 'video'
+    is_private?: boolean
+    video_analysis: any
+  }) {
+    return this.request('/api/v1/journal/entries', {
       method: 'POST',
       body: JSON.stringify(journalData),
     })

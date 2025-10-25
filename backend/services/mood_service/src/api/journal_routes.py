@@ -2,7 +2,7 @@
 
 import logging
 from typing import List, Optional
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy.orm import Session
 
 from shared.database import get_db
@@ -28,6 +28,47 @@ async def get_journal_entries_root(
     return []
 
 
+@router.post("/")
+async def create_journal_entry_root(
+    request: Request,
+    db: Session = Depends(get_db),
+    current_user: dict = Depends(get_current_user)
+):
+    """
+    Create a new journal entry (root path).
+    Handles frontend requests to POST /api/v1/journal/
+    """
+    from shared.models import JournalEntry
+    from datetime import datetime
+    
+    body = await request.json()
+    logger.info(f"Journal entry creation attempted via root path by user {current_user['user_id']}")
+    
+    # Extract fields from request
+    entry_type = body.get('entry_type', 'text')
+    video_analysis = body.get('video_analysis')
+    
+    # Create journal entry
+    journal_entry = JournalEntry(
+        user_id=current_user['user_id'],
+        title=body.get('title'),
+        content=body.get('content', ''),
+        mood_before=body.get('mood_before'),
+        mood_after=body.get('mood_after'),
+        is_private=body.get('is_private', True),
+        entry_type=entry_type,
+        video_analysis=video_analysis,
+        created_at=datetime.utcnow()
+    )
+    
+    db.add(journal_entry)
+    db.commit()
+    db.refresh(journal_entry)
+    
+    logger.info(f"Journal entry created via root path: {journal_entry.id} by user {current_user['user_id']}")
+    return journal_entry
+
+
 @router.get("/entries")
 async def get_journal_entries(
     limit: int = 50,
@@ -44,17 +85,43 @@ async def get_journal_entries(
 
 @router.post("/entries")
 async def create_journal_entry(
+    request: Request,
+    db: Session = Depends(get_db),
     current_user: dict = Depends(get_current_user)
 ):
     """
     Create a new journal entry.
-    Placeholder implementation - returns not implemented message.
+    Supports both text and video journal entries.
     """
+    from shared.models import JournalEntry
+    from datetime import datetime
+    
+    body = await request.json()
     logger.info(f"Journal entry creation attempted by user {current_user['user_id']}")
-    raise HTTPException(
-        status_code=501, 
-        detail="Journal functionality is planned for future release. Currently supports mood tracking."
+    
+    # Extract fields from request
+    entry_type = body.get('entry_type', 'text')
+    video_analysis = body.get('video_analysis')
+    
+    # Create journal entry
+    journal_entry = JournalEntry(
+        user_id=current_user['user_id'],
+        title=body.get('title'),
+        content=body.get('content', ''),
+        mood_before=body.get('mood_before'),
+        mood_after=body.get('mood_after'),
+        is_private=body.get('is_private', True),
+        entry_type=entry_type,
+        video_analysis=video_analysis,
+        created_at=datetime.utcnow()
     )
+    
+    db.add(journal_entry)
+    db.commit()
+    db.refresh(journal_entry)
+    
+    logger.info(f"Journal entry created: {journal_entry.id} by user {current_user['user_id']}")
+    return journal_entry
 
 
 @router.get("/entries/{entry_id}")

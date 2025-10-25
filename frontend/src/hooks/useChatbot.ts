@@ -114,11 +114,36 @@ Respond with empathy, understanding, and practical wellness guidance. If user se
       }
       const sid = currentSessionId || (localStorage.getItem('chat_session_id') || '')
       const sendResp = await chatbotApi.sendMessage(sid, enhancedContent)
-      const response = {
-        session_id: sendResp.session_id,
-        response: sendResp.response.content,
-        message_type: 'standard',
-        breathing_exercise: undefined,
+      
+      // Handle different response formats from the API
+      let responseContent = ''
+      let messageType = 'standard'
+      
+      if (typeof sendResp === 'string') {
+        // Response is a simple string
+        responseContent = sendResp
+      } else if (sendResp.response) {
+        if (typeof sendResp.response === 'string') {
+          // Response has a 'response' field that's a string
+          responseContent = sendResp.response
+          messageType = (sendResp as any).message_type || 'standard'
+        } else if (sendResp.response.content) {
+          // Response has a 'response' field that's an object with 'content'
+          responseContent = sendResp.response.content
+          messageType = sendResp.response.message_type || 'standard'
+        }
+      } else if (sendResp.content) {
+        // Response is a ChatMessage object
+        responseContent = sendResp.content
+      }
+
+      const botMessage: ChatMessage = {
+        id: (Date.now() + 1).toString(),
+        sender: 'assistant',
+        content: responseContent,
+        timestamp: new Date().toISOString(),
+        messageType: messageType,
+        breathingExercise: undefined,
         intent: undefined,
         orchestration_metadata: undefined,
         suggested_actions: undefined,
@@ -126,23 +151,6 @@ Respond with empathy, understanding, and practical wellness guidance. If user se
         cultural_adaptations: undefined,
         confidence_score: undefined,
         source: 'chatbot'
-      }
-
-      const botMessage: ChatMessage = {
-        id: (Date.now() + 1).toString(),
-        sender: 'assistant',
-        content: response.response,
-        timestamp: new Date().toISOString(),
-        messageType: response.message_type,
-        breathingExercise: response.breathing_exercise,
-        // Enhanced fields from Action Orchestrator
-        intent: response.intent,
-        orchestration_metadata: response.orchestration_metadata,
-        suggested_actions: response.suggested_actions,
-        mood_insights: response.mood_insights,
-        cultural_adaptations: response.cultural_adaptations,
-        confidence_score: response.confidence_score,
-        source: response.source
       }
 
       setMessages(prev => [...prev, botMessage])

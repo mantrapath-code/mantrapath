@@ -41,10 +41,19 @@ async def create_mood_entry(
     try:
         emotion_analysis = None
         
-        # Perform emotion analysis if description is provided
-        if mood_data.description and mood_data.description.strip():
+        # Prepare text for emotion analysis (handle both new and legacy formats)
+        text_for_analysis = None
+        if mood_data.input_text and mood_data.input_text.strip():
+            text_for_analysis = mood_data.input_text
+        elif mood_data.description and mood_data.description.strip():
+            text_for_analysis = mood_data.description
+        elif mood_data.notes and mood_data.notes.strip():
+            text_for_analysis = mood_data.notes
+        
+        # Perform emotion analysis if text is provided
+        if text_for_analysis:
             try:
-                analysis_result = await emotion_service.analyze_emotion(mood_data.description)
+                analysis_result = await emotion_service.analyze_emotion(text_for_analysis)
                 emotion_analysis = analysis_result.model_dump()
             except Exception as e:
                 logger.warning(f"Emotion analysis failed for mood entry: {e}")

@@ -872,7 +872,8 @@ services:
         - VITE_ML_SERVICE_URL=${VITE_ML_SERVICE_URL}
     # Expose frontend directly (reverse proxy disabled)
     ports:
-      - "80:80"  # Map host port 80 to container port 80 for external access
+      - "80:80"   # HTTP port
+      - "443:443" # HTTPS port for camera access
     environment:
       - VITE_FRONTEND_PORT=${VITE_FRONTEND_PORT}
       - VITE_API_GATEWAY_URL=${VITE_API_GATEWAY_URL}
@@ -884,7 +885,7 @@ services:
       - mantrapath-network
     restart: unless-stopped
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://frontend:80/"]
+      test: ["CMD", "curl", "-k", "-f", "https://localhost:443/health"]
       interval: 30s
       timeout: 10s
       retries: 3

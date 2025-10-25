@@ -28,6 +28,8 @@ class MoodDataService:
         return MoodEntryResponse(
             id=mood_entry.id,
             user_id=mood_entry.user_id,
+            input_text=mood_entry.description or "",  # Map description to input_text
+            input_type="text",
             mood_score=mood_entry.mood_score,
             description=mood_entry.description,
             stress_level=mood_entry.stress_level,
@@ -62,13 +64,20 @@ class MoodDataService:
             Created mood entry
         """
         try:
+            # Handle both legacy and new formats
+            description = mood_data.description
+            if not description and mood_data.notes:
+                description = mood_data.notes
+            if not description and mood_data.input_text:
+                description = mood_data.input_text
+            
             # Create mood entry
             mood_entry = MoodEntryModel(
                 user_id=user_id,
-                mood_score=mood_data.mood_score,
-                description=mood_data.description,
-                stress_level=mood_data.stress_level,
-                energy_level=mood_data.energy_level,
+                mood_score=mood_data.mood_score or 5,  # Default neutral mood
+                description=description,
+                stress_level=mood_data.stress_level or 5,
+                energy_level=mood_data.energy_level or 5,
                 context_tags=mood_data.context_tags,
                 location=mood_data.location,
                 activity=mood_data.activity
