@@ -168,3 +168,4 @@ class MoodEventPublisher:
 # Global instance
 event_publisher = MoodEventPublisher()
 
+

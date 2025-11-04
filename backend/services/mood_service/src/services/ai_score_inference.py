@@ -311,3 +311,4 @@ class AIScoreInferenceService:
 # Global instance
 ai_score_service = AIScoreInferenceService()
 
+

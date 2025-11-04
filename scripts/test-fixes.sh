@@ -76,3 +76,4 @@ echo "   4. Try the voice recording feature"
 echo ""
 echo "📝 Note: You may need to accept the self-signed certificate in your browser"
 
+
