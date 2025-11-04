@@ -453,8 +453,15 @@ export function EnhancedCommunitySection() {
       })
       toast.success('Thread created successfully!')
       setShowCreateDialog(false)
-      if (selectedForum) {
-        loadForumThreads(selectedForum.id)
+      
+      // Find the forum where the thread was created and select it to show the new thread
+      const targetForum = forums.find(f => f.id === data.forumId)
+      if (targetForum) {
+        setSelectedForum(targetForum)
+        await loadForumThreads(data.forumId)
+      } else if (selectedForum) {
+        // Fallback: reload current forum if it matches
+        await loadForumThreads(selectedForum.id)
       }
     } catch (error) {
       console.error('Failed to create thread:', error)
