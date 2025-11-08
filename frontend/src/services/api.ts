@@ -32,51 +32,16 @@ class ApiService {
   private baseUrl: string
   private mlServiceUrl: string
   private token: string | null = null
-  private isBackendAvailable: boolean = true
-  private backendCheckPromise: Promise<boolean> | null = null
 
   constructor(baseUrl: string = API_BASE_URL, mlServiceUrl: string = ML_SERVICE_URL) {
     this.baseUrl = baseUrl
     this.mlServiceUrl = mlServiceUrl
     this.token = getAuthToken()
-    this.checkBackendAvailability()
   }
 
   // Refresh token from localStorage (useful when token is updated by auth service)
   refreshToken() {
     this.token = getAuthToken()
-  }
-
-  private async checkBackendAvailability(): Promise<boolean> {
-    if (this.backendCheckPromise) {
-      return this.backendCheckPromise
-    }
-
-    this.backendCheckPromise = new Promise(async (resolve) => {
-      try {
-        // Check gateway health endpoint via nginx proxy
-        const response = await fetch(`/health/live`, {
-          method: 'GET',
-          headers: { 'Content-Type': 'application/json' },
-          signal: AbortSignal.timeout(5000) // 5 second timeout
-        })
-        
-        this.isBackendAvailable = response.ok
-        
-        if (this.isBackendAvailable) {
-          const healthData = await response.json()
-        } else {
-          throw new Error(`Backend health check failed with status: ${response.status}`)
-        }
-        
-        resolve(this.isBackendAvailable)
-      } catch (error) {
-        this.isBackendAvailable = false
-        resolve(false)
-      }
-    })
-
-    return this.backendCheckPromise
   }
 
   private getHeaders(): HeadersInit {
@@ -171,17 +136,9 @@ class ApiService {
     options: RequestInit = {},
     customBaseUrl?: string
   ): Promise<T> {
-    const backendAvailable = await this.checkBackendAvailability()
+    // Remove blocking backend availability check - let individual requests fail naturally
+    // The DevelopmentBanner component handles user-facing backend status notifications
     
-    if (!backendAvailable) {
-      const error: ApiError = {
-        message: 'Backend services are not available. Please ensure the backend is running.',
-        status: 0,
-        details: 'Use ./start.sh to start backend services'
-      }
-      throw error
-    }
-
     const baseUrl = customBaseUrl || this.baseUrl
     const fullPath = `${baseUrl}${endpoint}`
 
@@ -201,10 +158,7 @@ class ApiService {
         expectedStatuses: [200, 201, 202, 204]
       })
     } catch (error: any) {
-      if (error.status === 0) {
-        // network-level already handled in wrapper, propagate after flagging
-        this.isBackendAvailable = false
-      }
+      // Let the error propagate naturally for proper error handling
       throw error
     }
   }

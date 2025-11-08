@@ -210,3 +210,4 @@ Total Duration: {total_duration:.2f} seconds
 if __name__ == "__main__":
     runner = TestRunner()
     runner.run()
+

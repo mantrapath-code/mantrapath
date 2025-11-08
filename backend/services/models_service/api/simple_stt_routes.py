@@ -81,3 +81,4 @@ async def stt_health_check() -> JSONResponse:
         "supported_languages": 13,
         "engines": ["mock_stt"]
     })
+

@@ -126,6 +126,7 @@ export function useCommunityData() {
     } catch (err: any) {
       console.error('Failed to load threads:', err)
       setError('Failed to load threads')
+      setThreads([]) // Clear threads on error
       
       // Handle specific error cases
       if (err.status === 401) {
@@ -156,7 +157,13 @@ export function useCommunityData() {
         setForums(prevForums => 
           prevForums.map(forum => 
             forum.id === forumId 
-              ? { ...forum, is_member: response.is_joined }
+              ? { 
+                  ...forum, 
+                  is_member: response.is_joined, 
+                  member_count: forum.is_member 
+                    ? forum.member_count // already a member, don't increment
+                    : (forum.member_count || 0) + 1 // not a member, increment
+                }
               : forum
           )
         )
@@ -175,7 +182,19 @@ export function useCommunityData() {
       toast.success('Successfully joined forum!')
       
       // Reload forums to get updated membership data from backend
-      loadForums()
+      await loadForums()
+      
+      // IMMEDIATE DATA CONSISTENCY: Load threads for the newly joined forum
+      // This allows user to immediately see content after joining
+      try {
+        await loadThreads(forumId)
+      } catch (err) {
+        // If loading threads fails, it's likely a permission issue
+        // The error will be handled by loadThreads
+        console.warn('Could not load threads after joining forum:', err)
+      }
+      
+      return { success: true, forumId }
     } catch (err: any) {
       console.error('Failed to join forum:', err)
       
@@ -185,13 +204,19 @@ export function useCommunityData() {
       } else {
         toast.error('Failed to join forum')
       }
+      
+      return { success: false, forumId }
     }
-  }, [joinedForums, communityStats, setJoinedForums, setCommunityStats, loadForums])
+  }, [joinedForums, communityStats, setJoinedForums, setCommunityStats, loadForums, loadThreads])
 
   // Leave forum
   const leaveForum = useCallback(async (forumId: string) => {
     try {
       const response = await communityApi.leaveForum(forumId)
+      
+      // IMMEDIATE DATA CONSISTENCY: Clear all forum-related data from state
+      // This ensures user cannot see any threads/data after leaving
+      setThreads(prevThreads => prevThreads.filter(thread => thread.forum_id !== forumId))
       
       // Update local state with response data
       if (response.is_joined !== undefined) {
@@ -199,7 +224,7 @@ export function useCommunityData() {
         setForums(prevForums => 
           prevForums.map(forum => 
             forum.id === forumId 
-              ? { ...forum, is_member: response.is_joined }
+              ? { ...forum, is_member: response.is_joined, member_count: Math.max(0, (forum.member_count || 1) - 1) }
               : forum
           )
         )
@@ -218,7 +243,9 @@ export function useCommunityData() {
       toast.success('Successfully left forum')
       
       // Reload forums to get updated membership data from backend
-      loadForums()
+      await loadForums()
+      
+      return { success: true, forumId }
     } catch (err: any) {
       console.error('Failed to leave forum:', err)
       
@@ -228,8 +255,10 @@ export function useCommunityData() {
       } else {
         toast.error('Failed to leave forum')
       }
+      
+      return { success: false, forumId }
     }
-  }, [joinedForums, communityStats, setJoinedForums, setCommunityStats, loadForums])
+  }, [joinedForums, communityStats, setJoinedForums, setCommunityStats, loadForums, setThreads])
 
   // Like/Unlike content (using toggle endpoint)
   const toggleLike = useCallback(async (contentType: string, contentId: string) => {

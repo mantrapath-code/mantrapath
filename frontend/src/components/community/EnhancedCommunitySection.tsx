@@ -393,8 +393,21 @@ export function EnhancedCommunitySection() {
     }
     
     try {
-      await joinForumAction(forumId)
-      loadForums() // Refresh to update member count
+      const result = await joinForumAction(forumId)
+      
+      // IMMEDIATE DATA CONSISTENCY: Navigate to the forum and load threads after joining
+      if (result && result.success) {
+        const forum = forums.find(f => f.id === forumId)
+        if (forum) {
+          setSelectedForum(forum)
+          toast.success(`Welcome to ${forum.name}! Loading discussions...`)
+        }
+      }
+      
+      // Refresh forums to update member count from backend
+      await loadForums()
+      
+      return result
     } catch (error) {
       console.error('Failed to join forum:', error)
       toast.error('Failed to join forum')
@@ -408,8 +421,19 @@ export function EnhancedCommunitySection() {
     }
     
     try {
-      await leaveForumAction(forumId)
-      loadForums() // Refresh to update member count
+      const result = await leaveForumAction(forumId)
+      
+      // IMMEDIATE DATA CONSISTENCY: If user was viewing this forum's threads, navigate back
+      if (selectedForum && selectedForum.id === forumId) {
+        setSelectedForum(null)
+        setThreads([]) // Clear threads immediately
+        toast.info('You have left this forum. Returning to forum list.')
+      }
+      
+      // Refresh forums to update member count from backend
+      await loadForums()
+      
+      return result
     } catch (error) {
       console.error('Failed to leave forum:', error)
       toast.error('Failed to leave forum')
@@ -453,8 +477,15 @@ export function EnhancedCommunitySection() {
       })
       toast.success('Thread created successfully!')
       setShowCreateDialog(false)
-      if (selectedForum) {
-        loadForumThreads(selectedForum.id)
+      
+      // Find the forum where the thread was created and select it to show the new thread
+      const targetForum = forums.find(f => f.id === data.forumId)
+      if (targetForum) {
+        setSelectedForum(targetForum)
+        await loadForumThreads(data.forumId)
+      } else if (selectedForum) {
+        // Fallback: reload current forum if it matches
+        await loadForumThreads(selectedForum.id)
       }
     } catch (error) {
       console.error('Failed to create thread:', error)

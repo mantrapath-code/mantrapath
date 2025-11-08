@@ -1432,6 +1432,20 @@ async def get_forum_threads(
         if not forum:
             raise HTTPException(status_code=404, detail="Forum not found")
         
+        # Check if user is a member of this forum
+        user_id = current_user.get('user_id')
+        is_member = db.query(ForumMembership).filter(
+            ForumMembership.user_id == user_id,
+            ForumMembership.forum_id == forum_id,
+            ForumMembership.is_active == True
+        ).first() is not None
+        
+        if not is_member:
+            raise HTTPException(
+                status_code=403, 
+                detail="Must be a forum member to view discussions. Please join the forum first."
+            )
+        
         # Import ForumThread model
         from shared.models import ForumThread
         
@@ -1604,6 +1618,20 @@ async def get_forum_thread(
         if not thread:
             raise HTTPException(status_code=404, detail="Thread not found")
         
+        # Check if user is a member of the forum this thread belongs to
+        user_id = current_user.get('user_id')
+        is_member = db.query(ForumMembership).filter(
+            ForumMembership.user_id == user_id,
+            ForumMembership.forum_id == thread.forum_id,
+            ForumMembership.is_active == True
+        ).first() is not None
+        
+        if not is_member:
+            raise HTTPException(
+                status_code=403,
+                detail="Must be a forum member to view thread details. Please join the forum first."
+            )
+        
         # Get thread creator info
         username, full_name = get_user_display_name(thread.author_id, db)
         
@@ -1703,6 +1731,19 @@ async def reply_to_thread(
         
         if not thread:
             raise HTTPException(status_code=404, detail="Thread not found")
+        
+        # Check if user is a member of the forum
+        is_member = db.query(ForumMembership).filter(
+            ForumMembership.user_id == user_id,
+            ForumMembership.forum_id == thread.forum_id,
+            ForumMembership.is_active == True
+        ).first() is not None
+        
+        if not is_member:
+            raise HTTPException(
+                status_code=403,
+                detail="Must be a forum member to reply to threads. Please join the forum first."
+            )
         
         # Create new reply
         try:
