@@ -157,7 +157,13 @@ export function useCommunityData() {
         setForums(prevForums => 
           prevForums.map(forum => 
             forum.id === forumId 
-              ? { ...forum, is_member: response.is_joined, member_count: (forum.member_count || 0) + 1 }
+              ? { 
+                  ...forum, 
+                  is_member: response.is_joined, 
+                  member_count: forum.is_member 
+                    ? forum.member_count // already a member, don't increment
+                    : (forum.member_count || 0) + 1 // not a member, increment
+                }
               : forum
           )
         )
