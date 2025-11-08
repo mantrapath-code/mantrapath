@@ -252,7 +252,7 @@ export function useCommunityData() {
       
       return { success: false, forumId }
     }
-  }, [joinedForums, communityStats, setJoinedForums, setCommunityStats, loadForums])
+  }, [joinedForums, communityStats, setJoinedForums, setCommunityStats, loadForums, setThreads])
 
   // Like/Unlike content (using toggle endpoint)
   const toggleLike = useCallback(async (contentType: string, contentId: string) => {
