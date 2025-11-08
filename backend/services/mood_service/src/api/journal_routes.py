@@ -7,6 +7,7 @@ from sqlalchemy.orm import Session
 
 from shared.database import get_db
 from shared.auth import get_current_user
+from shared.models import JournalEntry
 
 logger = logging.getLogger(__name__)
 
@@ -14,18 +15,66 @@ logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/v1/journal", tags=["journal"])
 
 
+def _serialize_journal_entry(entry: JournalEntry) -> dict:
+    return {
+        "id": entry.id,
+        "user_id": entry.user_id,
+        "title": entry.title,
+        "content": entry.content,
+        "mood_before": entry.mood_before,
+        "mood_after": entry.mood_after,
+        "sentiment_score": entry.sentiment_score,
+        "sentiment_label": entry.sentiment_label,
+        "themes": entry.themes,
+        "is_private": entry.is_private,
+        "word_count": entry.word_count,
+        "reading_time": entry.reading_time,
+        "entry_type": entry.entry_type,
+        "video_analysis": entry.video_analysis,
+        "created_at": entry.created_at,
+        "updated_at": entry.updated_at,
+    }
+
+
+def _get_user_journal_entries(
+    db: Session,
+    user_id: str,
+    limit: int,
+    offset: int,
+) -> List[dict]:
+    # Guardrails
+    limit = max(1, min(limit, 100))
+    offset = max(0, offset)
+
+    entries = (
+        db.query(JournalEntry)
+        .filter(JournalEntry.user_id == user_id)
+        .order_by(JournalEntry.created_at.desc())
+        .offset(offset)
+        .limit(limit)
+        .all()
+    )
+    return [_serialize_journal_entry(entry) for entry in entries]
+
+
 @router.get("/")
 async def get_journal_entries_root(
     limit: int = 50,
     offset: int = 0,
+    db: Session = Depends(get_db),
     current_user: dict = Depends(get_current_user)
 ):
     """
     Get journal entries for the authenticated user (root path).
     Handles frontend requests to /api/v1/journal/?limit=50
     """
-    logger.info(f"Journal entries requested via root path by user {current_user['user_id']} (limit={limit}, offset={offset})")
-    return []
+    logger.info(
+        "Journal entries requested via root path by user %s (limit=%s, offset=%s)",
+        current_user["user_id"],
+        limit,
+        offset,
+    )
+    return _get_user_journal_entries(db, current_user["user_id"], limit, offset)
 
 
 @router.post("/")
@@ -73,14 +122,19 @@ async def create_journal_entry_root(
 async def get_journal_entries(
     limit: int = 50,
     offset: int = 0,
+    db: Session = Depends(get_db),
     current_user: dict = Depends(get_current_user)
 ):
     """
     Get journal entries for the authenticated user.
-    Placeholder implementation - returns empty list until full journal service is implemented.
     """
-    logger.info(f"Journal entries requested by user {current_user['user_id']}")
-    return []
+    logger.info(
+        "Journal entries requested by user %s (limit=%s, offset=%s)",
+        current_user["user_id"],
+        limit,
+        offset,
+    )
+    return _get_user_journal_entries(db, current_user["user_id"], limit, offset)
 
 
 @router.post("/entries")
