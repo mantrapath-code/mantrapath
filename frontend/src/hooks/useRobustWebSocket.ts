@@ -165,24 +165,26 @@ class WebSocketManager {
 const getWebSocketUrls = (userId: string): string[] => {
   const uid = userId || 'anonymous'
   
-  // Always derive from current page URL to use Nginx proxy
-  // This ensures we never hardcode ports or bypass the proxy
   let baseUrl: string
   
   if (typeof window !== 'undefined') {
-    // Derive from current page URL (same-origin)
+    // Always use same-origin approach when we have nginx proxy
+    // This ensures the WebSocket goes through the nginx SSL termination
     const proto = window.location.protocol === 'https:' ? 'wss:' : 'ws:'
     baseUrl = `${proto}//${window.location.host}`
+    
+    console.log(`[WS] Using same-origin WebSocket base URL: ${baseUrl}`)
   } else {
     // Fallback for SSR (should not happen in browser)
     baseUrl = 'wss://localhost'
   }
 
   // Return multiple URLs to try in order of preference
-  // All URLs use same-origin to go through Nginx proxy
+  // These match the nginx proxy configuration
   return [
-    `${baseUrl}/notifications/ws/${uid}`,  // Primary: Nginx proxy to notification service
-    `${baseUrl}/ws/${uid}`                 // Fallback: Generic gateway WebSocket endpoint
+    `${baseUrl}/api/notifications/ws/${uid}`,  // Primary: Nginx proxy to API Gateway notifications
+    `${baseUrl}/ws/${uid}`,                    // Fallback: Nginx proxy to generic WebSocket endpoint
+    `${baseUrl}/notifications/ws/${uid}`       // Legacy: Direct proxy route
   ].filter(Boolean)
 }
 

@@ -57,45 +57,45 @@ const getMoodTheme = (averageMood: number): MoodTheme => {
     return {
       name: 'Excellent',
       colors: {
-        primary: 'bg-gradient-to-r from-green-400 to-emerald-500',
-        secondary: 'bg-green-50 border-green-200',
-        background: 'bg-green-50',
-        text: 'text-green-800'
+        primary: 'bg-gradient-to-r from-primary to-primary/80',
+        secondary: 'bg-background border-border',
+        background: 'bg-background',
+        text: 'text-foreground'
       },
-      icon: <Sun className="w-5 h-5 text-yellow-500" />
+      icon: <Sun className="w-5 h-5 text-primary" />
     };
   } else if (averageMood >= 6) {
     return {
       name: 'Good',
       colors: {
-        primary: 'bg-gradient-to-r from-blue-400 to-cyan-500',
-        secondary: 'bg-blue-50 border-blue-200',
-        background: 'bg-blue-50',
-        text: 'text-blue-800'
+        primary: 'bg-gradient-to-r from-primary to-primary/80',
+        secondary: 'bg-background border-border',
+        background: 'bg-background',
+        text: 'text-foreground'
       },
-      icon: <Cloud className="w-5 h-5 text-blue-500" />
+      icon: <Cloud className="w-5 h-5 text-primary" />
     };
   } else if (averageMood >= 4) {
     return {
-      name: 'Moderate',
+      name: 'Neutral',
       colors: {
-        primary: 'bg-gradient-to-r from-yellow-400 to-orange-500',
-        secondary: 'bg-yellow-50 border-yellow-200',
-        background: 'bg-yellow-50',
-        text: 'text-yellow-800'
+        primary: 'bg-gradient-to-r from-secondary to-muted',
+        secondary: 'bg-background border-border',
+        background: 'bg-background',
+        text: 'text-foreground'
       },
-      icon: <Cloud className="w-5 h-5 text-yellow-600" />
+      icon: <Cloud className="w-5 h-5 text-muted-foreground" />
     };
   } else {
     return {
-      name: 'Needs Attention',
+      name: 'Needs Support',
       colors: {
-        primary: 'bg-gradient-to-r from-red-400 to-pink-500',
-        secondary: 'bg-red-50 border-red-200',
-        background: 'bg-red-50',
-        text: 'text-red-800'
+        primary: 'bg-gradient-to-r from-destructive/50 to-destructive/30',
+        secondary: 'bg-background border-border',
+        background: 'bg-background',
+        text: 'text-foreground'
       },
-      icon: <Moon className="w-5 h-5 text-gray-500" />
+      icon: <Moon className="w-5 h-5 text-destructive" />
     };
   }
 };
@@ -211,58 +211,57 @@ export const OptimizedMoodPage: React.FC = () => {
   const theme = currentTheme || getMoodTheme(5);
 
   return (
-    <div className={`max-w-4xl mx-auto p-6 space-y-6 ${theme.colors.background} min-h-screen`}>
-      {/* Header */}
-      <div className="text-center mb-8">
-        <div className="flex items-center justify-center gap-3 mb-4">
-          {theme.icon}
-          <h1 className={`text-3xl font-bold ${theme.colors.text}`}>
-            Your Mood Journey
-          </h1>
-          {theme.icon}
+    <div className="min-h-screen bg-gradient-to-br from-neutral-1 to-neutral-3 p-6">
+      <div className="max-w-4xl mx-auto space-y-6">
+        {/* Header */}
+        <div className="text-center mb-8">
+          <div className="flex items-center justify-center gap-3 mb-4">
+            {theme.icon}
+            <h1 className="text-3xl font-bold text-foreground">
+              Your Mood Journey
+            </h1>
+            {theme.icon}
+          </div>
+          <p className="text-lg text-neutral-11">
+            Mood Status: <span className="font-semibold text-foreground">{theme.name}</span>
+          </p>
         </div>
-        <p className={`text-lg ${theme.colors.text} opacity-80`}>
-          Mood Status: <span className="font-semibold">{theme.name}</span>
-        </p>
-      </div>
 
-      {/* Development Mode Alert */}
-      {isDevMode() && (
-        <Alert>
-          <AlertDescription>
-            <div className="flex items-center justify-between">
-              <span>Development Mode: Set authentication token for testing</span>
-              <Button 
-                onClick={() => {
-                  setDevToken();
-                  refresh();
-                }} 
-                size="sm"
-              >
-                Set Dev Token
-              </Button>
-            </div>
-          </AlertDescription>
-        </Alert>
-      )}
+        {/* Development Mode Alert */}
+        {isDevMode() && (
+          <Alert>
+            <AlertDescription>
+              <div className="flex items-center justify-between">
+                <span>Development Mode: Set authentication token for testing</span>
+                <Button 
+                  onClick={() => {
+                    setDevToken();
+                    refresh();
+                  }} 
+                  size="sm"
+                >
+                  Set Dev Token
+                </Button>
+              </div>
+            </AlertDescription>
+          </Alert>
+        )}
 
-      {error && (
-        <Alert className="border-red-200 bg-red-50">
-          <AlertCircle className="h-4 w-4" />
-          <AlertDescription className="text-red-800">{error}</AlertDescription>
-        </Alert>
-      )}
+        {error && (
+          <Alert className="border-destructive/20 bg-destructive/10">
+            <AlertCircle className="h-4 w-4" />
+            <AlertDescription className="text-destructive">{error}</AlertDescription>
+          </Alert>
+        )}
 
-      {success && (
-        <Alert className="border-green-200 bg-green-50">
-          <CheckCircle className="h-4 w-4" />
-          <AlertDescription className="text-green-800">
-            Mood entry saved successfully! Analytics updated.
-          </AlertDescription>
-        </Alert>
-      )}
-
-      {/* Wellness Score Dashboard */}
+        {!loading && analytics && analytics.total_entries === 0 && (
+          <Alert className="border-primary/20 bg-primary/5">
+            <CheckCircle className="h-4 w-4" />
+            <AlertDescription className="text-foreground">
+              Welcome! Start by tracking your first mood entry below to see your wellness insights.
+            </AlertDescription>
+          </Alert>
+        )}      {/* Wellness Score Dashboard */}
       {wellnessMetrics && (
         <Card className={`${theme.colors.secondary} shadow-lg`}>
           <CardHeader>
@@ -274,45 +273,45 @@ export const OptimizedMoodPage: React.FC = () => {
           <CardContent>
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
               <div className="text-center">
-                <div className={`text-3xl font-bold ${theme.colors.text}`}>
+                <div className="text-3xl font-bold text-foreground">
                   {wellnessMetrics.overall_score}%
                 </div>
-                <div className="text-sm opacity-70">Overall Wellness</div>
+                <div className="text-sm text-muted-foreground">Overall Wellness</div>
                 <Progress value={wellnessMetrics.overall_score} className="mt-2" />
               </div>
               
               <div className="text-center">
-                <div className={`text-2xl font-semibold ${theme.colors.text}`}>
+                <div className="text-2xl font-semibold text-foreground">
                   {analytics?.average_mood.toFixed(1)}/10
                 </div>
-                <div className="text-sm opacity-70">Average Mood</div>
+                <div className="text-sm text-muted-foreground">Average Mood</div>
                 <Progress value={(analytics?.average_mood || 0) * 10} className="mt-2" />
               </div>
               
               <div className="text-center">
-                <div className={`text-2xl font-semibold ${theme.colors.text}`}>
+                <div className="text-2xl font-semibold text-foreground">
                   {10 - wellnessMetrics.stress_level}/10
                 </div>
-                <div className="text-sm opacity-70">Stress Management</div>
+                <div className="text-sm text-muted-foreground">Stress Management</div>
                 <Progress value={(10 - wellnessMetrics.stress_level) * 10} className="mt-2" />
               </div>
               
               <div className="text-center">
-                <div className={`text-2xl font-semibold ${theme.colors.text}`}>
+                <div className="text-2xl font-semibold text-foreground">
                   {wellnessMetrics.energy_level/10}/10
                 </div>
-                <div className="text-sm opacity-70">Energy Level</div>
+                <div className="text-sm text-muted-foreground">Energy Level</div>
                 <Progress value={wellnessMetrics.energy_level} className="mt-2" />
               </div>
             </div>
 
             {/* Quick Stats */}
-            <div className="flex justify-between items-center text-sm opacity-70">
+            <div className="flex justify-between items-center text-sm text-muted-foreground">
               <span>Total Entries: {analytics?.total_entries || 0}</span>
               <span className="flex items-center gap-1">
-                {analytics?.mood_trend === 'improving' && <TrendingUp className="w-4 h-4 text-green-600" />}
-                {analytics?.mood_trend === 'declining' && <TrendingDown className="w-4 h-4 text-red-600" />}
-                {analytics?.mood_trend === 'stable' && <Activity className="w-4 h-4 text-gray-600" />}
+                {analytics?.mood_trend === 'improving' && <TrendingUp className="w-4 h-4 text-primary" />}
+                {analytics?.mood_trend === 'declining' && <TrendingDown className="w-4 h-4 text-destructive" />}
+                {analytics?.mood_trend === 'stable' && <Activity className="w-4 h-4 text-muted-foreground" />}
                 Trend: {analytics?.mood_trend || 'Unknown'}
               </span>
             </div>
@@ -426,7 +425,7 @@ export const OptimizedMoodPage: React.FC = () => {
               {analyzingEmotion ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : <Zap className="w-4 h-4 mr-2" />}
               {analyzingEmotion ? 'Analyzing...' : 'Analyze Emotions'}
             </Button>
-            {emotionError && <p className="text-xs text-red-600">{emotionError}</p>}
+            {emotionError && <p className="text-xs text-destructive">{emotionError}</p>}
             {emotionResult && (
               <div className="bg-white/60 rounded-md p-3 border space-y-2">
                 <p className="text-xs font-medium">Primary Emotion: <span className="font-semibold">{emotionResult.primary_emotion}</span> ({emotionResult.primary_sentiment})</p>
@@ -507,10 +506,11 @@ export const OptimizedMoodPage: React.FC = () => {
           <RefreshCw className="w-4 h-4 mr-2" />
           Refresh Data
         </Button>
-        <Button variant="outline" className={theme.colors.text}>
+        <Button variant="outline" className="text-foreground">
           <Calendar className="w-4 h-4 mr-2" />
           View History
         </Button>
+      </div>
       </div>
     </div>
   );

@@ -1,8 +1,9 @@
 // Authentication service for managing tokens and user state
 
 import { parseGatewayResponse } from '@/utils/gateway'
+import { getApiBaseUrl } from '@/config/api-config'
 
-const API_BASE_URL = import.meta.env.VITE_API_GATEWAY_URL || import.meta.env.VITE_API_URL || 'http://api-gateway:8000'
+const API_BASE_URL = getApiBaseUrl()
 
 interface LoginResponse {
   access_token: string

@@ -4,6 +4,7 @@
  */
 
 import { get, post } from './httpClient'
+import { getApiBaseUrl } from '@/config/api-config'
 
 export interface VoiceEventProcessorConfig {
   baseUrl?: string
@@ -66,12 +67,16 @@ class VoiceEventProcessorClient {
   }
 
   private getVoiceEventProcessorUrl(): string {
-    // Use API Gateway URL instead of direct service URL
-    return import.meta.env.VITE_API_GATEWAY_URL || import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000'
+    // Use same-origin approach for HTTPS compatibility
+    return getApiBaseUrl() || 'http://localhost:8000'
   }
 
   private getVoiceEventProcessorWsUrl(): string {
     const baseUrl = this.getVoiceEventProcessorUrl()
+    // For same-origin, WebSocket URLs should also be same-origin
+    if (!baseUrl) {
+      return '' // Same-origin WebSocket
+    }
     return baseUrl.replace(/^http/, 'ws')
   }
 

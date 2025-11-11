@@ -44,7 +44,6 @@ export const ModernSidebar: React.FC<ModernSidebarProps> = ({ className = '' }) 
       items: [
         { icon: Trophy, label: 'Achievements', href: '/achievements', active: false },
         { icon: Heart, label: 'Mood Tracker', href: '/mood', active: true },
-        { icon: Heart, label: 'Mood Service Test', href: '/mood-test', active: false },
         { icon: Book, label: 'Journal', href: '/journal', active: false },
         { icon: Mic, label: 'Voice Testing', href: '/voice', active: false },
       ]

@@ -15,7 +15,8 @@ import {
   Menu,
   X,
   Heart,
-  Mic
+  Mic,
+  Cpu
 } from "lucide-react"
 import { 
   Sidebar, 
@@ -77,6 +78,13 @@ export function SidebarLayout({
       group: "main"
     },
     {
+      id: "services",
+      label: "Service Hub",
+      icon: <Cpu size={20} />,
+      group: "main",
+      badge: "AI"
+    },
+    {
       id: "crisis",
       label: "Crisis Monitor",
       icon: <Brain size={20} />,
@@ -95,13 +103,6 @@ export function SidebarLayout({
       icon: <Heart size={20} />,
       group: "wellness",
       badge: "NEW"
-    },
-    {
-      id: "mood-test",
-      label: "Mood Service Test",
-      icon: <Brain size={20} />,
-      group: "wellness",
-      badge: "DEV"
     },
     {
       id: "journal",

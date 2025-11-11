@@ -10,9 +10,9 @@ import { AuthScreen } from "@/components/auth"
 import { EmailVerification } from "@/components/auth"
 import { DevelopmentBanner } from "@/components/common"
 import { ProfileDashboard } from "@/components/profile"
+import { ServiceHub } from "@/components/services"
 import { EnhancedInsightsPage } from "@/pages/EnhancedInsightsPage"
 import { AchievementsPage } from "@/pages/AchievementsPage"
-import { MoodTestPage } from "@/pages/MoodTestPage"
 import { OptimizedMoodPage } from "@/pages/OptimizedMoodPage"
 import VoiceTestingPage from "@/pages/VoiceTestingPageIndic"
 import { ProactiveAssistancePanel } from "@/components/assistance"
@@ -195,6 +195,15 @@ function AppContent() {
             <EnhancedInsightsPage />
           </motion.div>
         )
+      case "services":
+        return (
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+          >
+            <ServiceHub />
+          </motion.div>
+        )
       case "crisis":
         return (
           <motion.div
@@ -211,15 +220,6 @@ function AppContent() {
             animate={{ opacity: 1, y: 0 }}
           >
             <AchievementsPage />
-          </motion.div>
-        )
-      case "mood-test":
-        return (
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-          >
-            <MoodTestPage />
           </motion.div>
         )
       case "mood":
@@ -281,35 +281,28 @@ function AppContent() {
         isOfflineMode={isOfflineMode}
       >
         <DevelopmentBanner />
-        {import.meta.env.DEV && (
-          <div className="mb-4 p-2 rounded border text-xs bg-gray-50 dark:bg-gray-900">
-            <div className="flex flex-wrap gap-4">
-              <span>WS Status: {isConnected ? '✅ Connected' : '❌ Not Connected'}</span>
-              <span>Configured VITE_WS_URL: {String(import.meta.env.VITE_WS_URL || 'AUTO')}</span>
-              <span>Total Connections: {connectionStats.totalConnections}</span>
-              <span>Healthy: {connectionStats.healthyConnections}</span>
-              <span>Failed: {connectionStats.failedConnections}</span>
-              <span>Attempted: {hasAttemptedConnection ? 'Yes' : 'No'}</span>
-              {connectionError && <span className="text-red-600">Err: {connectionError}</span>}
+        
+        {/* Simple connection status for development - cleaner UI */}
+        {import.meta.env.DEV && connectionError && (
+          <div className="mb-4 p-2 rounded border text-xs bg-yellow-50 dark:bg-yellow-900 border-yellow-200">
+            <div className="flex items-center gap-2">
+              <span className="text-yellow-700">⚠️ Development Mode:</span>
+              <span className="text-yellow-600">WebSocket connection failed</span>
+              <Button size="sm" variant="outline" onClick={() => reconnectAll()}>Retry</Button>
             </div>
           </div>
         )}
         
-        {/* Offline Mode Notice */}
+        {/* Simplified offline mode notice */}
         {isOfflineMode && (
-          <div className="mb-4 p-3 bg-amber-50 dark:bg-amber-950 border border-amber-300 dark:border-amber-800 rounded-lg">
+          <div className="mb-4 p-3 bg-blue-50 dark:bg-blue-950 border border-blue-200 dark:border-blue-800 rounded-lg">
             <div className="flex items-start gap-3">
-              <div className="mt-1 w-2 h-2 rounded-full bg-amber-500 animate-pulse"></div>
-              <div className="text-sm text-amber-800 dark:text-amber-200 space-y-1">
-                <p className="font-medium">Real-time connection unavailable</p>
-                {connectionError ? (
-                  <p className="text-xs opacity-90">{connectionError}</p>
-                ) : (
-                  <p className="text-xs opacity-90">Attempting to establish WebSocket connection failed. Background features continue using REST.</p>
-                )}
+              <div className="mt-1 w-2 h-2 rounded-full bg-blue-500"></div>
+              <div className="text-sm text-blue-800 dark:text-blue-200 space-y-1">
+                <p className="font-medium">App running in offline mode</p>
+                <p className="text-xs opacity-90">Some real-time features may be limited. Your data is still being saved.</p>
                 <div className="flex gap-2 pt-1">
-                  <Button size="sm" variant="outline" onClick={() => reconnectAll()}>Retry</Button>
-                  <Button size="sm" variant="ghost" onClick={() => window.location.reload()}>Reload</Button>
+                  <Button size="sm" variant="outline" onClick={() => reconnectAll()}>Try Reconnect</Button>
                 </div>
               </div>
             </div>

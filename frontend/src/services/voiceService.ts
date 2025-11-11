@@ -4,6 +4,7 @@
  */
 
 import { get, post } from './httpClient'
+import { getApiBaseUrl } from '@/config/api-config'
 
 export interface VoiceServiceConfig {
   baseUrl?: string
@@ -109,8 +110,8 @@ class VoiceServiceClient {
   }
 
   private getVoiceServiceUrl(): string {
-    // Use API Gateway URL since all services route through it
-    return import.meta.env.VITE_API_GATEWAY_URL || import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000'
+    // Use same-origin approach for HTTPS compatibility
+    return getApiBaseUrl() || 'http://localhost:8000'
   }
 
   /**

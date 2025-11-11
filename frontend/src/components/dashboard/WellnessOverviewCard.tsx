@@ -54,7 +54,7 @@ export function WellnessOverviewCard() {
                 <div className="w-16 h-16 rounded-full bg-gradient-to-br from-primary/20 to-secondary/20 flex items-center justify-center">
                   <Heart className="w-8 h-8 text-primary" />
                 </div>
-                <div className="absolute -top-1 -right-1 w-6 h-6 bg-green-500 rounded-full flex items-center justify-center">
+                <div className="absolute -top-1 -right-1 w-6 h-6 bg-primary rounded-full flex items-center justify-center">
                   <CheckCircle className="w-4 h-4 text-white" />
                 </div>
               </div>
@@ -77,9 +77,9 @@ export function WellnessOverviewCard() {
               
               <div className="pt-2 border-t border-muted/50">
                 <div className="flex items-center gap-2 justify-center">
-                  {moodTrend === 'improving' && <TrendingUp className="w-4 h-4 text-green-600" />}
-                  {moodTrend === 'declining' && <TrendingDown className="w-4 h-4 text-red-600" />}
-                  {moodTrend === 'stable' && <Activity className="w-4 h-4 text-blue-600" />}
+                  {moodTrend === 'improving' && <TrendingUp className="w-4 h-4 text-primary" />}
+                  {moodTrend === 'declining' && <TrendingDown className="w-4 h-4 text-destructive" />}
+                  {moodTrend === 'stable' && <Activity className="w-4 h-4 text-muted-foreground" />}
                   <span className="text-sm font-medium capitalize">{moodTrend}</span>
                   <span className="text-xs text-muted-foreground">trend</span>
                 </div>

@@ -7,6 +7,7 @@ import { useState, useEffect, useCallback } from 'react'
 import { sprint2ApiService } from '@/services/sprint2-api'
 import { useAuth } from '@/hooks/useAuth'
 import { SERVICE_ENDPOINTS, serviceHealthUrl } from '@/config/serviceEndpoints'
+import { getApiBaseUrl } from '@/config/api-config'
 
 interface ServiceStatus {
   name: string
@@ -22,7 +23,7 @@ export function useServiceMonitor() {
   const [isMonitoring, setIsMonitoring] = useState(false)
   const { user } = useAuth()
 
-  const baseUrl = import.meta.env.VITE_API_GATEWAY_URL || import.meta.env.VITE_API_URL || 'http://api-gateway:8000'
+  const baseUrl = getApiBaseUrl() || 'http://api-gateway:8000'
   const monitoredKeys = [
     { key: 'api_gateway', name: 'API Gateway', port: 8000 },
     { key: 'ai_context', name: 'AI Context Store', port: 8013 },

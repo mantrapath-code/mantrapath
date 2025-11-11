@@ -35,7 +35,7 @@ export interface PerformanceAlert {
 const DEFAULT_THRESHOLDS: PerformanceThresholds = {
   renderTime: 300, // 300ms
   memoryUsage: 150 * 1024 * 1024, // 150MB (increased from 100MB)
-  networkLatency: 500, // 500ms
+  networkLatency: 5000, // 5000ms - much more relaxed threshold to avoid false alerts
   realTimeUpdateLatency: 300, // 300ms
   webSocketLatency: 200, // 200ms
   uiResponseTime: 300, // 300ms
@@ -44,7 +44,7 @@ const DEFAULT_THRESHOLDS: PerformanceThresholds = {
 
 export function usePerformanceMonitor(
   thresholds: Partial<PerformanceThresholds> = {},
-  monitoringInterval: number = 10000 // Increased from 5000ms to 10000ms to reduce frequency
+  monitoringInterval: number = 15000 // Increased from 10000ms to 15000ms to reduce frequency
 ) {
   const [metrics, setMetrics] = useState<PerformanceMetrics>({
     renderTime: 0,
@@ -101,41 +101,34 @@ export function usePerformanceMonitor(
     
     const start = performance.now()
     try {
-      // Use the favicon.ico which should always exist, or try current origin
+      // Use a simple, lightweight request with timeout to avoid hanging
+      const controller = new AbortController()
+      const timeoutId = setTimeout(() => controller.abort(), 3000) // 3 second timeout
+      
       const response = await fetch('/favicon.ico', { 
         method: 'HEAD',
-        cache: 'no-cache'
+        cache: 'no-cache',
+        signal: controller.signal
       })
+      
+      clearTimeout(timeoutId)
       const end = performance.now()
+      const latency = end - start
       
       // Reset failure count on success
       networkFailureCountRef.current = 0
-      return end - start
+      
+      // Cap the latency to avoid extreme outliers from causing false alerts
+      return Math.min(latency, 10000) // Cap at 10 seconds
+      
     } catch (error) {
       // Increment failure count
       networkFailureCountRef.current++
       
-      // Try a simpler approach on first few failures
-      if (networkFailureCountRef.current <= 3) {
-        try {
-          const start2 = performance.now()
-          await fetch(window.location.origin, { 
-            method: 'HEAD',
-            cache: 'no-cache'
-          })
-          const end2 = performance.now()
-          
-          // Reset failure count on success
-          networkFailureCountRef.current = 0
-          return end2 - start2
-        } catch (error2) {
-          console.log(`Network latency measurement failed (${networkFailureCountRef.current}/5)`)
-          return 0
-        }
-      } else {
-        console.log(`Network latency measurement disabled after ${networkFailureCountRef.current} failures`)
-        return 0
-      }
+      // On failure, return a reasonable default instead of retrying immediately
+      // This prevents cascading failures and false alerts
+      console.log(`Network latency measurement failed (${networkFailureCountRef.current}/5):`, error.message || 'Unknown error')
+      return 0 // Return 0 to indicate measurement unavailable rather than slow
     }
   }, [])
 
@@ -237,6 +230,12 @@ export function usePerformanceMonitor(
     return newAlerts
   }, [mergedThresholds])
 
+  // Automatically clear old alerts
+  const clearOldAlerts = useCallback(() => {
+    const fiveMinutesAgo = Date.now() - 5 * 60 * 1000 // 5 minutes
+    setAlerts(prev => prev.filter(alert => alert.timestamp > fiveMinutesAgo))
+  }, [])
+
   const startMonitoring = useCallback(() => {
     if (isMonitoring) return
     
@@ -272,13 +271,27 @@ export function usePerformanceMonitor(
         const newAlerts = checkThresholds(currentMetrics)
         if (newAlerts.length > 0) {
           setAlerts(alertsPrev => {
-            const allAlerts = [...alertsPrev, ...newAlerts]
+            // Filter out duplicate alerts from the same metric within the last 30 seconds
+            const thirtySecondsAgo = Date.now() - 30000
+            const recentAlerts = alertsPrev.filter(alert => alert.timestamp > thirtySecondsAgo)
+            const filteredNewAlerts = newAlerts.filter(newAlert => 
+              !recentAlerts.some(existingAlert => 
+                existingAlert.metric === newAlert.metric && 
+                existingAlert.type === newAlert.type
+              )
+            )
             
-            // Auto-optimize if too many alerts (more than 15)
-            if (allAlerts.length > 15) {
+            if (filteredNewAlerts.length === 0) {
+              return alertsPrev // No new unique alerts
+            }
+            
+            const allAlerts = [...alertsPrev, ...filteredNewAlerts]
+            
+            // Auto-optimize if too many alerts (more than 10, reduced from 15)
+            if (allAlerts.length > 10) {
               console.log('🚨 Too many performance alerts, triggering auto-optimization...')
               setTimeout(optimizeMemory, 500)
-              return allAlerts.slice(-10) // Keep only recent alerts
+              return allAlerts.slice(-5) // Keep only 5 most recent alerts
             }
             
             return allAlerts
@@ -294,7 +307,7 @@ export function usePerformanceMonitor(
         return currentMetrics
       })
     }, monitoringInterval)
-  }, [isMonitoring, measureFPS, measureMemoryUsage, measureNetworkLatency, measureDOMNodes, measureEventLoopDelay, checkThresholds, monitoringInterval])
+  }, [isMonitoring, measureFPS, measureMemoryUsage, measureNetworkLatency, measureDOMNodes, measureEventLoopDelay, clearOldAlerts, checkThresholds, monitoringInterval])
 
   const stopMonitoring = useCallback(() => {
     setIsMonitoring(false)
@@ -442,6 +455,9 @@ export function usePerformanceMonitor(
           
           // Measure event loop delay
           measureEventLoopDelay()
+          
+          // Clear old alerts periodically
+          clearOldAlerts()
           
           // Check thresholds and generate alerts - use prev state to avoid stale closure
           setMetrics(prev => {

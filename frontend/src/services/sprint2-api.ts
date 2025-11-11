@@ -4,11 +4,7 @@
  */
 
 import { getAuthToken } from '../utils/auth'
-
-// Get environment-aware API base URL
-const getApiBaseUrl = () => {
-  return import.meta.env.VITE_API_GATEWAY_URL || import.meta.env.VITE_API_BASE_URL || 'http://api-gateway:8000';
-};
+import { getApiBaseUrl } from '@/config/api-config'
 
 // Real Backend Service Endpoints - Sprint 2
 const BACKEND_API_ENDPOINTS = {
