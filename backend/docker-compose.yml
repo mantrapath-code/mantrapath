@@ -119,6 +119,11 @@ services:
       - RESPONSE_CACHE_TTL=60
       - PERFORMANCE_MONITORING=true
       
+      # Rate Limiting - Relaxed for development
+      - RATE_LIMIT_ENABLED=true
+      - RATE_LIMIT_REQUESTS_PER_MINUTE=1000
+      - RATE_LIMIT_BURST=200
+      
       # Database & Cache
       - DATABASE_URL=postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@postgres:5432/${POSTGRES_DB:-mantrapath}
       - REDIS_URL=redis://redis:6379/0
@@ -874,6 +879,8 @@ services:
     ports:
       - "80:80"   # HTTP port
       - "443:443" # HTTPS port for camera access
+    volumes:
+      - ../config/ssl:/etc/nginx/ssl:ro
     environment:
       - VITE_FRONTEND_PORT=${VITE_FRONTEND_PORT}
       - VITE_API_GATEWAY_URL=${VITE_API_GATEWAY_URL}
@@ -920,12 +927,25 @@ services:
     ports:
       - "${MODELS_SERVICE_EXTERNAL_PORT:-8081}:${MODELS_SERVICE_INTERNAL_PORT:-8080}"
     # Memory limits for STT/TTS models and TinyLlama text generation
+    # For CPU-only deployment (current):
     deploy:
       resources:
         limits:
           memory: 4G  # Sufficient for lightweight models
         reservations:
           memory: 2G  # Reserve minimum memory
+    # For GPU-enabled deployment (recommended for production):
+    # Uncomment the section below and comment out the CPU section above
+    # deploy:
+    #   resources:
+    #     limits:
+    #       memory: 8G
+    #     reservations:
+    #       memory: 4G
+    #       devices:
+    #         - driver: nvidia
+    #           count: 1
+    #           capabilities: [gpu]
     env_file:
       - .env
     environment:
@@ -934,8 +954,8 @@ services:
       - MODELS_SERVICE_HOST=0.0.0.0
       - MODELS_SERVICE_PORT=${MODELS_SERVICE_INTERNAL_PORT:-8080}
       - DEBUG=true
-      - USE_GPU=false  # Set to true if GPU available
-      - TORCH_DEVICE=cpu
+      - USE_GPU=false  # Set to true if GPU available (reduces TinyLlama inference from 24-30s to 2-5s)
+      - TORCH_DEVICE=cpu  # Set to 'cuda' or 'auto' when USE_GPU=true
       - MODELS_DIR=/app/models
       - CACHE_DIR=/app/cache
       - LOGS_DIR=/app/logs
@@ -946,7 +966,9 @@ services:
       - LEGACY_MODELS_DISABLE=true         # Disable Whisper/Vosk/Coqui
       - VOICE_STACK_MODE=enhanced          # Enhanced natural voice mode
       - MODELS_SERVICE_SKIP_DEFAULTS=false # Force loading default models
-      - ENABLE_TEXT_GENERATION=true        # Enable Gemma-3 text generation
+      - ENABLE_TEXT_GENERATION=true        # Enable TinyLlama text generation (1.1B params)
+      - TEXT_GEN_USE_PIPELINE=false        # Set to true for 20-30% speedup in batch scenarios
+      - TEXT_GEN_CACHE_ENABLED=true        # Enable in-memory response caching
       - RASA_ENABLE=false                  # Disable dialogue management for now
       # Hardware settings
       - MAX_GPU_MEMORY=0.8

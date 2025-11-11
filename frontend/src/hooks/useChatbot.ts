@@ -54,13 +54,40 @@ interface ChatSession {
 }
 
 export function useChatbot() {
-  const [messages, setMessages] = useState<ChatMessage[]>([])
+  // Load messages from localStorage on mount
+  const [messages, setMessages] = useState<ChatMessage[]>(() => {
+    try {
+      const savedMessages = localStorage.getItem('chatbot_messages')
+      return savedMessages ? JSON.parse(savedMessages) : []
+    } catch (error) {
+      console.error('Failed to load chat history:', error)
+      return []
+    }
+  })
   const [sessions, setSessions] = useState<ChatSession[]>([])
-  const [currentSessionId, setCurrentSessionId] = useState<string | null>(null)
+  const [currentSessionId, setCurrentSessionId] = useState<string | null>(() => {
+    return localStorage.getItem('chat_session_id')
+  })
   const [loading, setLoading] = useState(false)
   const [isTyping, setIsTyping] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const abortControllerRef = useRef<AbortController | null>(null)
+
+  // Save messages to localStorage whenever they change
+  useEffect(() => {
+    try {
+      localStorage.setItem('chatbot_messages', JSON.stringify(messages))
+    } catch (error) {
+      console.error('Failed to save chat history:', error)
+    }
+  }, [messages])
+
+  // Save session ID to localStorage whenever it changes
+  useEffect(() => {
+    if (currentSessionId) {
+      localStorage.setItem('chat_session_id', currentSessionId)
+    }
+  }, [currentSessionId])
 
   // Send message to chatbot
   const sendMessage = useCallback(async (content: string, includeContext: boolean = true) => {
@@ -202,27 +229,55 @@ Respond with empathy, understanding, and practical wellness guidance. If user se
       // Add personalized welcome message
       const getPersonalizedWelcome = () => {
         const hour = new Date().getHours()
+        const greetings = [
+          { time: 'morning', phrases: ['Good morning', 'Morning', 'Rise and shine'] },
+          { time: 'afternoon', phrases: ['Good afternoon', 'Hello', 'Hi'] },
+          { time: 'evening', phrases: ['Good evening', 'Evening', 'Hello'] },
+          { time: 'night', phrases: ['Good evening', 'Hello', 'Hi there'] }
+        ]
+        
+        const followUps = [
+          'How can I help you today?',
+          'How are you doing?',
+          'How\'s your day going?',
+          'What\'s on your mind?',
+          'How are you feeling?'
+        ]
+        
         let timeGreeting = ''
+        let greetingPhrases: string[] = []
         
-        if (hour < 12) timeGreeting = 'Good morning'
-        else if (hour < 17) timeGreeting = 'Good afternoon'
-        else timeGreeting = 'Good evening'
+        if (hour < 12) {
+          greetingPhrases = greetings[0].phrases
+        } else if (hour < 17) {
+          greetingPhrases = greetings[1].phrases
+        } else if (hour < 21) {
+          greetingPhrases = greetings[2].phrases
+        } else {
+          greetingPhrases = greetings[3].phrases
+        }
         
-        // Get user name from context if available (you can enhance this)
-        const userName = 'there' // TODO: Get from user profile
+        // Randomly select greeting and follow-up
+        timeGreeting = greetingPhrases[Math.floor(Math.random() * greetingPhrases.length)]
+        const followUp = followUps[Math.floor(Math.random() * followUps.length)]
         
-        return `${timeGreeting} ${userName}! 👋 I'm Mantra-Mitra, your wellness companion.
-
-I'm here to listen, support, and help you on your wellness journey. 
-
-💬 **How can I help you today?**
-• Share how you're feeling
-• Get breathing exercises
-• Practice mindfulness
-• Track your mood
-• Or just chat about anything
-
-You can type or speak to me in any language - I'll understand and respond appropriately. 🌸`
+        // Try to get user name from localStorage (set during auth)
+        let userName = ''
+        try {
+          const userDataStr = localStorage.getItem('mantrapath_user')
+          if (userDataStr) {
+            const userData = JSON.parse(userDataStr)
+            userName = userData.first_name || userData.username || ''
+          }
+        } catch (e) {
+          console.log('Could not retrieve user name')
+        }
+        
+        if (userName) {
+          return `${timeGreeting} ${userName}, ${followUp}`
+        } else {
+          return `${timeGreeting}! ${followUp}`
+        }
       }
       
       const welcomeMessage: ChatMessage = {
@@ -331,6 +386,10 @@ You can type or speak to me in any language - I'll understand and respond approp
     setMessages([])
     setCurrentSessionId(null)
     setError(null)
+    // Clear localStorage
+    localStorage.removeItem('chatbot_messages')
+    localStorage.removeItem('chat_session_id')
+    toast.success('Chat history cleared')
   }, [])
 
   // Stop any ongoing request

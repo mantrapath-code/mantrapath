@@ -250,7 +250,7 @@ class ModelsServiceClient:
             
         try:
             # Build the prompt with system prompt and context
-            system_prompt_text = context.get("system_prompt") if context else "You are Mantra-Mitra, an empathetic AI wellness companion. Respond in the user's language with empathy, understanding, and practical wellness guidance."
+            system_prompt_text = context.get("system_prompt") if context else "You are Mantra-Mitra, an empathetic AI wellness companion. Respond directly and naturally in the user's language with empathy, understanding, and practical wellness guidance. Do not use greetings like 'Hi Friend' or 'Mantra-Mitra' in your responses. Just respond naturally to what the user says."
             
             # Build full prompt with context
             full_prompt = f"{system_prompt_text}\n\nUser: {message}\nAssistant:"

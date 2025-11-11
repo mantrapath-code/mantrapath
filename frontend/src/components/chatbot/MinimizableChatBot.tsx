@@ -35,7 +35,7 @@ export function MinimizableChatBot({ className }: MinimizableChatBotProps) {
   const [input, setInput] = useState("")
   const [isLoading, setIsLoading] = useState(false)
   const [isExpanded, setIsExpanded] = useState(false)
-  const [isMinimized, setIsMinimized] = useState(false)
+  const [isMinimized, setIsMinimized] = useState(true) // Start minimized by default
   const [showBreathingExercise, setShowBreathingExercise] = useState(false)
   const [isListening, setIsListening] = useState(false)
   const [recognition, setRecognition] = useState<any>(null)
@@ -43,7 +43,7 @@ export function MinimizableChatBot({ className }: MinimizableChatBotProps) {
   const [voiceEnabled, setVoiceEnabled] = useState(true)
   const [selectedLanguage, setSelectedLanguage] = useState('en')
   const [autoTranslate, setAutoTranslate] = useState(false)
-  const [autoTTS, setAutoTTS] = useState(true)
+  const [autoTTS, setAutoTTS] = useState(false) // Disable auto TTS by default
   const [showSettings, setShowSettings] = useState(false)
   const [supportedLanguages, setSupportedLanguages] = useState<any[]>([])
   const [lastInputMethod, setLastInputMethod] = useState<'text' | 'voice'>('text')
@@ -210,108 +210,106 @@ export function MinimizableChatBot({ className }: MinimizableChatBotProps) {
   // If minimized, show only the floating button
   if (isMinimized) {
     return (
-      <motion.div
-        initial={{ scale: 0 }}
-        animate={{ scale: 1 }}
-        className={cn(
-          "fixed bottom-4 right-4 z-50",
-          className
-        )}
-      >
-        <Button
-          size="lg"
-          className="rounded-full h-16 w-16 shadow-lg hover:shadow-xl transition-shadow bg-primary hover:bg-primary/90"
-          onClick={() => setIsMinimized(false)}
+      <>
+        <audio ref={audioRef} onEnded={() => setIsSpeaking(false)} />
+        <motion.div
+          initial={{ scale: 0 }}
+          animate={{ scale: 1 }}
+          className="fixed bottom-6 right-6 z-50"
         >
-          <Robot size={24} />
-        </Button>
-        {messages.length > 0 && messages[messages.length - 1].sender === 'assistant' && (
-          <div className="absolute -top-2 -right-2 w-4 h-4 bg-red-500 rounded-full animate-pulse" />
-        )}
-      </motion.div>
+          <Button
+            size="lg"
+            className="rounded-full h-16 w-16 shadow-2xl hover:shadow-xl transition-all hover:scale-110 bg-gradient-to-r from-primary to-purple-600 hover:from-primary/90 hover:to-purple-600/90"
+            onClick={() => setIsMinimized(false)}
+            title="Open Mantra-Mitra Chat"
+          >
+            <ChatCircle size={28} weight="fill" className="text-white" />
+          </Button>
+          {messages.length > 0 && messages[messages.length - 1].sender === 'assistant' && (
+            <div className="absolute -top-1 -right-1 w-5 h-5 bg-red-500 rounded-full animate-pulse border-2 border-white flex items-center justify-center">
+              <span className="text-xs text-white font-bold">{messages.filter(m => m.sender === 'assistant').length}</span>
+            </div>
+          )}
+        </motion.div>
+      </>
     )
   }
   
   return (
-    <div className={cn("space-y-4", className)} data-chat-widget>
+    <>
       <audio ref={audioRef} onEnded={() => setIsSpeaking(false)} />
       
-      <Card className={cn(
-        "flex flex-col transition-all duration-300",
-        isExpanded ? "h-[90vh]" : "h-96"
-      )}>
-        <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2 shrink-0">
-          <CardTitle className="flex items-center gap-2">
-            <Robot className="text-primary" size={24} />
-            Mantra-Mitra
-            <Badge variant="secondary" className="text-xs">AI Companion</Badge>
-          </CardTitle>
-          <div className="flex items-center gap-1">
-            {/* Voice Toggle */}
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={() => setVoiceEnabled(!voiceEnabled)}
-              title={voiceEnabled ? "Disable voice output" : "Enable voice output"}
-            >
-              {voiceEnabled ? <SpeakerHigh size={16} /> : <SpeakerX size={16} />}
-            </Button>
-            
-            {/* Stop Speaking */}
-            {isSpeaking && (
+      {/* Floating Chat Window */}
+      <motion.div
+        initial={{ opacity: 0, scale: 0.9, y: 20 }}
+        animate={{ opacity: 1, scale: 1, y: 0 }}
+        exit={{ opacity: 0, scale: 0.9, y: 20 }}
+        className="fixed bottom-6 right-6 z-50 w-[420px]"
+        style={{ maxHeight: 'calc(100vh - 120px)' }}
+      >
+  <Card className="flex flex-col shadow-2xl border-0 max-h-[80vh] min-h-[520px] overflow-hidden bg-gradient-to-b from-slate-50 to-white dark:from-slate-900 dark:to-slate-950">
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 py-3 px-4 shrink-0 border-b border-primary/20 bg-gradient-to-r from-primary/20 via-purple-500/20 to-pink-500/20 backdrop-blur-sm">
+            <CardTitle className="flex items-center gap-2 min-w-0 flex-1">
+              <div className="w-10 h-10 rounded-full bg-gradient-to-br from-primary via-purple-600 to-pink-600 flex items-center justify-center shrink-0 shadow-lg ring-2 ring-white/50">
+                <Robot className="text-white" size={20} weight="fill" />
+              </div>
+              <div className="flex flex-col min-w-0">
+                <span className="text-sm font-bold truncate bg-gradient-to-r from-primary via-purple-600 to-pink-600 bg-clip-text text-transparent">Mantra-Mitra</span>
+                <span className="text-xs text-muted-foreground font-medium truncate">AI Companion</span>
+              </div>
+            </CardTitle>
+            <div className="flex items-center gap-1 shrink-0 ml-2">
+              {/* Translation Button */}
               <Button
                 variant="ghost"
                 size="sm"
-                onClick={stopSpeaking}
-                title="Stop speaking"
-                className="text-red-500"
+                onClick={() => setAutoTranslate(!autoTranslate)}
+                title={autoTranslate ? "Disable translation" : "Enable translation"}
+                className={cn(
+                  "h-8 w-8 p-0 hover:bg-primary/10",
+                  autoTranslate && "bg-primary/20 text-primary"
+                )}
               >
-                <SpeakerX size={16} />
+                <Translate size={16} />
               </Button>
-            )}
-            
-            {/* Translation Toggle */}
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={() => setAutoTranslate(!autoTranslate)}
-              title={autoTranslate ? "Disable auto-translation" : "Enable auto-translation"}
-              className={autoTranslate ? "text-blue-500" : ""}
-            >
-              <Translate size={16} />
-            </Button>
-            
-            {/* Settings */}
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={() => setShowSettings(!showSettings)}
-              title="Language settings"
-            >
-              <Gear size={16} />
-            </Button>
-            
-            {/* Minimize */}
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={() => setIsMinimized(true)}
-              title="Minimize chatbot"
-            >
-              <Minus size={16} />
-            </Button>
-            
-            {/* Expand/Collapse */}
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={() => setIsExpanded(!isExpanded)}
-              title={isExpanded ? "Collapse" : "Expand"}
-            >
-              {isExpanded ? <ArrowsIn size={16} /> : <ArrowsOut size={16} />}
-            </Button>
-          </div>
-        </CardHeader>
+              
+              {/* Settings */}
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => setShowSettings(!showSettings)}
+                title="Chat settings"
+                className={cn(
+                  "h-8 w-8 p-0 hover:bg-primary/10",
+                  showSettings && "bg-primary/20 text-primary"
+                )}
+              >
+                <Gear size={16} />
+              </Button>
+              
+              {/* Minimize Button */}
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => setIsMinimized(true)}
+                title="Minimize chat"
+                className="h-8 w-8 p-0 hover:bg-destructive/10 hover:text-destructive"
+              >
+                <Minus size={18} weight="bold" />
+              </Button>
+              
+              {/* Close Button */}
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => setIsMinimized(true)}
+                title="Close chat"
+                className="h-8 w-8 p-0 hover:bg-destructive/10 hover:text-destructive"
+              >
+                <X size={18} weight="bold" />
+              </Button>
+            </div>
+          </CardHeader>
         
         {/* Settings Panel */}
         <AnimatePresence>
@@ -392,27 +390,37 @@ export function MinimizableChatBot({ className }: MinimizableChatBotProps) {
           )}
         </AnimatePresence>
         
-        <CardContent className="flex-1 flex flex-col gap-4 p-4 min-h-0">
+        <CardContent className="flex-1 flex flex-col p-0 min-h-0 bg-gradient-to-b from-slate-50/50 to-white/50 dark:from-slate-900/50 dark:to-slate-950/50">
           {/* Messages Area */}
           <div className={cn(
-            "flex-1 overflow-y-auto space-y-4",
+            "flex-1 overflow-y-auto space-y-3 px-4 pt-3 pb-2",
             isExpanded ? "max-h-none" : "max-h-64"
-          )}>
+          )} 
+          style={{
+            scrollbarWidth: 'thin',
+            scrollbarColor: 'rgba(155, 155, 155, 0.5) transparent'
+          }}>
             <AnimatePresence mode="popLayout">
               {messages.length === 0 && (
                 <motion.div
                   initial={{ opacity: 0, y: 20 }}
                   animate={{ opacity: 1, y: 0 }}
-                  className="text-center p-4 bg-muted/50 rounded-lg"
+                  className="text-center p-6 bg-gradient-to-br from-primary/10 via-purple-500/10 to-pink-500/10 rounded-xl border border-primary/20 shadow-sm"
                 >
-                  <p className="text-sm text-muted-foreground">
-                    Hello! I'm Mantra-Mitra, your AI wellness companion. 💜
+                  <div className="w-16 h-16 rounded-full bg-gradient-to-br from-primary via-purple-600 to-pink-600 flex items-center justify-center mx-auto mb-3 shadow-lg">
+                    <Robot className="text-white" size={32} weight="fill" />
+                  </div>
+                  <p className="text-sm font-medium text-foreground mb-1">
+                    Hello! I'm Mantra-Mitra 💜
                   </p>
-                  <p className="text-xs text-muted-foreground mt-1">
-                    {voiceEnabled && "🔊 Voice responses enabled"} 
-                    {autoTranslate && " • 🌐 Auto-translation active"}
-                    {selectedLanguage !== 'en' && ` • Language: ${selectedLanguage.toUpperCase()}`}
+                  <p className="text-xs text-muted-foreground">
+                    Your AI wellness companion is here to support you
                   </p>
+                  {voiceEnabled && (
+                    <p className="text-xs text-primary font-medium mt-2">
+                      🔊 Voice responses enabled
+                    </p>
+                  )}
                 </motion.div>
               )}
               
@@ -428,18 +436,18 @@ export function MinimizableChatBot({ className }: MinimizableChatBotProps) {
                   )}
                 >
                   {message.sender === "assistant" && (
-                    <div className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center shrink-0">
-                      <Robot size={16} className="text-primary" />
+                    <div className="w-8 h-8 rounded-full bg-gradient-to-br from-primary/20 via-purple-500/20 to-pink-500/20 flex items-center justify-center shrink-0 border border-primary/20">
+                      <Robot size={16} className="text-primary" weight="fill" />
                     </div>
                   )}
                   
                   <div className={cn(
-                    "max-w-[70%] p-3 rounded-lg",
+                    "max-w-[70%] p-3 rounded-xl shadow-sm",
                     message.sender === "user" 
-                      ? "bg-primary text-primary-foreground" 
-                      : "bg-muted"
+                      ? "bg-gradient-to-br from-primary via-purple-600 to-pink-600 text-white" 
+                      : "bg-gradient-to-br from-slate-100 to-slate-50 dark:from-slate-800 dark:to-slate-900 border border-slate-200 dark:border-slate-700"
                   )}>
-                    <p className="text-sm whitespace-pre-wrap">{message.content}</p>
+                    <p className="text-sm whitespace-pre-wrap leading-relaxed">{message.content}</p>
                     
                     {/* Message metadata */}
                     {message.sender === 'assistant' && message.orchestration_metadata && (
@@ -511,9 +519,9 @@ export function MinimizableChatBot({ className }: MinimizableChatBotProps) {
             <div ref={messagesEndRef} />
           </div>
           
-          {/* Quick Replies */}
+          {/* Quick Replies - moved inside messages area */}
           {messages.length === 0 && (
-            <div className="flex flex-wrap gap-2">
+            <div className="flex flex-wrap gap-2 px-4 pb-2">
               {quickReplies.map((reply) => (
                 <Button
                   key={reply}
@@ -535,14 +543,14 @@ export function MinimizableChatBot({ className }: MinimizableChatBotProps) {
           )}
           
           {/* Input Area */}
-          <div className="flex gap-2">
+          <div className="flex gap-2 p-2 border-t border-primary/10 bg-gradient-to-r from-slate-50/80 to-white/80 dark:from-slate-900/80 dark:to-slate-950/80 backdrop-blur-sm shrink-0">
             <div className="flex-1 relative">
               <Input
                 value={input}
                 onChange={(e) => setInput(e.target.value)}
                 onKeyPress={handleKeyPress}
                 placeholder="Share what's on your mind..."
-                className="pr-12"
+                className="pr-12 border-primary/20 bg-white dark:bg-slate-900 focus:ring-2 focus:ring-primary/20 rounded-xl h-10"
                 disabled={isLoading}
               />
               
@@ -552,13 +560,13 @@ export function MinimizableChatBot({ className }: MinimizableChatBotProps) {
                   variant="ghost"
                   size="sm"
                   className={cn(
-                    "absolute right-1 top-1 h-8 w-8 p-0",
-                    isListening && "text-red-500 animate-pulse"
+                    "absolute right-1 top-1/2 -translate-y-1/2 h-8 w-8 p-0 rounded-lg",
+                    isListening && "text-red-500 bg-red-50 dark:bg-red-950 animate-pulse"
                   )}
                   onClick={toggleVoiceRecording}
                   title={isListening ? "Stop recording" : "Start voice recording"}
                 >
-                  {isListening ? <MicrophoneSlash size={14} /> : <Microphone size={14} />}
+                  {isListening ? <MicrophoneSlash size={16} weight="fill" /> : <Microphone size={16} />}
                 </Button>
               )}
             </div>
@@ -566,13 +574,15 @@ export function MinimizableChatBot({ className }: MinimizableChatBotProps) {
             <Button 
               onClick={handleSendMessage} 
               disabled={isLoading || !input.trim()}
+              className="bg-gradient-to-r from-primary via-purple-600 to-pink-600 hover:from-primary/90 hover:via-purple-600/90 hover:to-pink-600/90 text-white shadow-md rounded-xl px-5 h-10"
               size="sm"
             >
               Send
             </Button>
           </div>
         </CardContent>
-      </Card>
+        </Card>
+      </motion.div>
       
       {/* Breathing Exercise Modal */}
       <AnimatePresence>
@@ -581,7 +591,7 @@ export function MinimizableChatBot({ className }: MinimizableChatBotProps) {
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4"
+            className="fixed inset-0 bg-black/50 backdrop-blur-sm z-[60] flex items-center justify-center p-4"
           >
             <motion.div
               initial={{ scale: 0.9, opacity: 0 }}
@@ -594,6 +604,6 @@ export function MinimizableChatBot({ className }: MinimizableChatBotProps) {
           </motion.div>
         )}
       </AnimatePresence>
-    </div>
+    </>
   )
 }

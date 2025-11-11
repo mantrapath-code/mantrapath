@@ -413,6 +413,75 @@ Response Guidelines:
         
         return base_prompt + mood_info + strategy_guidance.get(strategy, "")
     
+    def _clean_ai_response(self, response_text: str) -> str:
+        """
+        Clean AI-generated response by removing prompt artifacts, role labels, and formatting issues
+        
+        Args:
+            response_text (str): Raw AI response text
+            
+        Returns:
+            str: Cleaned response text suitable for display
+        """
+        import re
+        
+        # Remove common greeting artifacts and unwanted prefixes
+        # Remove "Hi Friend", "Mantra-Mitra", and similar phrases that shouldn't appear in responses
+        response_text = re.sub(r'^(Hi Friend,?|Hi there!|Hello!)\s*', '', response_text, flags=re.IGNORECASE)
+        response_text = re.sub(r'^(Mantra-Mitra,?|MantraMitra,?)\s*', '', response_text, flags=re.IGNORECASE)
+        response_text = re.sub(r'^(response|Response):\s*', '', response_text, flags=re.IGNORECASE)
+        
+        # Strategy: Find the first actual response content after removing all role labels
+        # Split by common role indicators
+        parts = re.split(r'\n\s*(User|user|Assistant|assistant|Mantra-Mitra|MantraMitra):\s*', response_text)
+        
+        # Extract meaningful response parts (skip the role labels themselves)
+        meaningful_parts = []
+        skip_next = False
+        
+        for i, part in enumerate(parts):
+            part = part.strip()
+            if not part:
+                continue
+            
+            # Skip role label identifiers
+            if part.lower() in ['user', 'assistant', 'mantra-mitra', 'mantramitra']:
+                skip_next = True
+                continue
+            
+            # If this is actual content and not after a "User:" label
+            if not skip_next:
+                # Check if this looks like assistant content (not user dialogue)
+                if i == 0 or not re.match(r'^(i\'m|how|what|when|where|why|can you|could you)', part.lower()):
+                    meaningful_parts.append(part)
+                    # Only take the first meaningful assistant response
+                    break
+            
+            skip_next = False
+        
+        # Join the meaningful parts
+        result = ' '.join(meaningful_parts).strip()
+        
+        # Additional cleanup - remove any remaining role labels
+        result = re.sub(r'^(Assistant|assistant|Mantra-Mitra|MantraMitra):\s*', '', result)
+        result = re.sub(r'\n\s*(Assistant|assistant|Mantra-Mitra|MantraMitra):\s*', '\n', result)
+        
+        # Remove multiple spaces/newlines
+        result = re.sub(r'\n{2,}', '\n\n', result)
+        result = re.sub(r' {2,}', ' ', result)
+        
+        # If result is still empty or too short, fallback to basic cleanup
+        if len(result) < 10:
+            result = response_text
+            result = re.sub(r'(User|user|Assistant|assistant|Mantra-Mitra|MantraMitra):\s*', '', result)
+            result = result.strip()
+        
+        # Ensure we don't return dialogue snippets - if it contains "User:" anywhere, truncate there
+        if 'User:' in result or 'user:' in result:
+            result = re.split(r'\n\s*(User|user):', result)[0].strip()
+        
+        return result
+    
     def _generate_follow_up_suggestions(self, mood_context: MoodContext) -> List[str]:
         """
         Generate follow-up suggestions based on mood context
@@ -504,6 +573,9 @@ Response Guidelines:
             
             if result and result.get("response"):
                 ai_text = result.get("response", "").strip()
+                
+                # Clean up the AI response - remove prompt artifacts and formatting
+                ai_text = self._clean_ai_response(ai_text)
                 
                 # Determine if breathing exercise should be suggested
                 breathing_exercise = None

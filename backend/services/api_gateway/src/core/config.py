@@ -39,9 +39,9 @@ class GatewayConfig(BaseSettings):
     cors_headers: List[str] = Field(default=["*"])
     
     # Rate limiting
-    rate_limit_enabled: bool = Field(default=True)
-    rate_limit_requests_per_minute: int = Field(default=100)
-    rate_limit_burst: int = Field(default=20)
+    rate_limit_enabled: bool = Field(default=os.getenv("RATE_LIMIT_ENABLED", "true").lower() == "true")
+    rate_limit_requests_per_minute: int = Field(default=int(os.getenv("RATE_LIMIT_REQUESTS_PER_MINUTE", "1000")))
+    rate_limit_burst: int = Field(default=int(os.getenv("RATE_LIMIT_BURST", "200")))
     
     # Load balancing
     load_balancing_strategy: LoadBalancingStrategy = Field(default=LoadBalancingStrategy.ROUND_ROBIN)

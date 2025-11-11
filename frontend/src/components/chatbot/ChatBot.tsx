@@ -508,9 +508,9 @@ export function ChatBot({ className }: ChatBotProps) {
   }
   
   return (
-    <div className="space-y-4">
-      <Card className={cn("flex flex-col", isExpanded ? "h-[90vh]" : "h-96", className)}>
-        <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2 shrink-0">
+    <div className="h-full flex flex-col">
+  <Card className={cn("flex flex-col h-full", className)}>
+        <CardHeader className="flex flex-row items-center justify-between space-y-0 py-3 px-4 shrink-0">
           <CardTitle className="flex items-center gap-2">
             <Robot className="text-primary" size={24} />
             Mantra-Mitra
@@ -644,11 +644,8 @@ export function ChatBot({ className }: ChatBotProps) {
           </div>
         )}
         
-        <CardContent className="flex-1 flex flex-col gap-4 p-4 min-h-0">
-          <div className={cn(
-            "flex-1 overflow-y-auto space-y-4",
-            className?.includes('h-full') ? "max-h-none" : "max-h-64"
-          )}>
+        <CardContent className="flex-1 flex flex-col p-0 min-h-0 overflow-hidden">
+          <div className="flex-1 overflow-y-auto space-y-3 px-4 pt-3 pb-2">
             <AnimatePresence mode="popLayout">
               {messages.length === 0 && (
                 <motion.div
@@ -829,7 +826,7 @@ export function ChatBot({ className }: ChatBotProps) {
           </div>
           
           {messages.length === 0 && (
-            <div className="flex flex-wrap gap-2">
+            <div className="flex flex-wrap gap-2 px-4 pb-2">
               {quickReplies.map((reply) => (
                 <Button
                   key={reply}
@@ -850,7 +847,7 @@ export function ChatBot({ className }: ChatBotProps) {
             </div>
           )}
           
-          <div className="flex gap-2">
+          <div className="flex gap-2 p-2 border-t bg-background/50 shrink-0">
             <div className="flex-1 relative">
               <Input
                 placeholder="Share what's on your mind..."
@@ -859,7 +856,7 @@ export function ChatBot({ className }: ChatBotProps) {
                 onKeyDown={(e) => e.key === 'Enter' && handleSend()}
                 disabled={isLoading}
                 className={cn(
-                  "flex-1",
+                  "h-10",
                   (autoTranslate || isSpeaking) && "pr-32"
                 )}
               />
@@ -886,6 +883,7 @@ export function ChatBot({ className }: ChatBotProps) {
                 size="icon"
                 disabled={isLoading}
                 title={isListening ? "Stop recording" : "Start voice input"}
+                className="h-10 w-10"
               >
                 {isListening ? <MicrophoneSlash size={16} /> : <Microphone size={16} />}
               </Button>
@@ -903,12 +901,13 @@ export function ChatBot({ className }: ChatBotProps) {
                 variant="outline"
                 size="sm"
                 title="Test voice input flow"
+                className="h-10"
               >
                 Test Voice
               </Button>
             )}
             
-            <Button onClick={handleSend} disabled={isLoading || !input.trim()}>
+            <Button onClick={handleSend} disabled={isLoading || !input.trim()} className="h-10 px-4">
               <ChatCircle size={16} />
             </Button>
           </div>

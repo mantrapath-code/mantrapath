@@ -54,6 +54,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             initials: getUserInitials(userData)
           }
           setUser(enhancedUser)
+          // Store user info for chatbot access
+          localStorage.setItem('mantrapath_user', JSON.stringify(enhancedUser))
           setLoading(false)
           return
         } catch (error) {
@@ -80,6 +82,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         initials: getUserInitials(userData)
       }
       setUser(enhancedUser)
+      // Store user info for chatbot access
+      localStorage.setItem('mantrapath_user', JSON.stringify(enhancedUser))
     } catch (error) {
       throw error
     }
@@ -132,6 +136,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const logout = () => {
     apiService.logout()
+    localStorage.removeItem('mantrapath_user')
     setUser(null)
   }
 

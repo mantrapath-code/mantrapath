@@ -342,7 +342,7 @@ function AppContent() {
                 initial={{ opacity: 0, x: 20 }}
                 animate={{ opacity: 1, x: 0 }}
                 transition={{ delay: 0.2 }}
-                className="sticky top-6"
+                className="sticky top-0"
               >
                 <MinimizableChatBot />
               </motion.div>
