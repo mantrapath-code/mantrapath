@@ -5,7 +5,7 @@ from datetime import datetime, timedelta
 from typing import Optional, Dict, Any
 from jose import jwt
 from jose.exceptions import JWTError
-from passlib.context import CryptContext
+import bcrypt
 import os
 import re
 import secrets
@@ -19,39 +19,22 @@ ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = 30
 REFRESH_TOKEN_EXPIRE_DAYS = 7
 
-# Password hashing - configure bcrypt context with minimal configuration to avoid initialization issues
-try:
-    # First try with minimal configuration
-    pwd_context = CryptContext(
-        schemes=["bcrypt"],
-        deprecated="auto",
-        bcrypt__rounds=10  # Lower rounds for compatibility
-    )
-    # Test the context with a simple password to ensure it works
-    test_hash = pwd_context.hash("test123")
-    if not pwd_context.verify("test123", test_hash):
-        raise Exception("Context verification failed")
-except Exception as e:
-    print(f"Warning: Error initializing bcrypt context: {e}")
-    print("Falling back to direct bcrypt implementation...")
+# Password hashing - Use direct bcrypt implementation for reliability
+class SimpleBcryptContext:
+    """Simple bcrypt wrapper that handles the 72-byte limit properly"""
+    def hash(self, password):
+        password_bytes = password.encode('utf-8')
+        if len(password_bytes) > 72:
+            password_bytes = password_bytes[:72]
+        return bcrypt.hashpw(password_bytes, bcrypt.gensalt(rounds=10)).decode('utf-8')
     
-    # Fallback: Use direct bcrypt without passlib if there are initialization issues
-    import bcrypt
-    
-    class SimpleBcryptContext:
-        def hash(self, password):
-            password_bytes = password.encode('utf-8')
-            if len(password_bytes) > 72:
-                password_bytes = password_bytes[:72]
-            return bcrypt.hashpw(password_bytes, bcrypt.gensalt(rounds=10)).decode('utf-8')
-        
-        def verify(self, password, hashed):
-            password_bytes = password.encode('utf-8')
-            if len(password_bytes) > 72:
-                password_bytes = password_bytes[:72]
-            return bcrypt.checkpw(password_bytes, hashed.encode('utf-8'))
-    
-    pwd_context = SimpleBcryptContext()
+    def verify(self, password, hashed):
+        password_bytes = password.encode('utf-8')
+        if len(password_bytes) > 72:
+            password_bytes = password_bytes[:72]
+        return bcrypt.checkpw(password_bytes, hashed.encode('utf-8'))
+
+pwd_context = SimpleBcryptContext()
 
 def validate_password_strength(password: str) -> tuple[bool, str]:
     """

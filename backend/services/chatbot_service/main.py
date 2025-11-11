@@ -44,6 +44,18 @@ from src.intelligent_engine import (
     ContextAnalyzer, 
     ResponseGenerator
 )
+from src.clients.models_service_client import ModelsServiceClient
+from src.translation_utils import (
+    translate_text_enhanced, 
+    get_simplified_response
+)
+
+OLLAMA_CONFIG = {
+    # The local model should be pulled on the server where this service runs
+    'model_name': os.getenv('LLM_MODEL_NAME', 'mistral'), 
+    # Ollama's default local API endpoint
+    'ollama_base_url': os.getenv('OLLAMA_BASE_URL', 'http://host.docker.internal:11434'), 
+}
 
 # Configure logging
 logging.basicConfig(
@@ -61,69 +73,21 @@ SERVICE_URLS = {
     'voice_service': os.getenv('VOICE_SERVICE_URL', 'http://voice-service:8011'),
 }
 
-import asyncio
-import logging
-import os
-import sys
-from datetime import datetime
-from typing import List, Optional
-from contextlib import asynccontextmanager
-
-from fastapi import FastAPI, Depends, HTTPException, BackgroundTasks
-from fastapi.middleware.cors import CORSMiddleware
-from sqlalchemy.orm import Session
-from pydantic import BaseModel, Field
-
-# Add parent directories to path for shared imports
-sys.path.append('/app')
-sys.path.append('/app/shared')
-
-from shared.database import get_db, engine
-from shared.models import ChatSession, ChatMessage, Base
-from shared.auth import get_current_user
-
-# Import our intelligent engine components
-from src.intelligent_engine import (
-    MoodAwareResponder, 
-    ServiceIntegrator, 
-    ContextAnalyzer, 
-    ResponseGenerator
-)
-
-# Configure logging
-logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
-)
-logger = logging.getLogger(__name__)
-
-# Create database tables
-Base.metadata.create_all(bind=engine)
-
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    """
-    Application lifespan manager for startup and shutdown tasks
-    """
-    # Startup tasks
-    logger.info("Starting MantraPath Intelligent Chatbot Service v2.0.0 with Translation Support")
-    
-    # Initialize HTTP client for service communication
+    logger.info("Starting MantraPath Intelligent Chatbot Service with Models Service Support")
+
     app.state.http_client = httpx.AsyncClient(timeout=30.0)
     
-    # Initialize intelligent engine components
+    # Add Models Service client for LLM capabilities
+    app.state.models_client = ModelsServiceClient()
+
+    # Initialize intelligent engine components (no parameters needed)
     app.state.response_generator = ResponseGenerator()
-    logger.info("Intelligent engine with translation support initialized successfully")
-    
-    # Startup health check
-    engine_status = app.state.response_generator.get_engine_status()
-    logger.info(f"Engine status: {engine_status}")
-    
+
     yield
-    
-    # Shutdown tasks
     await app.state.http_client.aclose()
-    logger.info("Shutting down MantraPath Intelligent Chatbot Service")
+
 
 # Initialize FastAPI application with intelligent capabilities
 app = FastAPI(
@@ -678,7 +642,7 @@ async def intelligent_chat(
 # Frontend-compatible chatbot endpoints
 @app.post("/api/chatbot/chat", response_model=IntelligentChatResponse)
 async def chatbot_chat_frontend(
-    request: IntelligentChatRequest,
+    request: IntelligentChatRequest, 
     background_tasks: BackgroundTasks,
     db: Session = Depends(get_db),
     current_user: dict = Depends(get_current_user)
@@ -1011,6 +975,17 @@ async def global_exception_handler(request, exc):
         "message": "Please try again later or contact support if the problem persists",
         "timestamp": datetime.utcnow().isoformat()
     }
+
+@app.get("/test/llm")
+async def test_llm(prompt: str = "Hello from MantraPath"):
+    """
+    Simple test endpoint to verify LLM connection through Models Service
+    """
+    response = await app.state.models_client.generate_response(
+        message=prompt,
+        language="en"
+    )
+    return {"prompt": prompt, "response": response}
 
 if __name__ == "__main__":
     import uvicorn

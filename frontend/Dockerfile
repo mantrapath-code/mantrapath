@@ -41,12 +41,14 @@ COPY --from=builder /app/dist /usr/share/nginx/html
 # Copy nginx configuration
 COPY nginx.conf /etc/nginx/nginx.conf
 
-# Create entrypoint script to generate SSL certs
+# Create entrypoint script to generate SSL certs if not provided via volume
 RUN echo '#!/bin/sh' > /docker-entrypoint.sh && \
     echo 'set -e' >> /docker-entrypoint.sh && \
     echo '' >> /docker-entrypoint.sh && \
-    echo '# Generate SSL certificate if it does not exist' >> /docker-entrypoint.sh && \
-    echo 'if [ ! -f /etc/nginx/ssl/cert.pem ] || [ ! -f /etc/nginx/ssl/key.pem ]; then' >> /docker-entrypoint.sh && \
+    echo '# Check if SSL certificates are provided via volume mount' >> /docker-entrypoint.sh && \
+    echo 'if [ -f /etc/nginx/ssl/mantrapath.crt ] && [ -f /etc/nginx/ssl/mantrapath.key ]; then' >> /docker-entrypoint.sh && \
+    echo '    echo "Using mounted SSL certificates (mantrapath.crt/key)"' >> /docker-entrypoint.sh && \
+    echo 'elif [ ! -f /etc/nginx/ssl/cert.pem ] || [ ! -f /etc/nginx/ssl/key.pem ]; then' >> /docker-entrypoint.sh && \
     echo '    echo "Generating self-signed SSL certificate..."' >> /docker-entrypoint.sh && \
     echo '    mkdir -p /etc/nginx/ssl' >> /docker-entrypoint.sh && \
     echo '    openssl req -x509 -nodes -days 365 -newkey rsa:2048 \' >> /docker-entrypoint.sh && \
@@ -54,6 +56,8 @@ RUN echo '#!/bin/sh' > /docker-entrypoint.sh && \
     echo '        -out /etc/nginx/ssl/cert.pem \' >> /docker-entrypoint.sh && \
     echo '        -subj "/C=US/ST=State/L=City/O=Organization/CN=localhost"' >> /docker-entrypoint.sh && \
     echo '    echo "SSL certificate generated successfully"' >> /docker-entrypoint.sh && \
+    echo 'else' >> /docker-entrypoint.sh && \
+    echo '    echo "Using existing SSL certificates"' >> /docker-entrypoint.sh && \
     echo 'fi' >> /docker-entrypoint.sh && \
     echo '' >> /docker-entrypoint.sh && \
     echo '# Start nginx' >> /docker-entrypoint.sh && \

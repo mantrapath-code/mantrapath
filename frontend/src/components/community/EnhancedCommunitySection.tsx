@@ -614,7 +614,11 @@ export function EnhancedCommunitySection() {
                           Share your thoughts, ask for support, or celebrate achievements with the community.
                         </DialogDescription>
                       </DialogHeader>
-                      <CreateThreadForm onSubmit={handleCreateThread} forums={forums} />
+                      <CreateThreadForm 
+                        onSubmit={handleCreateThread} 
+                        forums={forums}
+                        onCancel={() => setShowCreateDialog(false)}
+                      />
                     </DialogContent>
                   </Dialog>
                 </div>
@@ -1149,10 +1153,12 @@ function ChallengesSection({
 // Helper components
 function CreateThreadForm({ 
   onSubmit, 
-  forums 
+  forums,
+  onCancel
 }: { 
   onSubmit: (data: any) => void
   forums: Forum[]
+  onCancel?: () => void
 }) {
   const [title, setTitle] = useState("")
   const [content, setContent] = useState("")
@@ -1229,7 +1235,7 @@ function CreateThreadForm({
       </div>
       
       <div className="flex justify-end gap-2">
-        <Button type="button" variant="outline">
+        <Button type="button" variant="outline" onClick={onCancel}>
           Cancel
         </Button>
         <Button type="submit">

@@ -255,7 +255,7 @@ async def register(user_data: UserRegister, db: Session = Depends(get_db)):
     # Check if username already exists
     existing_username = db.query(User).filter(User.username == user_data.username).first()
     if existing_username:
-        raise HTTPException(
+        raise HTTPException( 
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Username already taken"
         )

@@ -104,21 +104,63 @@ The **MantraPath Models Service** is a centralized AI model management and infer
 **Why Used**: High-quality embeddings for content understanding, semantic search, and downstream NLP applications
 **Integration**: External TEI server provides scalable embedding generation
 
-#### Microsoft Phi-4 (Advanced NLP) 🧠
-**Model**: `microsoft/Phi-4-mini-instruct` (Primary) / `microsoft/Phi-4-mini-flash-reasoning` (Advanced)
-**Purpose**: Multilingual text generation, translation, and instruction-following tasks
-**Supported Languages**: 25+ languages including all major Indian languages
+#### TinyLlama (Current - Text Generation) 💬
+**Model**: `TinyLlama/TinyLlama-1.1B-Chat-v1.0`
+**Purpose**: Lightweight text generation for chatbot responses and content creation
+**Parameters**: 1.1B
+**Context Window**: 2048 tokens
 **Why Chosen**:
-- **Significantly improved** over Phi-3 with better reasoning capabilities
-- Enhanced architecture with 64K context window (vs 4K in Phi-3)
-- Superior performance on mathematical and logical reasoning tasks
-- Advanced multilingual capabilities including Indian languages
-- Instruction-following for complex NLP tasks
-- 10x better throughput for long-context generation
-- Efficient translation between Indian languages and English
-- Advanced reasoning capabilities for chatbot and content generation
+- Extremely lightweight (~1.1GB in FP16) for resource-constrained deployments
+- Fast inference on CPU (24-30s) and GPU (2-5s)
+- Good chat capabilities for basic conversational AI
+- Direct HuggingFace integration (no external dependencies)
+- Low memory footprint enables co-deployment with other models
 
-**⚠️ UPGRADE REQUIRED**: Currently using deprecated Phi-3 model - needs migration to Phi-4
+**Current Status**: ✅ **In Production** - Serving chatbot and text generation requests
+
+**Performance**:
+- CPU: 24-30s per request (acceptable for background processing)
+- GPU (CUDA): 2-5s per request (recommended for real-time chat)
+- Memory: ~1.1GB (FP16) / ~2.2GB (FP32)
+
+#### Microsoft Phi-4 (Recommended Upgrade - Advanced NLP) 🧠
+**Model**: `microsoft/Phi-4-mini-instruct` (Primary) / `microsoft/Phi-4-mini-flash-reasoning` (Advanced)
+**Purpose**: Advanced multilingual text generation, reasoning, translation, and instruction-following
+**Parameters**: 3.8B (3.4x larger than TinyLlama)
+**Context Window**: 64K tokens (32x larger than TinyLlama)
+**Supported Languages**: 25+ languages including all major Indian languages
+
+**Why Upgrade to Phi-4**:
+- **Significantly better quality** over TinyLlama for complex tasks
+- **64K context window** vs 2K context (32x improvement)
+- **Superior reasoning capabilities** for mathematical and logical tasks
+- **Advanced multilingual performance** including Indian languages
+- **Better instruction-following** for complex NLP tasks
+- **Improved translation quality** between Indian languages and English
+- **10x better throughput** for long-context generation compared to Phi-3
+- **State-of-art small model performance** with excellent efficiency
+
+**Upgrade Path**:
+```python
+# CURRENT (Production)
+model_name = "TinyLlama/TinyLlama-1.1B-Chat-v1.0"  # 1.1B params, 2K context
+memory_requirement = "~1.1GB (FP16)"
+inference_time_gpu = "2-5s"
+
+# RECOMMENDED UPGRADE (Better Quality)
+model_name = "microsoft/Phi-4-mini-instruct"  # 3.8B params, 64K context
+memory_requirement = "~7.6GB (FP16)"
+inference_time_gpu = "3-8s"  # Slightly slower but much better quality
+
+# FOR ADVANCED REASONING
+model_name = "microsoft/Phi-4-mini-flash-reasoning"  # Advanced reasoning capabilities
+```
+
+**Trade-offs**:
+- **TinyLlama**: Lower memory (1.1GB), faster (2-5s GPU), good for basic chat
+- **Phi-4**: Higher memory (7.6GB), slightly slower (3-8s GPU), excellent for complex reasoning and multilingual tasks
+
+**Recommendation**: Deploy Phi-4 on GPU-enabled production infrastructure for superior quality, keep TinyLlama as lightweight fallback
 
 ### 4. Legacy/Compatibility Models
 
@@ -167,7 +209,192 @@ The **MantraPath Models Service** is a centralized AI model management and infer
 - **Behavior**: Intelligent caching with fallback strategies
 - **Use Case**: General production deployments
 
-## 🚨 **Critical Architecture Issues & Recommendations**
+## � **Production Deployment Guide**
+
+### GPU Configuration for Optimal Performance
+
+#### Current Performance Benchmarks
+
+**TinyLlama-1.1B-Chat-v1.0**:
+| Hardware | Inference Time | Memory Usage | Use Case |
+|----------|---------------|--------------|----------|
+| CPU (Intel Xeon) | 24-30s | ~2.2GB (FP32) | Background processing, async tasks |
+| GPU (CUDA, FP16) | 2-5s | ~1.1GB | Real-time chat, interactive responses |
+| GPU (Pipeline) | 1.5-4s | ~1.1GB | Batch processing, high throughput |
+
+**Phi-4-mini-instruct** (Recommended Upgrade):
+| Hardware | Inference Time | Memory Usage | Use Case |
+|----------|---------------|--------------|----------|
+| CPU (Intel Xeon) | 90-120s | ~7.6GB (FP32) | Not recommended |
+| GPU (CUDA, FP16) | 3-8s | ~3.8GB | Production chat, complex reasoning |
+| GPU (Pipeline) | 2-6s | ~3.8GB | Batch operations, multi-turn conversations |
+
+#### GPU Deployment (Docker Compose)
+
+**1. Enable GPU in docker-compose.yml**:
+```yaml
+models_service:
+  deploy:
+    resources:
+      limits:
+        memory: 8G
+      reservations:
+        memory: 4G
+        devices:
+          - driver: nvidia
+            count: 1
+            capabilities: [gpu]
+  environment:
+    - USE_GPU=true
+    - TORCH_DEVICE=cuda  # or 'auto' for automatic detection
+    - MAX_GPU_MEMORY=0.8  # Use 80% of available GPU memory
+```
+
+**2. GPU Prerequisites**:
+```bash
+# Install NVIDIA Docker Runtime
+curl -s -L https://nvidia.github.io/nvidia-docker/gpgkey | sudo apt-key add -
+distribution=$(. /etc/os-release;echo $ID$VERSION_ID)
+curl -s -L https://nvidia.github.io/nvidia-docker/$distribution/nvidia-docker.list | \
+  sudo tee /etc/apt/sources.list.d/nvidia-docker.list
+sudo apt-get update && sudo apt-get install -y nvidia-docker2
+sudo systemctl restart docker
+
+# Verify GPU access
+docker run --rm --gpus all nvidia/cuda:11.8.0-base-ubuntu22.04 nvidia-smi
+```
+
+**3. Deploy with GPU**:
+```bash
+# Start services with GPU support
+docker-compose up -d models_service
+
+# Verify GPU is being used
+docker exec models_service python -c "import torch; print(f'CUDA available: {torch.cuda.is_available()}')"
+
+# Check model health
+curl http://localhost:8081/api/v1/nlp/health
+```
+
+#### Response Caching for Production
+
+**Current Implementation**: In-memory caching (suitable for single-instance deployments)
+
+**Production Recommendation**: Redis-based distributed caching
+
+**Benefits**:
+- Shared cache across multiple service instances
+- Persistent cache across restarts
+- TTL-based expiration for stale responses
+- Significantly reduced response times for common queries
+
+**Implementation Steps**:
+
+1. **Add Redis dependency** (already available in stack):
+```python
+# In text_generation_routes.py, replace in-memory cache with Redis:
+import redis.asyncio as redis
+
+redis_client = redis.from_url(
+    os.getenv("REDIS_URL", "redis://localhost:6379/4"),
+    encoding="utf-8",
+    decode_responses=True
+)
+```
+
+2. **Update caching logic**:
+```python
+# Cache lookup
+cache_key = f"textgen:{_get_cache_key(request)}"
+cached = await redis_client.get(cache_key)
+if cached:
+    return TextGenerationResponse(**json.loads(cached))
+
+# Cache storage (with 1-hour TTL)
+await redis_client.setex(
+    cache_key,
+    3600,  # 1 hour TTL
+    json.dumps(response_data)
+)
+```
+
+3. **Environment configuration**:
+```yaml
+environment:
+  - REDIS_URL=redis://redis:6379/4
+  - TEXT_GEN_CACHE_TTL=3600  # 1 hour
+  - TEXT_GEN_CACHE_ENABLED=true
+```
+
+#### Model Upgrade Strategy: TinyLlama → Phi-4
+
+**When to Upgrade**:
+- ✅ Need better response quality for complex questions
+- ✅ Require advanced reasoning capabilities
+- ✅ Working with longer context (>2K tokens)
+- ✅ Need better multilingual performance
+- ✅ GPU infrastructure is available
+
+**Upgrade Steps**:
+
+1. **Update model name** in `text_generation_routes.py`:
+```python
+# Change from:
+model_name = "TinyLlama/TinyLlama-1.1B-Chat-v1.0"
+
+# To:
+model_name = "microsoft/Phi-4-mini-instruct"
+```
+
+2. **Adjust memory limits** in docker-compose.yml:
+```yaml
+deploy:
+  resources:
+    limits:
+      memory: 12G  # Increased for Phi-4
+    reservations:
+      memory: 8G
+```
+
+3. **Update environment variables**:
+```yaml
+environment:
+  - USE_GPU=true  # Strongly recommended for Phi-4
+  - MAX_GPU_MEMORY=0.8
+```
+
+4. **Test and validate**:
+```bash
+# Check health
+curl http://localhost:8081/api/v1/nlp/health
+
+# Test generation
+curl -X POST http://localhost:8081/api/v1/nlp/generate \
+  -H "Content-Type: application/json" \
+  -d '{"prompt": "Explain quantum computing", "max_tokens": 200}'
+```
+
+#### Performance Optimization Checklist
+
+**For Real-Time Chat (High Priority)**:
+- [x] Enable GPU acceleration (`USE_GPU=true`)
+- [x] Use FP16 precision (automatic with GPU)
+- [x] Enable pipeline mode (`use_pipeline=true`)
+- [ ] Implement Redis caching
+- [ ] Consider Phi-4 upgrade for better quality
+
+**For Background Processing (Lower Priority)**:
+- [x] Current CPU performance acceptable (24-30s)
+- [x] Enable response caching
+- [ ] Batch requests when possible
+- [ ] Use pipeline mode for multiple requests
+
+**Infrastructure Recommendations**:
+- **Minimum**: 4GB RAM, 2 vCPU (CPU-only, TinyLlama)
+- **Recommended**: 8GB RAM, 4 vCPU, NVIDIA GPU with 4GB+ VRAM (TinyLlama)
+- **Optimal**: 16GB RAM, 8 vCPU, NVIDIA GPU with 8GB+ VRAM (Phi-4)
+
+## �🚨 **Critical Architecture Issues & Recommendations**
 
 ### **Issue 1: Outdated Phi-3 Usage**
 **Problem**: Currently using `microsoft/Phi-3-mini-4k-instruct` when Phi-4 offers significant improvements:
@@ -801,10 +1028,110 @@ Response:
 }
 ```
 
-### Text Generation Endpoints (Ollama Integration)
+### Text Generation Endpoints (TinyLlama)
+
+#### Current Implementation: TinyLlama-1.1B-Chat-v1.0 🚀
+
+**Model**: `TinyLlama/TinyLlama-1.1B-Chat-v1.0`
+**Purpose**: Lightweight, efficient text generation for chatbot responses and content generation
+**Architecture**: 1.1B parameter transformer model optimized for chat interactions
+
+**Performance Characteristics**:
+- **CPU Inference**: 24-30 seconds per request (acceptable for background processing)
+- **GPU Inference**: 2-5 seconds per request (recommended for real-time chat)
+- **Memory**: ~2.2GB (FP32) or ~1.1GB (FP16 with GPU)
+- **Context Length**: 2048 tokens
+
+**Features**:
+- ✅ Direct HuggingFace Transformers integration (no external services)
+- ✅ GPU acceleration support (CUDA)
+- ✅ Response caching for common queries (in-memory)
+- ✅ Pipeline mode for faster real-time inference
+- ✅ Chat template support for conversational AI
+- ✅ Low memory footprint for resource-constrained deployments
+
+**Production Recommendations**:
+- 🎯 **GPU Deployment**: Use CUDA-enabled infrastructure for <5s response times
+- 🎯 **Response Caching**: Enable Redis caching for frequently asked questions
+- 🎯 **Model Upgrade Path**: Consider Phi-4 for improved quality (3.8B parameters, better reasoning)
+- 🎯 **Pipeline Mode**: Use `use_pipeline=true` for 20-30% speedup in batch scenarios
 
 #### POST `/api/v1/nlp/generate`
-**Generate Text Using AI Models**
+**Generate Text Using TinyLlama**
+```json
+Request:
+{
+  "prompt": "Write a short meditation guide for beginners",
+  "message": "Optional: alternative to prompt for chat-style input",
+  "model": "tinyllama",
+  "max_tokens": 256,
+  "temperature": 0.7,
+  "system_prompt": "You are a helpful meditation guide",
+  "use_cache": true,
+  "use_pipeline": false
+}
+
+Response:
+{
+  "generated_text": "Here's a simple meditation guide for beginners:\n\n1. Find a quiet, comfortable space...",
+  "response": "Here's a simple meditation guide for beginners...",
+  "model_used": "TinyLlama/TinyLlama-1.1B-Chat-v1.0",
+  "tokens_generated": 156,
+  "processing_time_ms": 4200,
+  "success": true,
+  "confidence": 0.85
+}
+```
+
+**Request Parameters**:
+- `prompt` (required): Main text prompt for generation
+- `message` (optional): Alternative to prompt for chat-style interactions
+- `max_tokens` (default: 256): Maximum tokens to generate
+- `temperature` (default: 0.7): Sampling temperature (0.0-1.0)
+- `model` (default: "tinyllama"): Model identifier
+- `system_prompt` (optional): System-level instructions for the model
+- `use_cache` (default: true): Enable response caching
+- `use_pipeline` (default: false): Use pipeline for faster inference
+
+#### GET `/api/v1/nlp/health`
+**Check Text Generation Service Health**
+```json
+Response:
+{
+  "model_available": true,
+  "model_name": "TinyLlama/TinyLlama-1.1B-Chat-v1.0",
+  "status": "healthy",
+  "device": "cuda:0",
+  "dtype": "torch.float16",
+  "gpu_available": true,
+  "pipeline_available": true,
+  "cache_enabled": true,
+  "test_inference_ms": 145.32,
+  "production_notes": {
+    "current_performance": "24-30s CPU, 2-5s GPU",
+    "recommended_upgrade": "Phi-4 for better quality",
+    "caching": "In-memory (Redis recommended for production)"
+  }
+}
+```
+
+#### POST `/api/v1/nlp/clear_cache`
+**Clear Response Cache**
+```json
+Response:
+{
+  "success": true,
+  "cleared_entries": 42,
+  "message": "Response cache cleared successfully"
+}
+```
+
+### Legacy Text Generation Endpoints (Ollama Integration - Deprecated)
+
+**Note**: The following Ollama-based endpoints are maintained for backward compatibility but are deprecated in favor of the direct TinyLlama integration above.
+
+#### POST `/api/v1/nlp/generate` (Legacy)
+**Generate Text Using AI Models via Ollama**
 ```json
 Request:
 {

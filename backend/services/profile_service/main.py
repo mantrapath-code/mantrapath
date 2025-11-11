@@ -16,7 +16,6 @@ import redis
 import sys
 import os
 sys.path.append(os.path.join(os.path.dirname(__file__), '..', '..'))
-
 from shared.database import get_db
 from shared.auth import get_current_user, verify_user_access
 from shared.models import User, UserProfile, UserLanguagePreference
