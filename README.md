@@ -21,6 +21,7 @@
 ## Table of Contents
 
 - [Installation](#installation)
+- [Documentation](#documentation)
 - [Usage](#usage)
 - [Features](#features)
 - [Configuration](#configuration)
@@ -84,6 +85,26 @@ For production deployment on a self-hosted GitHub Actions runner, see our compre
 # Check service health
 ./start.sh status
 ```
+
+## Documentation
+
+Our comprehensive documentation is organized in the [`docs/`](docs/) directory for easy navigation:
+
+### 📋 Quick Access
+- **[📖 Documentation Hub](docs/README.md)** - Complete documentation index
+- **[🚀 Implementation Status](docs/project/implementation/)** - Development progress
+- **[🏗️ Architecture Overview](docs/architecture/)** - System design details
+- **[🔧 Service Documentation](docs/services/)** - Individual microservice guides
+
+### 📁 Documentation Structure
+- **[Project Docs](docs/project/)** - Implementation plans, SRS, and project documentation  
+- **[Deployment](docs/deployment/)** - Production setup and Docker configurations
+- **[Features](docs/features/)** - Text generation, video integration, and feature guides
+- **[Security](docs/security/)** - Authentication, SSL setup, and security protocols
+- **[Testing](docs/testing/)** - Testing strategies and performance guides
+- **[Troubleshooting](docs/troubleshooting/)** - Common issues and debugging guides
+
+For detailed information about any aspect of MantraPath, start with the [Documentation Hub](docs/README.md).
 
 ## Usage
 
